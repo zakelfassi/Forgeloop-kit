@@ -444,9 +444,14 @@
         background: #0b0f14;
         color: rgba(255, 253, 248, 0.92);
         border-radius: 14px;
-        padding: 14px;
+        padding: 16px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         overflow: hidden;
+      }
+
+      .code pre {
+        padding-top: 22px;
+        padding-right: 92px;
       }
 
       .code::before {
@@ -886,7 +891,7 @@
                 <p>
                   Install the kit into any repo (writes docs + prompts + a wrapper), then run planning/build loops.
                 </p>
-                <div class="code" style="margin-top: 12px">
+                <div class="code" style="margin-top: 16px">
                   <button class="copy" data-copy="#cmd-install">Copy</button>
                   <pre id="cmd-install">./install.sh /path/to/target-repo --wrapper
 cd /path/to/target-repo
