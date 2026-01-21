@@ -2,31 +2,39 @@
 set -euo pipefail
 
 usage() {
-    cat <<'EOF'
+    cat <<'USAGE'
 Ralph framework installer.
 
 Usage:
-  ./ralph/install.sh [target_repo_dir] [--force] [--wrapper]
+  ./install.sh [target_repo_dir] [--force] [--wrapper]
 
 Examples:
-  # Install into this repo (parent of ./ralph)
-  ./ralph/install.sh
+  # From the ralph-kit repo:
+  ./install.sh /path/to/target-repo --wrapper
 
-  # Install into another repo
-  ./ralph/install.sh ../some-other-repo
+  # From within a target repo where this kit is vendored at ./ralph:
+  ./ralph/install.sh --wrapper
 
 Flags:
   --force     Overwrite existing files
   --wrapper   Create ./ralph.sh convenience wrapper
-EOF
+USAGE
 }
 
 SRC_KIT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC_REPO_DIR="$(cd "$SRC_KIT_DIR/.." && pwd)"
+SRC_KIT_NAME="$(basename "$SRC_KIT_DIR")"
 
 FORCE="false"
 WRAPPER="false"
-TARGET_REPO_DIR="$SRC_REPO_DIR"
+
+# Default target:
+# - If this installer lives in a folder named "ralph", assume it's vendored into a repo at ./ralph and
+#   default to the parent directory (repo root).
+# - Otherwise (e.g., running from the standalone ralph-kit repo), require an explicit target path.
+TARGET_REPO_DIR=""
+if [ "$SRC_KIT_NAME" = "ralph" ]; then
+    TARGET_REPO_DIR="$(cd "$SRC_KIT_DIR/.." && pwd)"
+fi
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -53,6 +61,12 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+if [ -z "$TARGET_REPO_DIR" ]; then
+    echo "Error: target repo dir required." >&2
+    usage
+    exit 1
+fi
+
 DEST_KIT_DIR="$TARGET_REPO_DIR/ralph"
 
 copy_kit() {
@@ -64,10 +78,12 @@ copy_kit() {
 
     if command -v rsync >/dev/null 2>&1; then
         rsync -a \
+            --exclude '.git' \
             --exclude '.DS_Store' \
             "$SRC_KIT_DIR/" "$DEST_KIT_DIR/"
     else
-        cp -R "$SRC_KIT_DIR/"* "$DEST_KIT_DIR/"
+        # tar fallback (preserves file modes; excludes .git)
+        (cd "$SRC_KIT_DIR" && tar --exclude='.git' --exclude='.DS_Store' -cf - .) | (cd "$DEST_KIT_DIR" && tar -xf -)
     fi
 }
 
@@ -112,7 +128,7 @@ install_wrapper() {
         return 0
     fi
 
-    cat > "$wrapper_path" <<'EOF'
+    cat > "$wrapper_path" <<'RALPH_WRAPPER_SH'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -167,7 +183,7 @@ case "$cmd" in
     exit 1
     ;;
 esac
-EOF
+RALPH_WRAPPER_SH
 
     chmod +x "$wrapper_path"
     echo "write: $wrapper_path"
@@ -175,10 +191,11 @@ EOF
 
 main() {
     echo "Installing Ralph framework into: $TARGET_REPO_DIR"
+
     copy_kit
 
     # Ensure scripts are executable
-    chmod +x "$DEST_KIT_DIR/bin/"*.sh "$DEST_KIT_DIR/config.sh" 2>/dev/null || true
+    chmod +x "$DEST_KIT_DIR/bin/"*.sh "$DEST_KIT_DIR/config.sh" "$DEST_KIT_DIR/install.sh" 2>/dev/null || true
 
     # Root coordination files
     install_file "$DEST_KIT_DIR/templates/AGENTS.md" "$TARGET_REPO_DIR/AGENTS.md"
@@ -204,11 +221,10 @@ main() {
     fi
 
     echo "Done."
-    echo "Next:"
+    echo "Next (in the target repo):"
     echo "  cd \"$TARGET_REPO_DIR\""
     echo "  ./ralph/bin/loop.sh plan 1"
     echo "  ./ralph/bin/loop.sh 5"
 }
 
 main
-
