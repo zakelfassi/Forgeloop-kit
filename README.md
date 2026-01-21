@@ -1,9 +1,9 @@
 # Ralph Kit
 
-Ralph Kit is a portable **implementation + augmentation** of the workflow described in **The Ralph Playbook** (`how-to-ralph-wiggum`).
+Ralph Kit is a portable **implementation + augmentation** of the workflow described in **The Ralph Playbook**.
 
-- The playbook explains *how/why* to Ralph (specs → plan → build, context discipline, backpressure, sandboxing).
-- This repo provides the *drop-in machinery* (scripts + markdown templates) you can apply to any codebase.
+- Playbook (how/why): https://github.com/ghuntley/how-to-ralph-wiggum
+- This repo (do/ship): scripts + markdown templates you can apply to any codebase.
 
 ## What it adds (augmentations)
 - **Portable kit** vendorable as `ralph/` into any repo
@@ -16,6 +16,7 @@ Ralph Kit is a portable **implementation + augmentation** of the workflow descri
 - **Optional structured review/security gate** via JSON schemas
 
 ## Install into another repo
+
 From this repo:
 ```bash
 ./install.sh /path/to/target-repo --wrapper
@@ -27,6 +28,7 @@ If the kit is already vendored in a target repo at `./ralph`:
 ```
 
 ## Run (in the target repo)
+
 ```bash
 ./ralph/bin/loop.sh plan 1
 ./ralph/bin/loop.sh 10
@@ -37,7 +39,13 @@ Daemon mode:
 ./ralph/bin/ralph-daemon.sh 300
 ```
 
+## Run safely (VMs / Docker)
+
+If you’re using auto-permissions (`--dangerously-skip-permissions`, `--full-auto`), run in an isolated environment:
+- `docs/sandboxing.md`
+
 ## Config
+
 Edit `ralph/config.sh` (in the target repo) to set:
 - `RALPH_AUTOPUSH=true` if you want auto-push
 - `RALPH_TEST_CMD` (optional) to run after review auto-fixes
@@ -45,4 +53,3 @@ Edit `ralph/config.sh` (in the target repo) to set:
 
 ## Notes
 - Optional Slack integration uses `.env.local` with `SLACK_WEBHOOK_URL=...`.
-- Run Ralph in an isolated environment when using auto-permissions (`--dangerously-skip-permissions`).
