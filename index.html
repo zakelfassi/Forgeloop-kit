@@ -167,6 +167,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
+        flex-wrap: wrap;
         padding: 14px 0;
       }
 
@@ -220,6 +221,10 @@
         gap: 10px;
         flex-wrap: wrap;
         justify-content: flex-end;
+      }
+
+      .pill.navtoggle {
+        display: none;
       }
 
       .pill {
@@ -300,6 +305,10 @@
       .hero > * {
         position: relative;
         z-index: 1;
+      }
+
+      .herowide {
+        grid-column: 1 / -1;
       }
 
       .kicker {
@@ -445,14 +454,23 @@
         background: #0b0f14;
         color: rgba(255, 253, 248, 0.92);
         border-radius: 14px;
-        padding: 18px;
+        padding: 14px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         overflow: hidden;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto 1fr;
+        gap: 10px;
       }
 
       .code pre {
-        padding-top: 24px;
-        padding-right: 92px;
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .code.nowrap pre {
+        white-space: pre;
+        word-break: normal;
       }
 
       .code::before {
@@ -478,9 +496,11 @@
       }
 
       .copy {
-        position: absolute;
-        top: 10px;
-        right: 10px;
+        position: relative;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        align-self: start;
         z-index: 2;
         background: rgba(255, 253, 248, 0.1);
         border: 1px solid rgba(255, 253, 248, 0.18);
@@ -772,6 +792,17 @@
         .hero {
           grid-template-columns: 1fr;
         }
+        .heromain {
+          grid-row: 2;
+        }
+
+        .herowide {
+          grid-row: 3;
+        }
+
+        .heroaside {
+          grid-row: 4;
+        }
         .sticker {
           position: static;
           transform: rotate(-3deg);
@@ -780,7 +811,7 @@
           margin-bottom: 10px;
         }
         .card {
-          grid-column: span 12;
+          grid-column: span 12 !important;
         }
         .how {
           grid-template-columns: 1fr;
@@ -793,6 +824,37 @@
         }
       }
 
+
+      @media (max-width: 860px) {
+        .nav {
+          align-items: flex-start;
+        }
+
+        .pill.navtoggle {
+          display: inline-flex;
+        }
+
+        .navlinks {
+          display: none;
+          width: 100%;
+          margin-top: 10px;
+          justify-content: flex-start;
+        }
+
+        html[data-nav-open="true"] .navlinks {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
+        }
+
+        html[data-nav-open="true"] .navlinks .pill {
+          width: 100%;
+          justify-content: flex-start;
+          padding: 12px 14px;
+        }
+      }
+
       @media (max-width: 560px) {
         .nav {
           padding: 12px 0;
@@ -802,6 +864,58 @@
         }
         .brand p {
           display: none;
+        }
+
+        .hero {
+          padding: 18px;
+        }
+
+        .kicker {
+          display: inline-block;
+          max-width: 100%;
+        }
+
+        .lead {
+          font-size: 16px;
+        }
+
+        .ctas {
+          flex-direction: column;
+        }
+
+        .btn {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .sticker {
+          font-size: 11px;
+          padding: 8px 10px;
+          border-radius: 12px;
+        }
+
+        .sticker span {
+          font-size: 10px;
+        }
+
+        .chip {
+          font-size: 10.5px;
+          padding: 7px 9px;
+        }
+
+        .chip span {
+          min-width: 0;
+          white-space: normal;
+        }
+
+        .code pre {
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
+        .copy {
+          padding: 7px 8px;
+          font-size: 10px;
         }
       }
     </style>
@@ -821,7 +935,11 @@
             </div>
           </div>
 
-          <nav class="navlinks" aria-label="Primary">
+          <button class="pill navtoggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
+            <span class="dot"></span><span class="navlabel">Menu</span>
+          </button>
+
+          <nav class="navlinks" id="primary-nav" aria-label="Primary">
             <a class="pill ghost" href="#how"><span class="dot"></span>How it works</a>
             <a class="pill ghost secondary" href="#use"><span class="dot"></span>Use it</a>
             <a class="pill" href="#provision"><span class="dot"></span>Provision (GCP)</a>
@@ -840,10 +958,10 @@
       <div class="container">
         <div class="hero">
           <div class="sticker" aria-hidden="true">
-            I’m helping! <span>full-auto, but sandboxed</span>
+            I’m helping!&nbsp;<span>full-auto, but sandboxed</span>
           </div>
 
-          <div>
+          <div class="heromain">
             <div class="kicker">
               <b>Ralph</b> as a kit: <span>kickoff → plan → build</span>
             </div>
@@ -870,40 +988,9 @@
                 ><span class="spark"></span>Read the Playbook</a
               >
             </div>
-
-            <div class="grid">
-              <div class="card" style="grid-column: span 7">
-                <h3>What it adds</h3>
-                <p>
-                  The classic Ralph loop is tiny: <code>while :; do cat PROMPT.md | claude; done</code>. Ralph Kit keeps
-                  the simplicity, but adds the missing ergonomics and guardrails you actually want in a repo.
-                </p>
-                <div class="chiprow" role="list">
-                  <span class="chip" role="listitem"><span class="tag"></span><span>plan-work</span></span>
-                  <span class="chip blue" role="listitem"><span class="tag"></span><span>multi-model routing</span></span>
-                  <span class="chip" role="listitem"><span class="tag"></span><span>GCP provisioner</span></span>
-                  <span class="chip pink" role="listitem"><span class="tag"></span><span>kickoff prompt</span></span>
-                  <span class="chip" role="listitem"><span class="tag"></span><span>.ralph runtime</span></span>
-                </div>
-              </div>
-
-              <div class="card" style="grid-column: span 5">
-                <h3>Quick install</h3>
-                <p>
-                  Install the kit into any repo (writes docs + prompts + a wrapper), then run planning/build loops.
-                </p>
-                <div class="code" style="margin-top: 20px">
-                  <button class="copy" data-copy="#cmd-install">Copy</button>
-                  <pre id="cmd-install">./install.sh /path/to/target-repo --wrapper
-cd /path/to/target-repo
-./ralph.sh plan 1
-./ralph.sh build 10</pre>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <aside>
+          <aside class="heroaside">
             <div class="panel">
               <h3>One-command runner (GCP)</h3>
               <p>
@@ -913,7 +1000,8 @@ cd /path/to/target-repo
               <div class="code">
                 <button class="copy" data-copy="#cmd-gcp">Copy</button>
                 <pre id="cmd-gcp">OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
-  ops/gcp/provision.sh --name ralph-runner --project &lt;gcp-project&gt; --zone us-central1-a</pre>
+  ops/gcp/provision.sh --name ralph-runner \
+  --project &lt;gcp-project&gt; --zone us-central1-a</pre>
               </div>
             </div>
 
@@ -937,6 +1025,40 @@ cd /path/to/target-repo
               </div>
             </div>
           </aside>
+
+          <div class="herowide">
+            <div class="grid">
+              <div class="card" style="grid-column: span 4">
+                <h3>What it adds</h3>
+                <p>
+                  The classic Ralph loop is tiny: <code>while :; do cat PROMPT.md | claude; done</code>. Ralph Kit keeps
+                  the simplicity, but adds the missing ergonomics and guardrails you actually want in a repo.
+                </p>
+                <div class="chiprow" role="list">
+                  <span class="chip" role="listitem"><span class="tag"></span><span>plan-work</span></span>
+                  <span class="chip blue" role="listitem"><span class="tag"></span><span>multi-model routing</span></span>
+                  <span class="chip" role="listitem"><span class="tag"></span><span>GCP provisioner</span></span>
+                  <span class="chip pink" role="listitem"><span class="tag"></span><span>kickoff prompt</span></span>
+                  <span class="chip" role="listitem"><span class="tag"></span><span>.ralph runtime</span></span>
+                </div>
+              </div>
+
+              <div class="card" style="grid-column: span 8">
+                <h3>Quick install</h3>
+                <p>
+                  Install the kit into any repo (writes docs + prompts + a wrapper), then run planning/build loops.
+                </p>
+                <div class="code" style="margin-top: 20px">
+                  <button class="copy" data-copy="#cmd-install">Copy</button>
+                  <pre id="cmd-install">REPO=/path/to/target-repo
+./install.sh "$REPO" --wrapper
+cd "$REPO"
+./ralph.sh plan 1
+./ralph.sh build 10</pre>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <section id="how">
@@ -997,7 +1119,7 @@ cd /path/to/target-repo
             <div class="card" style="grid-column: span 7">
               <h3>File layout</h3>
               <p>Installer writes prompts + coordination files at repo root, and vendors the kit at <code>./ralph</code>.</p>
-              <div class="code" style="margin-top: 12px">
+              <div class="code nowrap" style="margin-top: 12px">
                 <button class="copy" data-copy="#tree">Copy</button>
                 <pre id="tree">./
 ├─ AGENTS.md
@@ -1153,7 +1275,8 @@ cd /path/to/existing-repo</pre>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#cmd-provision">Copy</button>
                 <pre id="cmd-provision">OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
-  ops/gcp/provision.sh --name ralph-runner --project &lt;gcp-project&gt; --zone us-central1-a</pre>
+  ops/gcp/provision.sh --name ralph-runner \
+  --project &lt;gcp-project&gt; --zone us-central1-a</pre>
               </div>
               <div class="callout" style="margin-top: 12px">
                 <b>Security:</b> treat runners as disposable. Use least-privilege tokens.
@@ -1166,7 +1289,8 @@ cd /path/to/existing-repo</pre>
               <p>SSH in, clone your target repo, install the kit, and run loops in <code>tmux</code>.</p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#cmd-after">Copy</button>
-                <pre id="cmd-after">gcloud compute ssh ralph-runner --project &lt;gcp-project&gt; --zone us-central1-a
+                <pre id="cmd-after">gcloud compute ssh ralph-runner \
+  --project &lt;gcp-project&gt; --zone us-central1-a
 
 mkdir -p ~/work && cd ~/work
 git clone &lt;your-repo-url&gt; repo
@@ -1233,6 +1357,41 @@ cd ~/work/repo
 
         document.getElementById("tab-new").addEventListener("click", () => select("new"));
         document.getElementById("tab-existing").addEventListener("click", () => select("existing"));
+
+        // Mobile nav
+        const navToggle = document.getElementById("nav-toggle");
+        const nav = document.getElementById("primary-nav");
+
+        function setNavOpen(open) {
+          document.documentElement.dataset.navOpen = open ? "true" : "false";
+          if (!navToggle) return;
+          navToggle.setAttribute("aria-expanded", String(open));
+          const label = navToggle.querySelector(".navlabel");
+          if (label) label.textContent = open ? "Close" : "Menu";
+        }
+
+        if (navToggle && nav) {
+          setNavOpen(false);
+
+          navToggle.addEventListener("click", () => {
+            const open = document.documentElement.dataset.navOpen !== "true";
+            setNavOpen(open);
+          });
+
+          nav.addEventListener("click", (e) => {
+            const el = e.target;
+            if (!(el instanceof HTMLElement)) return;
+            if (el.closest("a")) setNavOpen(false);
+          });
+
+          document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") setNavOpen(false);
+          });
+
+          window.addEventListener("resize", () => {
+            if (window.matchMedia("(min-width: 861px)").matches) setNavOpen(false);
+          });
+        }
 
         // Copy
         async function copyText(text) {
