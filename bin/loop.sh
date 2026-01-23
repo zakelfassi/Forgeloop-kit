@@ -18,9 +18,13 @@ set -euo pipefail
 
 # Resolve repo directory and load libraries
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-source "$REPO_DIR/ralph/config.sh" 2>/dev/null || true
-source "$REPO_DIR/ralph/lib/core.sh"
-source "$REPO_DIR/ralph/lib/llm.sh"
+RALPH_DIR="$REPO_DIR/ralph"
+if [[ ! -f "$RALPH_DIR/lib/core.sh" ]]; then
+    RALPH_DIR="$REPO_DIR"
+fi
+source "$RALPH_DIR/config.sh" 2>/dev/null || true
+source "$RALPH_DIR/lib/core.sh"
+source "$RALPH_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
 RUNTIME_DIR=$(ralph_core__ensure_runtime_dirs "$REPO_DIR")

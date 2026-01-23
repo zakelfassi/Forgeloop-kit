@@ -6,7 +6,11 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-source "$REPO_DIR/ralph/config.sh" 2>/dev/null || true
+RALPH_DIR="$REPO_DIR/ralph"
+if [[ ! -f "$RALPH_DIR/config.sh" ]]; then
+    RALPH_DIR="$REPO_DIR"
+fi
+source "$RALPH_DIR/config.sh" 2>/dev/null || true
 source "$REPO_DIR/.env.local" 2>/dev/null || true
 
 if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
@@ -70,4 +74,3 @@ curl -s -X POST "$SLACK_WEBHOOK_URL" \
 
 echo ""
 echo "Question Q-$question_id posted to Slack and logged to $QUESTIONS_FILE_REL"
-
