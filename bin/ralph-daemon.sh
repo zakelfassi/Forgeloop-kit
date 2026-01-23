@@ -18,15 +18,14 @@ set -euo pipefail
 # =============================================================================
 
 INTERVAL=${1:-300}
+
+# Resolve repo directory and load libraries
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 source "$REPO_DIR/ralph/config.sh" 2>/dev/null || true
+source "$REPO_DIR/ralph/lib/core.sh"
 
-RUNTIME_DIR="${RALPH_RUNTIME_DIR:-.ralph}"
-if [[ "$RUNTIME_DIR" != /* ]]; then
-    RUNTIME_DIR="$REPO_DIR/$RUNTIME_DIR"
-fi
-mkdir -p "$RUNTIME_DIR/logs"
-
+# Setup runtime directories and paths
+RUNTIME_DIR=$(ralph_core__ensure_runtime_dirs "$REPO_DIR")
 LOG_FILE="${RALPH_DAEMON_LOG_FILE:-$RUNTIME_DIR/logs/daemon.log}"
 LOCK_FILE="${RALPH_DAEMON_LOCK_FILE:-$RUNTIME_DIR/daemon.lock}"
 STATE_FILE="$RUNTIME_DIR/daemon.state"
@@ -41,15 +40,9 @@ BLOCKER_PAUSE_SECONDS="${RALPH_BLOCKER_PAUSE_SECONDS:-1800}"  # 30 minutes
 BLOCKED_ITERATION_COUNT=0
 LAST_BLOCKER_HASH=""
 
-notify() {
-    if [ -x "$REPO_DIR/ralph/bin/notify.sh" ]; then
-        "$REPO_DIR/ralph/bin/notify.sh" "$@" 2>/dev/null || true
-    fi
-}
-
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
-}
+# Convenience wrappers
+log() { ralph_core__log "$1" "$LOG_FILE"; }
+notify() { ralph_core__notify "$REPO_DIR" "$@"; }
 
 # =============================================================================
 # State Persistence
@@ -78,8 +71,9 @@ load_state() {
 get_blocker_hash() {
     local questions_path="$REPO_DIR/$QUESTIONS_FILE"
     if [ -f "$questions_path" ]; then
-        # Hash the unanswered question IDs
-        grep -E '^## Q-[0-9]+' "$questions_path" 2>/dev/null | \
+        # Hash the unanswered question IDs without blocking on stdin
+        local blocker_ids
+        blocker_ids=$(grep -E '^## Q-[0-9]+' "$questions_path" 2>/dev/null | \
             while read -r line; do
                 local qid
                 qid=$(echo "$line" | grep -oE 'Q-[0-9]+')
@@ -87,7 +81,13 @@ get_blocker_hash() {
                 if grep -A5 "$qid" "$questions_path" 2>/dev/null | grep -q "⏳ Awaiting response"; then
                     echo "$qid"
                 fi
-            done | sort | md5sum 2>/dev/null | cut -d' ' -f1 || shasum 2>/dev/null | cut -d' ' -f1 || echo "none"
+            done | sort)
+
+        if [[ -z "$blocker_ids" ]]; then
+            echo "none"
+        else
+            ralph_core__hash "$blocker_ids"
+        fi
     else
         echo "none"
     fi
@@ -142,22 +142,11 @@ pause_for_blocker() {
 }
 
 is_paused() {
-    grep -q '\\[PAUSE\\]' "$REPO_DIR/$REQUESTS_FILE" 2>/dev/null
-}
-
-consume_flag() {
-    local flag="$1"
-    local file="$REPO_DIR/$REQUESTS_FILE"
-    grep -q "\\[$flag\\]" "$file" 2>/dev/null || return 1
-    # GNU/BSD compatible in-place edit
-    sed -i.bak "s/\\[$flag\\]//g" "$file" && rm -f "$file.bak"
-    git add "$REQUESTS_FILE" 2>/dev/null || true
-    git commit -m "ralph: processed $flag" --allow-empty 2>/dev/null || true
-    return 0
+    ralph_core__has_flag "$REPO_DIR" "$REQUESTS_FILE" "PAUSE"
 }
 
 has_pending_tasks() {
-    [ -f "$REPO_DIR/$PLAN_FILE" ] && grep -q '^\\- \\[ \\]' "$REPO_DIR/$PLAN_FILE" 2>/dev/null
+    [ -f "$REPO_DIR/$PLAN_FILE" ] && grep -q '^- \[ \]' "$REPO_DIR/$PLAN_FILE" 2>/dev/null
 }
 
 run_plan() {
@@ -211,11 +200,11 @@ main_loop() {
             continue
         fi
 
-        if consume_flag "REPLAN"; then
+        if ralph_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "REPLAN"; then
             run_plan
         fi
 
-        if consume_flag "DEPLOY"; then
+        if ralph_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "DEPLOY"; then
             run_deploy
         fi
 
@@ -233,6 +222,7 @@ main_loop() {
     done
 }
 
-trap 'log "Shutting down..."; exit 0' SIGINT SIGTERM
-main_loop
-
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    trap 'log "Shutting down..."; exit 0' SIGINT SIGTERM
+    main_loop
+fi
