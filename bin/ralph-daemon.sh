@@ -2,9 +2,11 @@
 set -euo pipefail
 
 # =============================================================================
-# Ralph Daemon (Portable)
+# Ralph Daemon (Portable, Hardened)
 # =============================================================================
 # Periodically runs Ralph planning/build based on REQUESTS.md and IMPLEMENTATION_PLAN.md.
+#
+# HARDENED: Detects repeated blockers and pauses instead of looping endlessly.
 #
 # Usage: ./ralph/bin/ralph-daemon.sh [interval_seconds]
 # Default interval: 300 (5 minutes)
@@ -27,9 +29,17 @@ mkdir -p "$RUNTIME_DIR/logs"
 
 LOG_FILE="${RALPH_DAEMON_LOG_FILE:-$RUNTIME_DIR/logs/daemon.log}"
 LOCK_FILE="${RALPH_DAEMON_LOCK_FILE:-$RUNTIME_DIR/daemon.lock}"
+STATE_FILE="$RUNTIME_DIR/daemon.state"
 
 REQUESTS_FILE="${RALPH_REQUESTS_FILE:-REQUESTS.md}"
 PLAN_FILE="${RALPH_IMPLEMENTATION_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
+QUESTIONS_FILE="${RALPH_QUESTIONS_FILE:-QUESTIONS.md}"
+
+# Blocker detection settings
+MAX_BLOCKED_ITERATIONS="${RALPH_MAX_BLOCKED_ITERATIONS:-3}"
+BLOCKER_PAUSE_SECONDS="${RALPH_BLOCKER_PAUSE_SECONDS:-1800}"  # 30 minutes
+BLOCKED_ITERATION_COUNT=0
+LAST_BLOCKER_HASH=""
 
 notify() {
     if [ -x "$REPO_DIR/ralph/bin/notify.sh" ]; then
@@ -39,6 +49,96 @@ notify() {
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# =============================================================================
+# State Persistence
+# =============================================================================
+
+save_state() {
+    cat > "$STATE_FILE" << EOF
+BLOCKED_ITERATION_COUNT=$BLOCKED_ITERATION_COUNT
+LAST_BLOCKER_HASH=$LAST_BLOCKER_HASH
+EOF
+}
+
+load_state() {
+    if [ -f "$STATE_FILE" ]; then
+        # shellcheck disable=SC1090
+        source "$STATE_FILE"
+        log "Loaded state: blocked_count=$BLOCKED_ITERATION_COUNT"
+    fi
+}
+
+# =============================================================================
+# Blocker Detection (HARDENED)
+# =============================================================================
+
+# Get hash of unanswered questions to detect repeated blockers
+get_blocker_hash() {
+    local questions_path="$REPO_DIR/$QUESTIONS_FILE"
+    if [ -f "$questions_path" ]; then
+        # Hash the unanswered question IDs
+        grep -E '^## Q-[0-9]+' "$questions_path" 2>/dev/null | \
+            while read -r line; do
+                local qid
+                qid=$(echo "$line" | grep -oE 'Q-[0-9]+')
+                # Check if this question is still awaiting response
+                if grep -A5 "$qid" "$questions_path" 2>/dev/null | grep -q "⏳ Awaiting response"; then
+                    echo "$qid"
+                fi
+            done | sort | md5sum 2>/dev/null | cut -d' ' -f1 || shasum 2>/dev/null | cut -d' ' -f1 || echo "none"
+    else
+        echo "none"
+    fi
+}
+
+# Check if we're stuck on the same blocker
+check_blocker_loop() {
+    local current_hash
+    current_hash=$(get_blocker_hash)
+
+    if [ "$current_hash" = "none" ] || [ -z "$current_hash" ]; then
+        # No blockers, reset counter
+        BLOCKED_ITERATION_COUNT=0
+        LAST_BLOCKER_HASH=""
+        save_state
+        return 1  # Not blocked
+    fi
+
+    if [ "$current_hash" = "$LAST_BLOCKER_HASH" ]; then
+        # Same blocker as before
+        BLOCKED_ITERATION_COUNT=$((BLOCKED_ITERATION_COUNT + 1))
+        log "Repeated blocker detected (count: $BLOCKED_ITERATION_COUNT/$MAX_BLOCKED_ITERATIONS)"
+
+        if [ "$BLOCKED_ITERATION_COUNT" -ge "$MAX_BLOCKED_ITERATIONS" ]; then
+            save_state
+            return 0  # Blocked, should pause
+        fi
+    else
+        # New blocker, start tracking
+        BLOCKED_ITERATION_COUNT=1
+        LAST_BLOCKER_HASH="$current_hash"
+        log "New blocker detected, tracking..."
+    fi
+
+    save_state
+    return 1  # Not yet at threshold
+}
+
+# Pause when stuck on same blocker
+pause_for_blocker() {
+    local pause_mins=$((BLOCKER_PAUSE_SECONDS / 60))
+    log "Stuck on same blocker for $BLOCKED_ITERATION_COUNT iterations. Pausing for ${pause_mins}m..."
+    notify "⏸️" "Ralph Paused - Awaiting Input" \
+        "Stuck on same blocker for $BLOCKED_ITERATION_COUNT iterations. Pausing for ${pause_mins}m. Check QUESTIONS.md for unanswered questions."
+
+    sleep "$BLOCKER_PAUSE_SECONDS"
+
+    # Reset counter after pause to give it another try
+    BLOCKED_ITERATION_COUNT=0
+    save_state
+    log "Resuming after blocker pause..."
 }
 
 is_paused() {
@@ -86,7 +186,9 @@ run_deploy() {
 }
 
 main_loop() {
+    load_state
     log "Ralph daemon starting (interval: ${INTERVAL}s)"
+    log "Blocker detection: max $MAX_BLOCKED_ITERATIONS consecutive blocked iterations before ${BLOCKER_PAUSE_SECONDS}s pause"
 
     exec 200>"$LOCK_FILE"
     if ! flock -n 200; then
@@ -100,6 +202,12 @@ main_loop() {
         if is_paused; then
             log "Paused ([PAUSE] in $REQUESTS_FILE). Sleeping..."
             sleep "$INTERVAL"
+            continue
+        fi
+
+        # Check for blocker loop before running tasks
+        if check_blocker_loop; then
+            pause_for_blocker
             continue
         fi
 
