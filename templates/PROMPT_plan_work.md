@@ -7,6 +7,7 @@
    Update @IMPLEMENTATION_PLAN.md with ONLY tasks directly related to this scope.
 
 2. For each checklist item, include any REQUIRED TESTS derived from acceptance criteria in specs (what outcomes must be verified). Specify WHAT to verify, not HOW to implement.
+3. Skill opportunities (optional): if the work scope implies repeated workflows, propose a small Skill to capture them (to be created under `skills/<type>/<name>/SKILL.md` at repo root).
 
 IMPORTANT:
 - This is SCOPED PLANNING only. Do NOT implement anything.

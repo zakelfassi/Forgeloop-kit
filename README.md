@@ -7,7 +7,7 @@ In plain English, Ralph is a loop that:
 2. **Plan**: translate specs into a prioritized, test-aware task list.
 3. **Build**: execute tasks with backpressure (tests/typecheck/lint), updating plan/status as you go.
 
-Ralph Kit adds the scaffolding, prompts, and tooling to make that loop repeatable in real codebases.
+Ralph Kit adds the scaffolding, prompts, and tooling to make that loop repeatable in real codebases — plus **Skills-Driven Development**: forge reusable agent Skills as you build, and grow a repo-specific “skill factory”.
 
 - Playbook (background): https://github.com/ghuntley/how-to-ralph-wiggum
 - This repo (do/ship): scripts + markdown templates you can apply to any codebase.
@@ -62,7 +62,7 @@ flowchart LR
 - **Optional Slack loop**: `ask.sh` + `QUESTIONS.md`, `notify.sh`
 - **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]` triggers in `REQUESTS.md`
 - **Optional structured review/security gate** via JSON schemas
-- **Installable skills** for Claude/Codex/Amp agents (prd, tasks)
+- **Skills-Driven Development** primitives: `skillforge` + `sync-skills` + a typed skills library (`operational/`, `meta/`, `composed/`)
 
 ## Quickstart (new or existing repo)
 
@@ -74,6 +74,7 @@ Install the kit:
 Then run a loop in the target repo:
 ```bash
 cd /path/to/target-repo
+./ralph.sh sync-skills      # optional: refresh repo-scoped skill mirrors (.claude/skills; .codex/skills when writable)
 ./ralph.sh plan 1
 ./ralph.sh build 10
 ```

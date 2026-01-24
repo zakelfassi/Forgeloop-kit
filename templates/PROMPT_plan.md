@@ -15,6 +15,8 @@
    - What outcomes must be verified: behavior, edge cases, performance, security
    - Specify WHAT to verify, not HOW to implement
 
+3. **Skill opportunities (optional but preferred):** If you notice repeated workflows across tasks, propose a small Skill to capture them (to be created under `skills/<type>/<name>/SKILL.md` at repo root).
+
 ## REQUIRED TESTS Examples
 
 Good (what to verify):

@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>Ralph Kit — Provision a Ralph-equipped VM. Augment any repo.</title>
+    <title>Ralph Kit — Skills-Driven Development. Build loops. Ship with backpressure.</title>
     <meta
       name="description"
-      content="Ralph Kit is a portable implementation + augmentation of Geoff Huntley’s Ralph methodology: kickoff specs with a memory-backed agent, plan from specs, build with backpressure, and run full-auto in a dedicated VM."
+      content="Ralph Kit is a portable loop for AI-assisted development: kickoff specs, plan tasks, build with backpressure — plus Skills-Driven Development to forge reusable agent skills as you ship. Includes an optional one-command GCP runner provisioner."
     />
     <meta name="theme-color" content="#0b0f14" />
 
@@ -15,7 +15,7 @@
     <meta property="og:title" content="Ralph Kit" />
     <meta
       property="og:description"
-      content="Provision a Ralph-equipped VM. Augment any repo with a Ralph loop (kickoff → plan → build)."
+      content="Build with the Ralph loop (kickoff → plan → build) plus Skills-Driven Development: forge reusable agent skills as you ship."
     />
     <meta property="og:type" content="website" />
 
@@ -1000,7 +1000,7 @@
             <div class="mark" aria-hidden="true"></div>
             <div>
               <h1>Ralph Kit</h1>
-              <p>Provision a Ralph VM. Augment any repo.</p>
+              <p>Build loops. Forge skills. Any repo.</p>
             </div>
           </div>
 
@@ -1010,6 +1010,7 @@
 
           <nav class="navlinks" id="primary-nav" aria-label="Primary">
             <a class="pill ghost" href="#how"><span class="dot"></span>How it works</a>
+            <a class="pill ghost" href="#sdd"><span class="dot"></span>Skills-driven</a>
             <a class="pill ghost secondary" href="#use"><span class="dot"></span>Use it</a>
             <a class="pill" href="#provision"><span class="dot"></span>Provision (GCP)</a>
             <a class="pill ghost" href="https://github.com/zakelfassi/Ralph-Kit#readme" target="_blank" rel="noreferrer">
@@ -1032,18 +1033,19 @@
 
           <div class="heromain">
             <div class="kicker">
-              <b>Ralph</b> as a kit: <span>kickoff → plan → build</span>
+              <b>Skills-Driven Development</b>: <span>kickoff → plan → build → forge skills</span>
             </div>
 
             <h2>
               Build in loops.
-              <span class="hl">Ship with backpressure.</span>
+              <span class="hl">Forge skills. Ship with backpressure.</span>
             </h2>
 
             <p class="lead">
-              Ralph Kit is a portable workflow for AI-assisted development. It installs prompts + templates
-              and gives you a repeatable loop: <b>kickoff</b> (optional) → <b>plan</b> (specs to tasks) → <b>build</b>
-              (tasks to code with backpressure from tests).
+              Ralph Kit is a portable workflow for AI-assisted development. It installs prompts + templates and gives
+              you a repeatable loop: <b>kickoff</b> (optional) → <b>plan</b> (specs to tasks) → <b>build</b> (tasks to
+              code with backpressure from tests). Then it adds <b>Skills-Driven Development</b>: before each task,
+              forge reusable Skills (plain Markdown SOPs) and sync them into Codex / Claude Code.
             </p>
 
             <div class="ctas">
@@ -1112,7 +1114,8 @@
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>tasks lane</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>report ingestion</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>shared libraries</span></span>
-                  <span class="chip blue" role="listitem"><span class="tag"></span><span>installable skills</span></span>
+                  <span class="chip blue" role="listitem"><span class="tag"></span><span>skills-driven dev</span></span>
+                  <span class="chip" role="listitem"><span class="tag"></span><span>sync-skills</span></span>
                 </div>
               </div>
 
@@ -1120,13 +1123,14 @@
                 <h3>Quick install</h3>
                 <p>
                   Install the kit into any repo (writes docs + prompts + a wrapper), then run planning/build loops.
-                  You'll get a consistent file layout + prompts.
+                  You'll get a consistent file layout + prompts — plus a small Skills library you can extend as you go.
                 </p>
                 <div class="code" style="margin-top: 20px">
                   <button class="copy" data-copy="#cmd-install">Copy</button>
                   <pre id="cmd-install">REPO=/path/to/target-repo
 ./install.sh "$REPO" --wrapper --skills
 cd "$REPO"
+./ralph.sh sync-skills
 ./ralph.sh plan 1
 ./ralph.sh build 10
 # Or use tasks lane: ./ralph.sh tasks 10</pre>
@@ -1141,7 +1145,8 @@ cd "$REPO"
             <h2>How it works</h2>
             <p>
               Ralph is a simple loop: <b>kickoff</b> (optional) → <b>planning</b> (specs → tasks) → <b>building</b>
-              (tasks → code + tests). Ralph Kit makes the loop reliable and copy/pasteable.
+              (tasks → code + tests). Ralph Kit makes the loop reliable and copy/pasteable — and adds
+              <b>Skills-Driven Development</b> so your agents get better at your workflow over time.
             </p>
           </div>
 
@@ -1215,6 +1220,73 @@ flowchart LR
             <b>Full-auto ≠ reckless:</b> in auto-permissions mode, the agent can run arbitrary commands.
             Run in a dedicated VM/container. Treat the environment as disposable.
             See <a class="underline" href="https://github.com/zakelfassi/Ralph-Kit/blob/main/docs/sandboxing.md" target="_blank" rel="noreferrer">docs/sandboxing.md</a>.
+          </div>
+        </section>
+
+        <section id="sdd">
+          <div class="sectionhead">
+            <h2>Skills-Driven Development</h2>
+            <p>
+              Every loop gets a <b>preflight</b>: before you implement the next task, decide if the work should become a reusable
+              <b>Skill</b>. Skills are plain Markdown SOPs (optionally with scripts) that you version with your repo and compose into pipelines.
+            </p>
+          </div>
+
+          <div class="grid" style="margin-top: 14px">
+            <div class="card" style="grid-column: span 4">
+              <h3>Operational (ICs)</h3>
+              <p>
+                One job. Repeat forever. The “how we do X here” playbook that keeps agents consistent across repos and time.
+              </p>
+              <div class="chiprow" role="list">
+                <span class="chip" role="listitem"><span class="tag"></span><span>single-purpose</span></span>
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>scripts/</span></span>
+                <span class="chip pink" role="listitem"><span class="tag"></span><span>references/</span></span>
+              </div>
+            </div>
+
+            <div class="card" style="grid-column: span 4">
+              <h3>Meta (managers)</h3>
+              <p>
+                Plan, gate, and steer the loop. Keep standards consistent. Turn “good taste” into a repeatable protocol.
+              </p>
+              <div class="chiprow" role="list">
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>project-architect</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>skillforge</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>completion-director</span></span>
+              </div>
+            </div>
+
+            <div class="card" style="grid-column: span 4">
+              <h3>Composed (middle management)</h3>
+              <p>
+                Chain skills into a delivery pipeline: brief → plan → forge → execute → validate. Build your internal “skill factory”.
+              </p>
+              <div class="chiprow" role="list">
+                <span class="chip pink" role="listitem"><span class="tag"></span><span>builder-loop</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>voltrons</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panelbox" style="margin-top: 14px">
+            <h3>Forge + sync</h3>
+            <p>
+              Project skills live at <code>skills/</code> (repo root). The kit ships a base library under <code>ralph/skills/</code>.
+              Sync them into <code>.claude/skills</code> (Claude Code) and <code>.codex/skills</code> (Codex) so agents can discover and reuse them.
+              If a sandbox blocks Codex mirroring, <code>sync-skills</code> will warn and continue.
+            </p>
+            <div class="code" style="margin-top: 12px">
+              <button class="copy" data-copy="#cmd-sync-skills">Copy</button>
+              <pre id="cmd-sync-skills">./ralph.sh sync-skills
+# Optional: also install to user skill dirs (Codex/Claude/Amp)
+./ralph.sh sync-skills --all</pre>
+            </div>
+          </div>
+
+          <div class="callout">
+            <b>Skill factory mindset:</b> if you had to explain a step twice, it probably wants to be a Skill.
+            Keep them small, name them clearly, and let them compound.
           </div>
         </section>
 
@@ -1309,7 +1381,8 @@ flowchart LR
             <h2>What gets added to your repo</h2>
             <p>
               Ralph steers by <b>signs</b>: prompts, operational notes, patterns in your codebase, and backpressure from
-              tests/typecheck/lint. This kit drops in the structure so the signs are consistent.
+              tests/typecheck/lint. This kit drops in the structure so the signs are consistent — plus a typed Skills library
+              (<code>ralph/skills</code>) and room for repo-specific skills (<code>skills/</code>) so your workflow compounds over time.
             </p>
           </div>
 
@@ -1332,6 +1405,14 @@ flowchart LR
 ├─ CHANGELOG.md
 ├─ prd.json                 # (optional) Tasks lane task file
 ├─ progress.txt             # (optional) Tasks lane progress
+├─ .claude/
+│  └─ skills/               # (generated) Claude Code skill mirror (commit; ignore rp-* skills)
+├─ .codex/
+│  └─ skills/               # (generated) Codex skill mirror (commit if you use Codex)
+├─ skills/                  # (optional) your project skills (Skills-Driven Development)
+│  ├─ operational/
+│  ├─ meta/
+│  └─ composed/
 ├─ specs/
 │  ├─ feature_template.md
 │  └─ ...
@@ -1344,13 +1425,21 @@ flowchart LR
    │  ├─ loop-tasks.sh      # Tasks lane loop
    │  ├─ ralph-daemon.sh    # Daemon mode
    │  ├─ ingest-report.sh   # Report ingestion
-   │  └─ kickoff.sh         # Kickoff helper
+   │  ├─ kickoff.sh         # Kickoff helper
+   │  └─ sync-skills.sh     # Skills discovery (Claude Code / Codex / Amp)
    ├─ lib/
    │  ├─ core.sh            # Logging, notifications, git helpers
    │  └─ llm.sh             # LLM routing with failover
    ├─ skills/
-   │  ├─ prd/SKILL.md       # PRD generation skill
-   │  └─ tasks/SKILL.md     # Tasks conversion skill
+   │  ├─ operational/
+   │  │  ├─ prd/SKILL.md                # PRD generation skill
+   │  │  └─ tasks/SKILL.md              # PRD → prd.json conversion
+   │  ├─ meta/
+   │  │  ├─ skillforge/SKILL.md         # Scaffold new Skills
+   │  │  ├─ project-architect/SKILL.md  # Plan + skill opportunities
+   │  │  └─ completion-director/SKILL.md # Closed-loop execution
+   │  └─ composed/
+   │     └─ builder-loop/SKILL.md       # End-to-end orchestration
    ├─ config.sh
    └─ ...</pre>
               </div>
@@ -1362,6 +1451,7 @@ flowchart LR
               <ul style="margin: 10px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 14px">
                 <li><code>AI_MODEL=claude|codex</code> force one model</li>
                 <li><code>RALPH_AUTOPUSH=false</code> by default</li>
+                <li><code>./ralph.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
                 <li><code>RALPH_TEST_CMD</code> run after review auto-fixes</li>
                 <li><code>RALPH_DEPLOY_CMD</code> used by daemon on <code>[DEPLOY]</code></li>
                 <li><code>CODEX_PLANNING_CONFIG</code> / <code>CODEX_REVIEW_CONFIG</code> reasoning tuning</li>
@@ -1400,8 +1490,9 @@ flowchart LR
                   Install kit + wrapper:
                   <div class="code" style="margin-top: 8px">
                     <button class="copy" data-copy="#cmd-new-install">Copy</button>
-                    <pre id="cmd-new-install">./install.sh /path/to/your/new-repo --wrapper
-cd /path/to/your/new-repo</pre>
+                    <pre id="cmd-new-install">./install.sh /path/to/your/new-repo --wrapper --skills
+cd /path/to/your/new-repo
+./ralph.sh sync-skills</pre>
                   </div>
                 </li>
                 <li>
@@ -1439,8 +1530,9 @@ cd /path/to/your/new-repo</pre>
                   Install kit + wrapper:
                   <div class="code" style="margin-top: 8px">
                     <button class="copy" data-copy="#cmd-old-install">Copy</button>
-                    <pre id="cmd-old-install">./install.sh /path/to/existing-repo --wrapper
-cd /path/to/existing-repo</pre>
+                    <pre id="cmd-old-install">./install.sh /path/to/existing-repo --wrapper --skills
+cd /path/to/existing-repo
+./ralph.sh sync-skills</pre>
                   </div>
                 </li>
                 <li>

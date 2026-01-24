@@ -149,13 +149,25 @@ install_skills() {
             continue
         fi
 
-        mkdir -p "$agent_dir"
+        # Some sandboxed environments block writes to agent config dirs. Probe with an actual write.
+        if ! mkdir -p "$agent_dir" 2>/dev/null; then
+            echo "skip: cannot write $agent_dir"
+            continue
+        fi
+        local probe_file
+        probe_file="$agent_dir/.write-probe.$$"
+        if ! ( : > "$probe_file" ) 2>/dev/null; then
+            echo "skip: cannot write $agent_dir"
+            continue
+        fi
+        rm -f "$probe_file" 2>/dev/null || true
 
-        # Copy each skill
-        for skill_dir in "$skills_src"/*/; do
-            local skill_name
+        # Copy each skill (supports typed layout: skills/<type>/<name>/SKILL.md)
+        while IFS= read -r -d '' skill_md; do
+            local skill_dir skill_name dest_skill_dir
+            skill_dir="$(dirname "$skill_md")"
             skill_name="$(basename "$skill_dir")"
-            local dest_skill_dir="$agent_dir/ralph-$skill_name"
+            dest_skill_dir="$agent_dir/ralph-$skill_name"
 
             if [ -e "$dest_skill_dir" ] && [ "$FORCE" != "true" ]; then
                 echo "skip: $dest_skill_dir (exists)"
@@ -163,9 +175,16 @@ install_skills() {
             fi
 
             mkdir -p "$dest_skill_dir"
-            cp "$skill_dir/SKILL.md" "$dest_skill_dir/SKILL.md"
-            echo "write: $dest_skill_dir/SKILL.md"
-        done
+            if command -v rsync >/dev/null 2>&1; then
+                rsync -a --delete "$skill_dir/" "$dest_skill_dir/"
+            else
+                rm -rf "$dest_skill_dir" 2>/dev/null || true
+                mkdir -p "$dest_skill_dir"
+                # Copy dotfiles too; match rsync behavior as closely as possible.
+                cp -R "$skill_dir/." "$dest_skill_dir/" 2>/dev/null || true
+            fi
+            echo "write: $dest_skill_dir (from $skill_dir)"
+        done < <(find "$skills_src" -type f -name SKILL.md -print0)
     done
 }
 
@@ -191,6 +210,7 @@ Usage:
   ./ralph.sh build [max_iters]
   ./ralph.sh tasks [max_iters]
   ./ralph.sh review
+  ./ralph.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
   ./ralph.sh daemon [interval_seconds]
   ./ralph.sh ask "category" "question"
   ./ralph.sh notify "emoji" "title" "message"
@@ -216,6 +236,10 @@ case "$cmd" in
     ;;
   tasks)
     exec "$REPO_DIR/ralph/bin/loop-tasks.sh" "${2:-10}"
+    ;;
+  sync-skills)
+    shift
+    exec "$REPO_DIR/ralph/bin/sync-skills.sh" "$@"
     ;;
   daemon)
     exec "$REPO_DIR/ralph/bin/ralph-daemon.sh" "${2:-300}"

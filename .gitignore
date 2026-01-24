@@ -2,3 +2,9 @@
 .ralph/
 *.log
 .env.local
+
+# Claude Code local config + repo-local skill mirrors
+.claude/settings.local.json
+.claude/skills/rp-*
+.claude/commands/rp-*
+.codex/skills/rp-*

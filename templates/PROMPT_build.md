@@ -7,6 +7,7 @@
 0c. Study `docs/*` for product requirements, design specs, and architecture decisions.
 0d. For reference, study the source code in `src/*`, `apps/*`, `packages/*`, and other relevant folders.
 0e. CHECK @QUESTIONS.md for answered questions (Status: ✅ Answered). If you previously asked a question and it's been answered, read it and proceed accordingly. Mark it as ✅ Resolved after acting on it.
+0f. **Skill Forge preflight (always):** Before starting the task, decide if this work would benefit from a reusable Skill (a short procedural guide or tool wrapper you’ll reuse). If yes, create/update a focused Skill under `skills/<type>/<name>/SKILL.md` (repo-root) and then run `./ralph/bin/sync-skills.sh` to refresh agent discovery. (Avoid editing `ralph/skills` unless you’re changing the kit itself.)
 
 ## Your Mission
 

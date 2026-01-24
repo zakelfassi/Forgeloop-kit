@@ -5,6 +5,31 @@
 
 GCP provisioning scripts live in `ops/gcp/`.
 
+## Skills-Driven Development (SDD)
+
+Ralph is already a loop. **Skills-Driven Development** adds a pre-step: before you implement the next task, decide if the work would benefit from a reusable **Skill** (a small, focused SOP for an agent). If yes, forge the skill, sync it, then continue.
+
+**Why:** fewer “prompt one-offs”, more repeatable delivery. Over time you build a repo-specific **skill factory** (including “middle-management” composed skills that coordinate other skills).
+
+**Where skills live:**
+- Project (recommended): `skills/<operational|meta|composed>/<skill-name>/SKILL.md`
+- Kit (shipped): `ralph/skills/<operational|meta|composed>/<skill-name>/SKILL.md` (avoid editing unless you’re changing the kit itself)
+`sync-skills` links kit + project skills into `.claude/skills` (Claude Code) and, when writable, `.codex/skills` (Codex).
+
+**Repo hygiene:** commit `.claude/skills/` so the same skills are available for everyone. If you want Codex to discover repo skills without a user-level install, also commit `.codex/skills/`. Keep RepoPrompt-only skills prefixed `rp-` and ignore `.claude/skills/rp-*` (and `.codex/skills/rp-*` if you mirror Codex too).
+
+**Naming:** keep skill folder names unique across all types (`operational/`, `meta/`, `composed/`). Mirrors use the leaf folder name, so duplicates will collide.
+
+**Sync into agents:**
+```bash
+./ralph.sh sync-skills # refreshes repo-scoped skill mirrors (Codex mirror is best-effort if .codex is not writable)
+
+# Optional: also install into user-level skill dirs (if present)
+./ralph.sh sync-skills --claude-global --codex-global
+# or: ./ralph.sh sync-skills --all
+```
+If you didn’t install the `ralph.sh` wrapper, run: `./ralph/bin/sync-skills.sh`.
+
 ## Decision Tree
 
 Use this to pick the right workflow for your situation:
@@ -127,11 +152,16 @@ The daemon (`ralph-daemon.sh`) runs loops automatically, monitoring for:
 
 ## Skills
 
-Optional skills (installable via `--skills` flag) provide Claude/Codex/Amp agents with pre-built prompts:
+Ralph Kit includes a small Skills library (in `ralph/skills/`) you can use to standardize planning/execution workflows:
 
 - `ralph-prd` — generate Product Requirements Documents
-- `ralph-tasks` — convert PRDs to machine-executable `prd.json` format
+- `ralph-tasks` — convert PRDs to machine-executable `prd.json`
+- `ralph-skillforge` — scaffold new reusable Skills
+- `ralph-project-architect` — turn a brief into a concrete plan (incl. skill opportunities)
+- `ralph-completion-director` — run an execution loop with locks/gates
+- `ralph-builder-loop` — composed end-to-end build loop
 
-Install skills: `./install.sh /path/to/repo --wrapper --skills`
+Install into user-level agent skill dirs (when present): `./install.sh /path/to/repo --wrapper --skills`
 
-Skills are installed to `.claude/` in the target repo and auto-discovered by compatible agents.
+For Claude Code per-repo discovery (no global install), run this in the target repo:
+`./ralph/bin/sync-skills.sh` (creates/refreshes `.claude/skills` and, when writable, `.codex/skills` symlinks).
