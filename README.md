@@ -29,18 +29,25 @@ flowchart LR
         P1 --> P2
     end
 
-    subgraph BUILD["3. BUILD"]
-        B1[Execute task]
+    subgraph BUILD["3. BUILD (with SDD preflight)"]
+        S1{Should this become a Skill?}
+        S2[Forge/Update Skill<br/>(skillforge)]
+        S3[Sync skills<br/>(sync-skills)]
+        B1[Implement task]
         B2[Run tests/lint/types]
         B3{Pass?}
         B4[Next task]
-        B5[Retry task]
+        B5[Fix + retry]
+        S1 -->|Yes| S2
+        S2 --> S3
+        S1 -->|No| B1
+        S3 --> B1
         B1 --> B2
         B2 --> B3
         B3 -->|Yes| B4
         B3 -->|No| B5
         B5 -->|Backpressure| B1
-        B4 --> B1
+        B4 --> S1
     end
 
     KICKOFF --> PLAN
