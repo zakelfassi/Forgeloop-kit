@@ -34,3 +34,16 @@ export RALPH_TEST_CMD="${RALPH_TEST_CMD:-}"
 # Optional: deploy command the daemon runs when it sees [DEPLOY] in REQUESTS.md
 export RALPH_DEPLOY_CMD="${RALPH_DEPLOY_CMD:-}"
 
+# Optional: when true, ingestion scripts append a [REPLAN] trigger after adding a request
+export RALPH_INGEST_TRIGGER_REPLAN="${RALPH_INGEST_TRIGGER_REPLAN:-false}"
+
+# Log ingestion (ingest-logs.sh)
+export RALPH_LOGS_DIR="${RALPH_LOGS_DIR:-logs}"
+export RALPH_INGEST_LOGS_CMD="${RALPH_INGEST_LOGS_CMD:-}"
+export RALPH_INGEST_LOGS_FILE="${RALPH_INGEST_LOGS_FILE:-}"
+export RALPH_INGEST_LOGS_TAIL="${RALPH_INGEST_LOGS_TAIL:-400}"
+export RALPH_INGEST_LOGS_MAX_CHARS="${RALPH_INGEST_LOGS_MAX_CHARS:-60000}"
+
+# Optional: auto-ingest logs after deploy in daemon mode (use with care)
+export RALPH_POST_DEPLOY_INGEST_LOGS="${RALPH_POST_DEPLOY_INGEST_LOGS:-false}"
+export RALPH_POST_DEPLOY_OBSERVE_SECONDS="${RALPH_POST_DEPLOY_OBSERVE_SECONDS:-0}"

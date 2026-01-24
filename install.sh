@@ -215,6 +215,7 @@ Usage:
   ./ralph.sh ask "category" "question"
   ./ralph.sh notify "emoji" "title" "message"
   ./ralph.sh ingest --report <file> [--mode request|plan-work]
+  ./ralph.sh ingest-logs (--file <path> | --cmd "<command>" | --latest) [--tail <lines>] [--mode request|plan-work]
   ./ralph.sh kickoff "<brief>" [--project <name>] [--seed <path-or-url>] [--notes <text>] [--out <path>]
 USAGE
 }
@@ -259,6 +260,10 @@ case "$cmd" in
   ingest)
     shift
     exec "$REPO_DIR/ralph/bin/ingest-report.sh" "$@"
+    ;;
+  ingest-logs)
+    shift
+    exec "$REPO_DIR/ralph/bin/ingest-logs.sh" "$@"
     ;;
   ""|-h|--help)
     usage

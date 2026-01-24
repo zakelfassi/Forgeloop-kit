@@ -15,6 +15,7 @@ set -euo pipefail
 #   [PAUSE]   - pause daemon loop
 #   [REPLAN]  - run planning once, then continue
 #   [DEPLOY]  - run deploy command (RALPH_DEPLOY_CMD), if configured
+#   [INGEST_LOGS] - analyze configured logs and append a request (RALPH_INGEST_LOGS_CMD or RALPH_INGEST_LOGS_FILE)
 # =============================================================================
 
 INTERVAL=${1:-300}
@@ -176,6 +177,45 @@ run_deploy() {
     log "Running deploy: $RALPH_DEPLOY_CMD"
     notify "🚀" "Ralph Deploy" "Running deploy"
     (cd "$REPO_DIR" && bash -lc "$RALPH_DEPLOY_CMD") || true
+
+    if [[ "${RALPH_POST_DEPLOY_INGEST_LOGS:-false}" == "true" ]]; then
+        local wait_seconds="${RALPH_POST_DEPLOY_OBSERVE_SECONDS:-0}"
+        if [[ "$wait_seconds" =~ ^[0-9]+$ ]] && [[ "$wait_seconds" -gt 0 ]]; then
+            log "Post-deploy observe: waiting ${wait_seconds}s before ingesting logs..."
+            sleep "$wait_seconds"
+        fi
+        run_ingest_logs || true
+    fi
+}
+
+run_ingest_logs() {
+    local ingest_script="$REPO_DIR/ralph/bin/ingest-logs.sh"
+    if [[ ! -x "$ingest_script" ]]; then
+        log "INGEST_LOGS requested but ingest-logs.sh not found/executable; skipping"
+        notify "⚠️" "Ralph Log Ingest" "INGEST_LOGS requested but ingest-logs.sh not available"
+        return 0
+    fi
+
+    if [[ -z "${RALPH_INGEST_LOGS_CMD:-}" ]] && [[ -z "${RALPH_INGEST_LOGS_FILE:-}" ]]; then
+        log "INGEST_LOGS requested but RALPH_INGEST_LOGS_CMD / RALPH_INGEST_LOGS_FILE not set; skipping"
+        notify "⚠️" "Ralph Log Ingest" "INGEST_LOGS requested but no log source configured"
+        return 0
+    fi
+
+    local args=(--requests "$REQUESTS_FILE")
+    if [[ -n "${RALPH_INGEST_LOGS_CMD:-}" ]]; then
+        args+=(--cmd "$RALPH_INGEST_LOGS_CMD" --source "daemon")
+    else
+        args+=(--file "$RALPH_INGEST_LOGS_FILE" --source "daemon")
+    fi
+
+    if [[ -n "${RALPH_INGEST_LOGS_TAIL:-}" ]]; then
+        args+=(--tail "$RALPH_INGEST_LOGS_TAIL")
+    fi
+
+    log "Running log ingest..."
+    notify "📥" "Ralph Log Ingest" "Analyzing logs into REQUESTS"
+    (cd "$REPO_DIR" && "$ingest_script" "${args[@]}") || true
 }
 
 main_loop() {
@@ -210,6 +250,10 @@ main_loop() {
 
         if ralph_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "DEPLOY"; then
             run_deploy
+        fi
+
+        if ralph_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "INGEST_LOGS"; then
+            run_ingest_logs
         fi
 
         if [ ! -f "$REPO_DIR/$PLAN_FILE" ]; then

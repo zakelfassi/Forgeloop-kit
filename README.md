@@ -66,8 +66,9 @@ flowchart LR
 - **Runtime isolation**: logs/state in `.ralph/` (auto gitignored by installer)
 - **Greenfield kickoff** helper to generate docs/specs via a memory-backed agent
 - **Report ingestion** (`ingest-report.sh`) to convert analysis reports into requests
+- **Log ingestion** (`ingest-logs.sh`) to turn runtime errors/logs into actionable requests (optional daemon trigger: `[INGEST_LOGS]`)
 - **Optional Slack loop**: `ask.sh` + `QUESTIONS.md`, `notify.sh`
-- **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]` triggers in `REQUESTS.md`
+- **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]`, `[INGEST_LOGS]` triggers in `REQUESTS.md`
 - **Optional structured review/security gate** via JSON schemas
 - **Skills-Driven Development** primitives: `skillforge` + `sync-skills` + a typed skills library (`operational/`, `meta/`, `composed/`)
 
@@ -209,6 +210,7 @@ The daemon watches for changes and runs loops automatically:
 - `[PAUSE]` — Stop the daemon loop until flag is removed
 - `[REPLAN]` — Trigger a re-planning pass before continuing build
 - `[DEPLOY]` — Run `RALPH_DEPLOY_CMD` after successful build
+- `[INGEST_LOGS]` — Run log ingestion (uses `RALPH_INGEST_LOGS_CMD` or `RALPH_INGEST_LOGS_FILE`)
 
 **Blocker detection:**
 The daemon includes blocker detection to prevent infinite loops when the agent is stuck waiting for human input (e.g., unanswered questions in `QUESTIONS.md`).
@@ -219,6 +221,7 @@ Edit `ralph/config.sh` (in the target repo) to set:
 - `RALPH_AUTOPUSH=true` if you want auto-push
 - `RALPH_TEST_CMD` (optional) to run after review auto-fixes
 - `RALPH_DEPLOY_CMD` (optional) used by the daemon on `[DEPLOY]`
+- `RALPH_INGEST_LOGS_CMD` or `RALPH_INGEST_LOGS_FILE` (optional) used by the daemon on `[INGEST_LOGS]`
 
 ## Notes
 - Optional Slack integration uses `.env.local` with `SLACK_WEBHOOK_URL=...`.

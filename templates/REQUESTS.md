@@ -23,14 +23,16 @@ Add these anywhere in this file to control the Ralph daemon:
 - `[PAUSE]` - Pause the daemon loop
 - `[REPLAN]` - Run planning once, then continue building
 - `[DEPLOY]` - Run the configured deploy command
+- `[INGEST_LOGS]` - Analyze configured logs and append a new request (see `./ralph/bin/ingest-logs.sh`)
 
-## Ingested Reports
+## Ingested Reports & Logs
 
-When using `./ralph/bin/ingest-report.sh`, entries are appended below with:
+When using `./ralph/bin/ingest-report.sh` or `./ralph/bin/ingest-logs.sh`, entries are appended below with:
 - `Source: report:<hash>` - For idempotency tracking
+- `Source: logs:<hash>` - For idempotency tracking
+- `Signature: logsig:<hash>` - Best-effort dedupe for repeated runtime errors
 - `CreatedAt: <timestamp>` - When ingested
 
 ---
 
 <!-- Add your requests below this line -->
-

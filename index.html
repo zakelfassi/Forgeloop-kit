@@ -1113,6 +1113,7 @@
                   <span class="chip" role="listitem"><span class="tag"></span><span>.ralph runtime</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>tasks lane</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>report ingestion</span></span>
+                  <span class="chip pink" role="listitem"><span class="tag"></span><span>log ingestion</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>shared libraries</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>skills-driven dev</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>sync-skills</span></span>
@@ -1193,7 +1194,7 @@ flowchart LR
 
           <div class="callout" style="margin-top: 14px">
             <b>Daemon mode:</b> Optionally run <code>./ralph.sh daemon 300</code> to watch git + REQUESTS.md and run loops automatically.
-            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code> flags.
+            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, <code>[INGEST_LOGS]</code> flags.
           </div>
 
           <div class="how" style="margin-top: 14px">
@@ -1432,6 +1433,7 @@ flowchart LR
    │  ├─ loop-tasks.sh      # Tasks lane loop
    │  ├─ ralph-daemon.sh    # Daemon mode
    │  ├─ ingest-report.sh   # Report ingestion
+   │  ├─ ingest-logs.sh     # Log ingestion
    │  ├─ kickoff.sh         # Kickoff helper
    │  └─ sync-skills.sh     # Skills discovery (Claude Code / Codex / Amp)
    ├─ lib/
@@ -1461,6 +1463,7 @@ flowchart LR
                 <li><code>./ralph.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
                 <li><code>RALPH_TEST_CMD</code> run after review auto-fixes</li>
                 <li><code>RALPH_DEPLOY_CMD</code> used by daemon on <code>[DEPLOY]</code></li>
+                <li><code>RALPH_INGEST_LOGS_CMD</code> / <code>RALPH_INGEST_LOGS_FILE</code> used by daemon on <code>[INGEST_LOGS]</code></li>
                 <li><code>CODEX_PLANNING_CONFIG</code> / <code>CODEX_REVIEW_CONFIG</code> reasoning tuning</li>
               </ul>
             </div>

@@ -147,6 +147,7 @@ The daemon (`ralph-daemon.sh`) runs loops automatically, monitoring for:
 - `[PAUSE]` — Halt daemon until removed
 - `[REPLAN]` — Trigger re-planning pass
 - `[DEPLOY]` — Run `RALPH_DEPLOY_CMD` after successful build
+- `[INGEST_LOGS]` — Analyze logs into a new request (configure `RALPH_INGEST_LOGS_CMD` or `RALPH_INGEST_LOGS_FILE`)
 
 **Blocker detection:** The daemon detects when the agent is stuck (e.g., unanswered questions) and pauses to prevent spam loops.
 
