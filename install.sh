@@ -304,6 +304,84 @@ install_skills() {
     done
 }
 
+detect_and_configure_ci_gate() {
+    # Source the core library to use detection function
+    # shellcheck disable=SC1091
+    source "$DEST_KIT_DIR/lib/core.sh" 2>/dev/null || return 0
+
+    ci_gate__escape_for_double_quotes() {
+        local s="$1"
+        s=${s//\\/\\\\}
+        s=${s//\"/\\\"}
+        s=${s//\$/\\\$}
+        s=${s//\`/\\\`}
+        s=${s//$'\n'/ }
+        s=${s//$'\r'/ }
+        echo "$s"
+    }
+
+    ci_gate__escape_for_sed_replacement() {
+        local s="$1"
+        s=${s//\\/\\\\}
+        s=${s//&/\\&}
+        s=${s//|/\\|}
+        s=${s//$'\n'/ }
+        s=${s//$'\r'/ }
+        echo "$s"
+    }
+
+    local detected_gate_cmd
+    detected_gate_cmd=$(forgeloop_core__detect_ci_gate_cmd "$TARGET_REPO_DIR")
+
+    local config_file="$DEST_KIT_DIR/config.sh"
+
+    if [[ -n "$detected_gate_cmd" ]]; then
+        echo "Detected CI gate command: $detected_gate_cmd"
+        local escaped_gate_cmd
+        escaped_gate_cmd=$(ci_gate__escape_for_double_quotes "$detected_gate_cmd")
+        local sed_gate_cmd
+        sed_gate_cmd=$(ci_gate__escape_for_sed_replacement "$escaped_gate_cmd")
+        # Append to config.sh if not already set
+        if ! grep -q "^export FORGELOOP_CI_GATE_CMD=" "$config_file" 2>/dev/null || \
+           grep -q "^export FORGELOOP_CI_GATE_CMD=\"\${FORGELOOP_CI_GATE_CMD:-}\"$" "$config_file" 2>/dev/null; then
+            # Replace the empty default with the detected command
+            if grep -q "^export FORGELOOP_CI_GATE_CMD=" "$config_file" 2>/dev/null; then
+                sed -i.bak "s|^export FORGELOOP_CI_GATE_CMD=.*|export FORGELOOP_CI_GATE_CMD=\"\${FORGELOOP_CI_GATE_CMD:-$sed_gate_cmd}\"|" "$config_file"
+                rm -f "$config_file.bak"
+            else
+                echo "" >> "$config_file"
+                echo "# Auto-detected CI gate command" >> "$config_file"
+                echo "export FORGELOOP_CI_GATE_CMD=\"\${FORGELOOP_CI_GATE_CMD:-$escaped_gate_cmd}\"" >> "$config_file"
+            fi
+            echo "write: CI gate configured in $config_file"
+        fi
+    else
+        # Prompt user if interactive and no command detected
+        if is_interactive; then
+            echo ""
+            echo "Could not auto-detect CI gate command for this project."
+            echo "What command should run before pushing to main? (leave empty to skip)"
+            printf "  > "
+            read -r user_gate_cmd </dev/tty
+            if [[ -n "$user_gate_cmd" ]]; then
+                local escaped_user_cmd
+                escaped_user_cmd=$(ci_gate__escape_for_double_quotes "$user_gate_cmd")
+                local sed_user_cmd
+                sed_user_cmd=$(ci_gate__escape_for_sed_replacement "$escaped_user_cmd")
+                if grep -q "^export FORGELOOP_CI_GATE_CMD=" "$config_file" 2>/dev/null; then
+                    sed -i.bak "s|^export FORGELOOP_CI_GATE_CMD=.*|export FORGELOOP_CI_GATE_CMD=\"\${FORGELOOP_CI_GATE_CMD:-$sed_user_cmd}\"|" "$config_file"
+                    rm -f "$config_file.bak"
+                else
+                    echo "" >> "$config_file"
+                    echo "# User-specified CI gate command" >> "$config_file"
+                    echo "export FORGELOOP_CI_GATE_CMD=\"\${FORGELOOP_CI_GATE_CMD:-$escaped_user_cmd}\"" >> "$config_file"
+                fi
+                echo "write: CI gate configured in $config_file"
+            fi
+        fi
+    fi
+}
+
 install_wrapper() {
     local wrapper_path="$TARGET_REPO_DIR/forgeloop.sh"
 
@@ -481,6 +559,9 @@ main() {
     if [ "$SKILLS" = "true" ]; then
         install_skills
     fi
+
+    # Auto-detect CI gate command and append to config if found
+    detect_and_configure_ci_gate
 
     echo "Done."
     echo "Next (in the target repo):"

@@ -464,3 +464,101 @@ forgeloop_core__hash_file() {
         cat "$file" | head -c 32
     fi
 }
+
+# =============================================================================
+# CI Gate
+# =============================================================================
+
+# Auto-detect CI gate command based on project type
+# Usage: gate_cmd=$(forgeloop_core__detect_ci_gate_cmd "$REPO_DIR")
+forgeloop_core__detect_ci_gate_cmd() {
+    local repo_dir="$1"
+    local project_type
+    project_type=$(forgeloop_core__detect_project_type "$repo_dir")
+
+    case "$project_type" in
+        node)
+            # Parse package.json for available scripts
+            if [[ -f "$repo_dir/package.json" ]] && forgeloop_core__has_cmd "jq"; then
+                local typecheck_key test_key has_build has_lint
+                typecheck_key=$(jq -r 'if (.scripts | has("typecheck")) then "typecheck" elif (.scripts | has("type-check")) then "type-check" else "" end' "$repo_dir/package.json" 2>/dev/null)
+                test_key=$(jq -r 'if (.scripts | has("test:ci")) then "test:ci" elif (.scripts | has("test")) then "test" else "" end' "$repo_dir/package.json" 2>/dev/null)
+                has_build=$(jq -r '.scripts.build // empty' "$repo_dir/package.json" 2>/dev/null)
+                has_lint=$(jq -r '.scripts.lint // empty' "$repo_dir/package.json" 2>/dev/null)
+
+                # Detect package manager
+                local pm_run="npm run"
+                [[ -f "$repo_dir/pnpm-lock.yaml" ]] && pm_run="pnpm"
+                [[ -f "$repo_dir/yarn.lock" ]] && pm_run="yarn"
+                [[ -f "$repo_dir/bun.lockb" ]] && pm_run="bun run"
+
+                local cmds=()
+                [[ -n "$typecheck_key" ]] && cmds+=("$pm_run $typecheck_key")
+                [[ -n "$has_lint" ]] && cmds+=("$pm_run lint")
+                [[ -n "$test_key" ]] && cmds+=("$pm_run $test_key")
+                [[ -n "$has_build" ]] && cmds+=("$pm_run build")
+
+                if [[ ${#cmds[@]} -gt 0 ]]; then
+                    # Join array with " && "
+                    local result="${cmds[0]}"
+                    for ((i=1; i<${#cmds[@]}; i++)); do
+                        result="$result && ${cmds[i]}"
+                    done
+                    echo "$result"
+                fi
+            fi
+            ;;
+        rust)
+            echo "cargo check && cargo test && cargo build --release"
+            ;;
+        go)
+            echo "go vet ./... && go test ./... && go build ./..."
+            ;;
+        python)
+            if [[ -f "$repo_dir/pyproject.toml" ]]; then
+                echo "pytest && mypy . 2>/dev/null || true"
+            else
+                echo "pytest"
+            fi
+            ;;
+        swift)
+            echo "swift build && swift test"
+            ;;
+        *)
+            echo ""  # No auto-detection, leave empty
+            ;;
+    esac
+}
+
+# Run CI gate before pushing to protected branches
+# Usage: if forgeloop_core__ci_gate "$REPO_DIR" "$branch" "$LOG_FILE"; then ...
+forgeloop_core__ci_gate() {
+    local repo_dir="$1"
+    local branch="$2"
+    local log_file="${3:-}"
+
+    # Only gate protected branches
+    local default_branch="${FORGELOOP_DEFAULT_BRANCH:-main}"
+    if [[ "$branch" != "main" && "$branch" != "master" && "$branch" != "$default_branch" ]]; then
+        return 0
+    fi
+
+    local gate_cmd="${FORGELOOP_CI_GATE_CMD:-}"
+    if [[ -z "$gate_cmd" ]]; then
+        return 0  # No gate configured
+    fi
+
+    forgeloop_core__log "Running CI gate for $branch..." "$log_file"
+
+    local gate_exit=0
+    (cd "$repo_dir" && bash -lc "$gate_cmd") || gate_exit=$?
+
+    if [[ "$gate_exit" -ne 0 ]]; then
+        forgeloop_core__log "CI gate failed; skipping push to $branch" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚫" "CI Gate Failed" "Skipping push to $branch"
+        return 1
+    fi
+
+    forgeloop_core__log "CI gate passed" "$log_file"
+    return 0
+}

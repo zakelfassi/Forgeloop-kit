@@ -31,6 +31,16 @@ export FORGELOOP_CHANGELOG_FILE="${FORGELOOP_CHANGELOG_FILE:-CHANGELOG.md}"
 # Optional: command to run after Codex review auto-fixes (e.g. "pnpm test:ci", "npm test", "pytest -q")
 export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"
 
+# Optional: CI gate command to run before pushing to protected branches (main/master).
+# Auto-detected during installation based on project type. Examples:
+#   Node.js: "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+#   Rust:    "cargo check && cargo test && cargo build --release"
+#   Go:      "go vet ./... && go test ./... && go build ./..."
+#   Python:  "pytest && mypy ."
+#   Swift:   "swift build && swift test"
+# Leave empty to skip CI gating.
+export FORGELOOP_CI_GATE_CMD="${FORGELOOP_CI_GATE_CMD:-}"
+
 # Optional: deploy command the daemon runs when it sees [DEPLOY] in REQUESTS.md
 export FORGELOOP_DEPLOY_CMD="${FORGELOOP_DEPLOY_CMD:-}"
 

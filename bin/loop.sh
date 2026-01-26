@@ -156,6 +156,10 @@ while true; do
     fi
 
     forgeloop_llm__security_gate "$REPO_DIR" "$SECURITY_SCHEMA" "$STATE_FILE" "$LOG_FILE"
+
+    if ! forgeloop_core__ci_gate "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+        continue  # Agent should fix issues, loop continues
+    fi
     forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"
 
     ITERATION=$((ITERATION + 1))
