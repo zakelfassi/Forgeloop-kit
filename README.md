@@ -9,14 +9,27 @@ In plain English, Ralph is a loop that:
 
 Ralph Kit adds the scaffolding, prompts, and tooling to make that loop repeatable in real codebases — plus **Skills-Driven Development**: forge reusable agent Skills as you build, and grow a repo-specific “skill factory”.
 
-- Playbook (background): https://github.com/ghuntley/how-to-ralph-wiggum
-- This repo (do/ship): scripts + markdown templates you can apply to any codebase.
+**Inspiration & Sources:**
+- [how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum) - The original Ralph methodology playbook by Geoff Huntley
+- [marge-simpson](https://github.com/Soupernerd/marge-simpson) - Knowledge persistence & expert routing patterns (integrated in v2)
+- [compound-product](https://github.com/snarktank/compound-product) - Product development patterns
+
+**Links:**
+- This repo: scripts + markdown templates you can apply to any codebase
 - Landing page: https://ralphkit.zakelfassi.com
 
 ## How the Workflow Works
 
 ```mermaid
 flowchart LR
+    subgraph SESSION["SESSION (knowledge + experts)"]
+        direction TB
+        SS[session-start.sh]
+        KL[Load knowledge:<br/>decisions, patterns,<br/>preferences, insights]
+        EL[Detect experts:<br/>architecture, security,<br/>testing, implementation]
+        SS --> KL --> EL
+    end
+
     subgraph KICKOFF["1. KICKOFF (optional)"]
         K1[Memory-backed agent]
         K2[docs/* + specs/*]
@@ -50,11 +63,22 @@ flowchart LR
         B4 --> S1
     end
 
+    subgraph CAPTURE["SESSION END"]
+        SE[session-end.sh]
+        KC[Capture new:<br/>decisions, patterns,<br/>insights]
+        SE --> KC
+    end
+
+    SESSION --> KICKOFF
     KICKOFF --> PLAN
     PLAN --> BUILD
+    BUILD --> CAPTURE
 ```
 
-**Backpressure** is the key concept: when tests fail, the agent retries the task instead of moving on. This keeps the codebase in a working state and prevents cascading failures.
+**Key concepts:**
+- **Backpressure**: when tests fail, the agent retries the task instead of moving on. This keeps the codebase in a working state.
+- **Knowledge persistence**: decisions, patterns, and insights persist across sessions via `system/knowledge/`.
+- **Expert routing**: domain experts (architecture, security, testing, etc.) are loaded based on task keywords.
 
 ## What it adds (augmentations)
 - **Portable kit** vendorable as `ralph/` into any repo
@@ -68,9 +92,13 @@ flowchart LR
 - **Report ingestion** (`ingest-report.sh`) to convert analysis reports into requests
 - **Log ingestion** (`ingest-logs.sh`) to turn runtime errors/logs into actionable requests (optional daemon trigger: `[INGEST_LOGS]`)
 - **Optional Slack loop**: `ask.sh` + `QUESTIONS.md`, `notify.sh`
-- **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]`, `[INGEST_LOGS]` triggers in `REQUESTS.md`
+- **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]`, `[INGEST_LOGS]`, `[KNOWLEDGE_SYNC]` triggers in `REQUESTS.md`
 - **Optional structured review/security gate** via JSON schemas
 - **Skills-Driven Development** primitives: `skillforge` + `sync-skills` + a typed skills library (`operational/`, `meta/`, `composed/`)
+- **Knowledge persistence** (from marge-simpson): session-to-session memory via `system/knowledge/` (decisions, patterns, preferences, insights)
+- **Domain expert system** (from marge-simpson): specialized guidance via `system/experts/` (architecture, security, testing, devops)
+- **Lite mode**: `--lite` flag for one-shot simple tasks (uses `AGENTS-lite.md`)
+- **Session hooks**: `session-start.sh` / `session-end.sh` for loading and capturing knowledge
 
 ## Quickstart (new or existing repo)
 
@@ -174,6 +202,55 @@ Uses `prd.json` with machine-readable `passes: true/false` flags. Best for full 
 | Run command | `./ralph.sh build N` | `./ralph.sh tasks N` |
 | Best for | Human review/edits | Full automation |
 | Status tracking | `STATUS.md` | `progress.txt` |
+
+## Knowledge Persistence (from marge-simpson)
+
+Session-to-session memory that persists across loops. Located at `system/knowledge/`:
+
+```
+system/knowledge/
+├── _index.md          # Tag index, quick stats, recent entries
+├── decisions.md       # D-### entries: architectural choices
+├── patterns.md        # P-### entries: observed behaviors
+├── preferences.md     # PR-### entries: user-stated preferences
+├── insights.md        # I-### entries: discovered codebase facts
+└── archive.md         # Decayed entries (90+ days without access)
+```
+
+**Usage:**
+```bash
+./ralph.sh session-start     # Load knowledge context before work
+./ralph.sh session-end       # Capture new knowledge after work
+./ralph.sh session-end --capture decision "Title" "Context" "Decision" "Consequences" "tags"
+```
+
+## Domain Expert System (from marge-simpson)
+
+Specialized guidance loaded based on task keywords. Located at `system/experts/`:
+
+| Keywords | Expert File | Expertise |
+|----------|-------------|-----------|
+| `api`, `schema`, `architecture` | architecture.md | Systems design, API contracts |
+| `auth`, `security`, `encryption` | security.md | OWASP, compliance, access control |
+| `test`, `QA`, `coverage` | testing.md | Test strategy, automation |
+| `code`, `refactor`, `debug` | implementation.md | Clean code, debugging |
+| `deploy`, `CI/CD`, `docker` | devops.md | Pipelines, infrastructure |
+
+**Key insight:** Experts provide *guidance*, Skills provide *procedures*. Use both together.
+
+## Lite Mode
+
+For simple one-shot tasks that don't need full planning overhead:
+
+```bash
+./ralph.sh build --lite 1    # Uses AGENTS-lite.md
+./ralph.sh build --full 10   # Explicit full mode (default)
+```
+
+Lite mode constraints:
+- Single response, no follow-ups
+- No IMPLEMENTATION_PLAN.md updates
+- Direct execution only
 
 ## Shared Libraries
 

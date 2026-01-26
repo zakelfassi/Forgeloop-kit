@@ -1011,6 +1011,7 @@
           <nav class="navlinks" id="primary-nav" aria-label="Primary">
             <a class="pill ghost" href="#how"><span class="dot"></span>How it works</a>
             <a class="pill ghost" href="#sdd"><span class="dot"></span>Skills-driven</a>
+            <a class="pill ghost" href="#knowledge"><span class="dot"></span>Knowledge</a>
             <a class="pill ghost secondary" href="#use"><span class="dot"></span>Use it</a>
             <a class="pill" href="#provision"><span class="dot"></span>Provision (GCP)</a>
             <a class="pill ghost" href="https://github.com/zakelfassi/Ralph-Kit#readme" target="_blank" rel="noreferrer">
@@ -1077,9 +1078,9 @@
             </div>
 
             <div class="panel" style="margin-top: 14px">
-              <h3>Source material</h3>
+              <h3>Inspiration & Sources</h3>
               <p>
-                If you want the deeper theory, these are the original sources.
+                Standing on the shoulders of giants. These projects shaped Ralph Kit.
               </p>
               <div class="chiprow" role="list">
                 <a class="chip" role="listitem" href="https://ghuntley.com/ralph/" target="_blank" rel="noreferrer"
@@ -1092,6 +1093,22 @@
                   target="_blank"
                   rel="noreferrer"
                   ><span class="tag"></span><span>how-to-ralph-wiggum</span></a
+                >
+                <a
+                  class="chip pink"
+                  role="listitem"
+                  href="https://github.com/Soupernerd/marge-simpson"
+                  target="_blank"
+                  rel="noreferrer"
+                  ><span class="tag"></span><span>marge-simpson</span></a
+                >
+                <a
+                  class="chip"
+                  role="listitem"
+                  href="https://github.com/snarktank/compound-product"
+                  target="_blank"
+                  rel="noreferrer"
+                  ><span class="tag"></span><span>compound-product</span></a
                 >
               </div>
             </div>
@@ -1117,6 +1134,9 @@
                   <span class="chip" role="listitem"><span class="tag"></span><span>shared libraries</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>skills-driven dev</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>sync-skills</span></span>
+                  <span class="chip pink" role="listitem"><span class="tag"></span><span>knowledge persistence</span></span>
+                  <span class="chip blue" role="listitem"><span class="tag"></span><span>domain experts</span></span>
+                  <span class="chip" role="listitem"><span class="tag"></span><span>lite mode</span></span>
                 </div>
               </div>
 
@@ -1145,15 +1165,24 @@ cd "$REPO"
           <div class="sectionhead">
             <h2>How it works</h2>
             <p>
-              Ralph is a simple loop: <b>kickoff</b> (optional) → <b>planning</b> (specs → tasks) → <b>building</b>
-              (tasks → code + tests). Ralph Kit makes the loop reliable and copy/pasteable — and adds
-              <b>Skills-Driven Development</b> so your agents get better at your workflow over time.
+              Each session starts by loading <b>persistent knowledge</b> (decisions, patterns, preferences) and detecting
+              relevant <b>domain experts</b>. Then the loop runs: <b>kickoff</b> (optional) → <b>planning</b> → <b>building</b>
+              with backpressure. At session end, new knowledge is captured. Add <b>Skills-Driven Development</b>
+              so your agents get better at your workflow over time.
             </p>
           </div>
 
           <div class="mermaid-wrap">
             <pre class="mermaid">
 flowchart LR
+    subgraph SESSION["SESSION START"]
+        direction TB
+        SS[session-start.sh]
+        KL[Load knowledge]
+        EL[Detect experts]
+        SS --> KL --> EL
+    end
+
     subgraph KICKOFF["1. KICKOFF (optional)"]
         K1[Memory-backed agent]
         K2[docs/* + specs/*]
@@ -1187,14 +1216,22 @@ flowchart LR
         B4 --> S1
     end
 
+    subgraph CAPTURE["SESSION END"]
+        SE[session-end.sh]
+        KC[Capture knowledge]
+        SE --> KC
+    end
+
+    SESSION --> KICKOFF
     KICKOFF --> PLAN
     PLAN --> BUILD
+    BUILD --> CAPTURE
             </pre>
           </div>
 
           <div class="callout" style="margin-top: 14px">
             <b>Daemon mode:</b> Optionally run <code>./ralph.sh daemon 300</code> to watch git + REQUESTS.md and run loops automatically.
-            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, <code>[INGEST_LOGS]</code> flags.
+            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, <code>[INGEST_LOGS]</code>, <code>[KNOWLEDGE_SYNC]</code> flags.
           </div>
 
           <div class="how" style="margin-top: 14px">
@@ -1295,6 +1332,65 @@ flowchart LR
           <div class="callout">
             <b>Skill factory mindset:</b> if you had to explain a step twice, it probably wants to be a Skill.
             Keep them small, name them clearly, and let them compound.
+          </div>
+        </section>
+
+        <section id="knowledge">
+          <div class="sectionhead">
+            <h2>Knowledge & Experts</h2>
+            <p>
+              Integrated from <a class="underline" href="https://github.com/Soupernerd/marge-simpson" target="_blank" rel="noreferrer">marge-simpson</a>:
+              <b>persistent memory</b> across sessions and <b>domain expert routing</b> for specialized guidance.
+            </p>
+          </div>
+
+          <div class="grid" style="margin-top: 14px">
+            <div class="card" style="grid-column: span 6">
+              <h3>Knowledge Persistence</h3>
+              <p>
+                Session-to-session memory stored in <code>system/knowledge/</code>. Tracks decisions, patterns,
+                preferences, and codebase insights. Entries decay after 90+ days without access.
+              </p>
+              <div class="chiprow" role="list">
+                <span class="chip" role="listitem"><span class="tag"></span><span>decisions.md</span></span>
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>patterns.md</span></span>
+                <span class="chip pink" role="listitem"><span class="tag"></span><span>preferences.md</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>insights.md</span></span>
+              </div>
+              <div class="code" style="margin-top: 12px">
+                <button class="copy" data-copy="#cmd-knowledge">Copy</button>
+                <pre id="cmd-knowledge">./ralph.sh session-start   # Load context
+./ralph.sh session-end     # Capture knowledge</pre>
+              </div>
+            </div>
+
+            <div class="card" style="grid-column: span 6">
+              <h3>Domain Expert System</h3>
+              <p>
+                Specialized guidance loaded from <code>system/experts/</code> based on task keywords.
+                Experts provide guidance; Skills provide procedures. Use both together.
+              </p>
+              <div class="chiprow" role="list">
+                <span class="chip" role="listitem"><span class="tag"></span><span>architecture</span></span>
+                <span class="chip pink" role="listitem"><span class="tag"></span><span>security</span></span>
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>testing</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>implementation</span></span>
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>devops</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panelbox" style="margin-top: 14px">
+            <h3>Lite Mode</h3>
+            <p>
+              For simple one-shot tasks that don't need full planning overhead. Use <code>--lite</code> for direct execution
+              without status tracking or iteration.
+            </p>
+            <div class="code" style="margin-top: 12px">
+              <button class="copy" data-copy="#cmd-lite">Copy</button>
+              <pre id="cmd-lite">./ralph.sh build --lite 1   # One-shot, uses AGENTS-lite.md
+./ralph.sh build --full 10  # Full mode (default)</pre>
+            </div>
           </div>
         </section>
 
@@ -1402,6 +1498,7 @@ flowchart LR
                 <button class="copy" data-copy="#tree">Copy</button>
                 <pre id="tree">./
 ├─ AGENTS.md
+├─ AGENTS-lite.md           # Lite mode (one-shot tasks)
 ├─ PROMPT_plan.md
 ├─ PROMPT_plan_work.md
 ├─ PROMPT_build.md
@@ -1413,11 +1510,26 @@ flowchart LR
 ├─ CHANGELOG.md
 ├─ prd.json                 # (optional) Tasks lane task file
 ├─ progress.txt             # (optional) Tasks lane progress
+├─ system/
+│  ├─ knowledge/            # Session memory (from marge-simpson)
+│  │  ├─ _index.md
+│  │  ├─ decisions.md
+│  │  ├─ patterns.md
+│  │  ├─ preferences.md
+│  │  ├─ insights.md
+│  │  └─ archive.md
+│  └─ experts/              # Domain guidance (from marge-simpson)
+│     ├─ _index.md
+│     ├─ architecture.md
+│     ├─ security.md
+│     ├─ testing.md
+│     ├─ implementation.md
+│     └─ devops.md
 ├─ .claude/
-│  └─ skills/               # (generated) Claude Code skill mirror (commit; ignore rp-* skills)
+│  └─ skills/               # (generated) Claude Code skill mirror
 ├─ .codex/
-│  └─ skills/               # (generated) Codex skill mirror (commit if you use Codex)
-├─ skills/                  # (optional) your project skills (Skills-Driven Development)
+│  └─ skills/               # (generated) Codex skill mirror
+├─ skills/                  # (optional) your project skills
 │  ├─ operational/
 │  ├─ meta/
 │  └─ composed/
@@ -1435,7 +1547,9 @@ flowchart LR
    │  ├─ ingest-report.sh   # Report ingestion
    │  ├─ ingest-logs.sh     # Log ingestion
    │  ├─ kickoff.sh         # Kickoff helper
-   │  └─ sync-skills.sh     # Skills discovery (Claude Code / Codex / Amp)
+   │  ├─ sync-skills.sh     # Skills discovery (Claude Code / Codex / Amp)
+   │  ├─ session-start.sh   # Load knowledge context
+   │  └─ session-end.sh     # Capture session knowledge
    ├─ lib/
    │  ├─ core.sh            # Logging, notifications, git helpers
    │  └─ llm.sh             # LLM routing with failover
@@ -1626,8 +1740,8 @@ cd ~/work/repo
             <div>
               <div style="font-family: var(--font-display); letter-spacing: -0.02em">Ralph Kit</div>
               <div style="margin-top: 6px">
-                Inspired by Geoff Huntley’s Ralph methodology — “deterministically bad in an undeterministic world.”
-                This is a tooling kit, not a magic wand.
+                Inspired by Geoff Huntley's Ralph methodology, marge-simpson's knowledge persistence, and compound-product's patterns.
+                "Deterministically bad in an undeterministic world." This is a tooling kit, not a magic wand.
               </div>
             </div>
             <div class="links" aria-label="Footer links">
@@ -1640,6 +1754,13 @@ cd ~/work/repo
                 target="_blank"
                 rel="noreferrer"
                 ><span class="dot"></span>Playbook</a
+              >
+              <a
+                class="pill"
+                href="https://github.com/Soupernerd/marge-simpson"
+                target="_blank"
+                rel="noreferrer"
+                ><span class="dot"></span>marge-simpson</a
               >
               <a class="pill" href="https://github.com/zakelfassi/Ralph-Kit" target="_blank" rel="noreferrer"
                 ><span class="dot"></span>Repo</a

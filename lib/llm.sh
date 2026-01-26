@@ -245,6 +245,11 @@ ralph_llm__exec() {
         prompt_content="$prompt_source"
     fi
 
+    # Prepend optional session context (persistent knowledge + experts)
+    if [[ -n "${RALPH_SESSION_CONTEXT:-}" ]] && [[ -f "${RALPH_SESSION_CONTEXT:-}" ]]; then
+        prompt_content="$(cat "$RALPH_SESSION_CONTEXT")"$'\n\n'"$prompt_content"
+    fi
+
     ralph_core__log "Running task=$task_type with model=$model (preferred=$preferred_model)" "$log_file"
 
     case "$model" in

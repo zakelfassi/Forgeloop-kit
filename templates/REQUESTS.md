@@ -24,6 +24,7 @@ Add these anywhere in this file to control the Ralph daemon:
 - `[REPLAN]` - Run planning once, then continue building
 - `[DEPLOY]` - Run the configured deploy command
 - `[INGEST_LOGS]` - Analyze configured logs and append a new request (see `./ralph/bin/ingest-logs.sh`)
+- `[KNOWLEDGE_SYNC]` - Capture knowledge from session to `system/knowledge/`
 
 ## Ingested Reports & Logs
 

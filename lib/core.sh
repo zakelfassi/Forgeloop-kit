@@ -259,6 +259,132 @@ ralph_core__has_flag() {
 }
 
 # =============================================================================
+# CLI UX Functions
+# =============================================================================
+
+# Spinner with step detection for visual feedback
+# Usage: ralph_core__spinner_start "Working"
+#        ralph_core__spinner_step "Reading files"
+#        ralph_core__spinner_stop
+_RALPH_SPINNER_PID=""
+_RALPH_SPINNER_MSG=""
+
+ralph_core__spinner_start() {
+    local msg="${1:-Working}"
+    _RALPH_SPINNER_MSG="$msg"
+
+    if [[ -t 1 ]]; then
+        (
+            local spinchars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+            local i=0
+            while true; do
+                printf "\r\033[K%s %s" "${spinchars:i++%10:1}" "$_RALPH_SPINNER_MSG"
+                sleep 0.1
+            done
+        ) &
+        _RALPH_SPINNER_PID=$!
+        disown 2>/dev/null || true
+    fi
+}
+
+ralph_core__spinner_step() {
+    local msg="${1:-Working}"
+    _RALPH_SPINNER_MSG="$msg"
+}
+
+ralph_core__spinner_stop() {
+    if [[ -n "$_RALPH_SPINNER_PID" ]]; then
+        kill "$_RALPH_SPINNER_PID" 2>/dev/null || true
+        wait "$_RALPH_SPINNER_PID" 2>/dev/null || true
+        _RALPH_SPINNER_PID=""
+        printf "\r\033[K"
+    fi
+}
+
+# Timer display - shows elapsed time
+# Usage: RALPH_START_TIME=$(ralph_core__timer_start)
+#        ralph_core__timer_elapsed "$RALPH_START_TIME"  # Returns "05:23"
+ralph_core__timer_start() {
+    date +%s
+}
+
+ralph_core__timer_elapsed() {
+    local start_time="$1"
+    local now
+    now=$(date +%s)
+    local elapsed=$((now - start_time))
+    local mins=$((elapsed / 60))
+    local secs=$((elapsed % 60))
+    printf "%02d:%02d" "$mins" "$secs"
+}
+
+# Desktop notification (macOS/Linux compatible)
+# Usage: ralph_core__desktop_notify "title" "message"
+ralph_core__desktop_notify() {
+    local title="$1"
+    local message="$2"
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS
+        osascript - "$title" "$message" 2>/dev/null <<'APPLESCRIPT' || true
+on run argv
+    set theTitle to item 1 of argv
+    set theMessage to item 2 of argv
+    display notification theMessage with title theTitle
+end run
+APPLESCRIPT
+    elif ralph_core__has_cmd "notify-send"; then
+        # Linux with notify-send
+        notify-send "$title" "$message" 2>/dev/null || true
+    fi
+}
+
+# Parse token usage from Claude output (JSON stream format)
+# Usage: tokens=$(ralph_core__parse_token_usage "$output_file")
+ralph_core__parse_token_usage() {
+    local output_file="$1"
+
+    if [[ ! -f "$output_file" ]]; then
+        echo "unknown"
+        return
+    fi
+
+    local input_tokens output_tokens
+    input_tokens=$(grep -o '"input_tokens":[0-9]*' "$output_file" 2>/dev/null | tail -1 | grep -o '[0-9]*' || echo "0")
+    output_tokens=$(grep -o '"output_tokens":[0-9]*' "$output_file" 2>/dev/null | tail -1 | grep -o '[0-9]*' || echo "0")
+
+    if [[ "$input_tokens" = "0" ]] && [[ "$output_tokens" = "0" ]]; then
+        echo "unknown"
+    else
+        echo "${input_tokens}/${output_tokens}"
+    fi
+}
+
+# Detect project type from current directory
+# Usage: project_type=$(ralph_core__detect_project_type "$REPO_DIR")
+ralph_core__detect_project_type() {
+    local repo_dir="$1"
+
+    if [[ -f "$repo_dir/package.json" ]]; then
+        echo "node"
+    elif [[ -f "$repo_dir/Cargo.toml" ]]; then
+        echo "rust"
+    elif [[ -f "$repo_dir/go.mod" ]]; then
+        echo "go"
+    elif [[ -f "$repo_dir/pyproject.toml" ]] || [[ -f "$repo_dir/requirements.txt" ]] || [[ -f "$repo_dir/setup.py" ]]; then
+        echo "python"
+    elif [[ -f "$repo_dir/Gemfile" ]]; then
+        echo "ruby"
+    elif [[ -f "$repo_dir/build.gradle" ]] || [[ -f "$repo_dir/pom.xml" ]]; then
+        echo "java"
+    elif [[ -f "$repo_dir/Package.swift" ]]; then
+        echo "swift"
+    else
+        echo "unknown"
+    fi
+}
+
+# =============================================================================
 # Utility Functions
 # =============================================================================
 

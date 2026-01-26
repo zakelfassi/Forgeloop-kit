@@ -205,9 +205,9 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./ralph.sh plan [max_iters]
+  ./ralph.sh plan [max_iters] [--lite|--full]
   ./ralph.sh plan-work "scope" [max_iters]
-  ./ralph.sh build [max_iters]
+  ./ralph.sh build [max_iters] [--lite|--full]
   ./ralph.sh tasks [max_iters]
   ./ralph.sh review
   ./ralph.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
@@ -217,8 +217,29 @@ Usage:
   ./ralph.sh ingest --report <file> [--mode request|plan-work]
   ./ralph.sh ingest-logs (--file <path> | --cmd "<command>" | --latest) [--tail <lines>] [--mode request|plan-work]
   ./ralph.sh kickoff "<brief>" [--project <name>] [--seed <path-or-url>] [--notes <text>] [--out <path>]
+  ./ralph.sh session-start     # Load knowledge context
+  ./ralph.sh session-end       # Capture session knowledge
+
+Modes:
+  --lite    Use AGENTS-lite.md for simple one-shot tasks
+  --full    Force full AGENTS.md mode (default)
 USAGE
 }
+
+# Parse global flags
+RALPH_LITE=false
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --lite) RALPH_LITE=true; shift ;;
+    --full) RALPH_LITE=false; shift ;;
+    --) shift; while [[ $# -gt 0 ]]; do args+=("$1"); shift; done; break ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]:-}"
+
+export RALPH_LITE
 
 cmd="${1:-}"
 case "$cmd" in
@@ -265,6 +286,13 @@ case "$cmd" in
     shift
     exec "$REPO_DIR/ralph/bin/ingest-logs.sh" "$@"
     ;;
+  session-start)
+    exec "$REPO_DIR/ralph/bin/session-start.sh"
+    ;;
+  session-end)
+    shift
+    exec "$REPO_DIR/ralph/bin/session-end.sh" "$@"
+    ;;
   ""|-h|--help)
     usage
     exit 0
@@ -305,6 +333,28 @@ main() {
     install_file "$DEST_KIT_DIR/templates/specs/README.md" "$TARGET_REPO_DIR/specs/README.md"
     install_file "$DEST_KIT_DIR/templates/specs/feature_template.md" "$TARGET_REPO_DIR/specs/feature_template.md"
     install_file "$DEST_KIT_DIR/templates/docs/README.md" "$TARGET_REPO_DIR/docs/README.md"
+
+    # Knowledge persistence system
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/_index.md" "$TARGET_REPO_DIR/system/knowledge/_index.md"
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/decisions.md" "$TARGET_REPO_DIR/system/knowledge/decisions.md"
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/patterns.md" "$TARGET_REPO_DIR/system/knowledge/patterns.md"
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/preferences.md" "$TARGET_REPO_DIR/system/knowledge/preferences.md"
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/insights.md" "$TARGET_REPO_DIR/system/knowledge/insights.md"
+    install_file "$DEST_KIT_DIR/templates/system/knowledge/archive.md" "$TARGET_REPO_DIR/system/knowledge/archive.md"
+
+    # Domain expert system
+    install_file "$DEST_KIT_DIR/templates/system/experts/_index.md" "$TARGET_REPO_DIR/system/experts/_index.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/architecture.md" "$TARGET_REPO_DIR/system/experts/architecture.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/security.md" "$TARGET_REPO_DIR/system/experts/security.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/testing.md" "$TARGET_REPO_DIR/system/experts/testing.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/implementation.md" "$TARGET_REPO_DIR/system/experts/implementation.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/devops.md" "$TARGET_REPO_DIR/system/experts/devops.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/design.md" "$TARGET_REPO_DIR/system/experts/design.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/documentation.md" "$TARGET_REPO_DIR/system/experts/documentation.md"
+    install_file "$DEST_KIT_DIR/templates/system/experts/product.md" "$TARGET_REPO_DIR/system/experts/product.md"
+
+    # Lite mode agents file
+    install_file "$DEST_KIT_DIR/templates/AGENTS-lite.md" "$TARGET_REPO_DIR/AGENTS-lite.md"
 
     ensure_gitignore
 

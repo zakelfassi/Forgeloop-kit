@@ -4,10 +4,26 @@ This file contains project-specific guidance for Ralph. Keep it brief and operat
 
 ## Project Structure
 ```
-specs/          # Feature specifications (Ralph reads these)
-docs/           # Product/tech docs (Ralph reads these)
-src/            # Source code (adjust paths as needed)
+specs/           # Feature specifications (Ralph reads these)
+docs/            # Product/tech docs (Ralph reads these)
+src/             # Source code (adjust paths as needed)
+system/knowledge # Persistent session memory (decisions, patterns, preferences, insights)
+system/experts   # Domain expert guidance (architecture, security, testing, etc.)
 ```
+
+## Expert Loading
+
+Load relevant experts from `system/experts/` based on task keywords:
+
+| Task Type | Expert File | When to Load |
+|-----------|-------------|--------------|
+| API/Architecture | `system/experts/architecture.md` | Schema design, component boundaries |
+| Auth/Security | `system/experts/security.md` | Auth flows, encryption, vulnerability review |
+| Tests/QA | `system/experts/testing.md` | Test strategy, coverage, automation |
+| Code/Debug | `system/experts/implementation.md` | Refactoring, debugging, code quality |
+| Deploy/CI | `system/experts/devops.md` | Pipeline, containerization, infrastructure |
+
+**Experts provide guidance; Skills provide procedures.** Use both together for complex tasks.
 
 ## Build & Run
 ```bash

@@ -28,6 +28,7 @@ source "$RALPH_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
 RUNTIME_DIR=$(ralph_core__ensure_runtime_dirs "$REPO_DIR")
+export RALPH_RUNTIME_DIR="$RUNTIME_DIR"
 LOG_FILE="${RALPH_LOOP_LOG_FILE:-$RUNTIME_DIR/logs/loop.log}"
 STATE_FILE="$RUNTIME_DIR/state"
 
@@ -41,6 +42,19 @@ PROMPT_PLAN_WORK="${RALPH_PROMPT_PLAN_WORK:-PROMPT_plan_work.md}"
 # Convenience wrappers using library functions
 log() { ralph_core__log "$1" "$LOG_FILE"; }
 notify() { ralph_core__notify "$REPO_DIR" "$@"; }
+
+# Select AGENTS file based on RALPH_LITE mode
+if [[ "${RALPH_LITE:-false}" == "true" ]]; then
+    export RALPH_AGENTS_FILE="AGENTS-lite.md"
+    if [[ -f "$REPO_DIR/AGENTS-lite.md" ]]; then
+        log "Using lite mode: AGENTS-lite.md"
+    else
+        log "Warning: AGENTS-lite.md not found, falling back to AGENTS.md"
+        export RALPH_AGENTS_FILE="AGENTS.md"
+    fi
+else
+    export RALPH_AGENTS_FILE="AGENTS.md"
+fi
 
 # =============================================================================
 # Arg parsing
@@ -91,6 +105,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Mode:       $MODE"
 echo "Branch:     $CURRENT_BRANCH"
 echo "Prompt:     $PROMPT_FILE"
+echo "Agents:     $RALPH_AGENTS_FILE"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Task Routing: $TASK_ROUTING"
 echo "  Planning: $PLANNING_MODEL ($CODEX_PLANNING_CONFIG)"
@@ -107,6 +122,15 @@ notify "🚀" "Ralph Started" "Mode: $MODE | Branch: $CURRENT_BRANCH"
 if [ "$MODE" != "review" ] && [ ! -f "$PROMPT_FILE" ]; then
     echo "Error: $PROMPT_FILE not found"
     exit 1
+fi
+
+# Session knowledge context (best-effort): write $RUNTIME_DIR/session-context.md and inject into prompts.
+SESSION_CONTEXT_FILE="$RUNTIME_DIR/session-context.md"
+if [[ -x "$RALPH_DIR/bin/session-start.sh" ]] && ([[ -d "$REPO_DIR/system/knowledge" ]] || [[ -d "$REPO_DIR/system/experts" ]]); then
+    RALPH_SESSION_QUIET=true RALPH_SESSION_NO_STDOUT=true "$RALPH_DIR/bin/session-start.sh" >/dev/null 2>&1 || true
+    if [[ -f "$SESSION_CONTEXT_FILE" ]]; then
+        export RALPH_SESSION_CONTEXT="$SESSION_CONTEXT_FILE"
+    fi
 fi
 
 while true; do
