@@ -16,9 +16,11 @@ Examples:
   ./ralph/install.sh --wrapper
 
 Flags:
-  --force     Overwrite existing files
-  --wrapper   Create ./ralph.sh convenience wrapper
-  --skills    Install skills to user agent directories (~/.claude/skills, ~/.codex/skills, etc.)
+  --force         Overwrite existing files
+  --wrapper       Create ./ralph.sh convenience wrapper
+  --skills        Install skills to user agent directories (~/.claude/skills, ~/.codex/skills, etc.)
+  --interactive   Force interactive prompts for conflicts (even in non-TTY)
+  --batch         Skip conflicts silently (no prompts, like CI)
 USAGE
 }
 
@@ -28,6 +30,7 @@ SRC_KIT_NAME="$(basename "$SRC_KIT_DIR")"
 FORCE="false"
 WRAPPER="false"
 SKILLS="false"
+INTERACTIVE="auto"  # auto, true, false
 
 # Default target:
 # - If this installer lives in a folder named "ralph", assume it's vendored into a repo at ./ralph and
@@ -54,6 +57,14 @@ while [ $# -gt 0 ]; do
             ;;
         --skills)
             SKILLS="true"
+            shift
+            ;;
+        --interactive|-i)
+            INTERACTIVE="true"
+            shift
+            ;;
+        --batch|-b)
+            INTERACTIVE="false"
             shift
             ;;
         *)
@@ -93,13 +104,118 @@ copy_kit() {
     fi
 }
 
+# Check if running interactively
+is_interactive() {
+    case "$INTERACTIVE" in
+        true) return 0 ;;
+        false) return 1 ;;
+        auto) [[ -t 0 && -t 1 ]] ;;
+    esac
+}
+
+# Prompt user for conflict resolution
+# Returns: skip, overwrite, merge
+prompt_conflict() {
+    local dest="$1"
+    local src="$2"
+
+    if ! is_interactive; then
+        echo "skip"
+        return
+    fi
+
+    while true; do
+        echo ""
+        echo "  $dest already exists. What would you like to do?"
+        echo "    [s]kip      - Keep existing file (default)"
+        echo "    [o]verwrite - Replace with template"
+        echo "    [m]erge     - Append template below separator"
+        echo "    [d]iff      - Show differences, then ask again"
+        printf "  > "
+
+        read -r choice </dev/tty
+        choice="${choice:-s}"
+
+        case "$choice" in
+            s|S|skip)
+                echo "skip"
+                return
+                ;;
+            o|O|overwrite)
+                echo "overwrite"
+                return
+                ;;
+            m|M|merge)
+                echo "merge"
+                return
+                ;;
+            d|D|diff)
+                echo ""
+                if command -v diff >/dev/null 2>&1; then
+                    diff -u "$dest" "$src" | head -50 || true
+                else
+                    echo "(diff not available)"
+                fi
+                # Loop continues to ask again
+                ;;
+            *)
+                echo "  Invalid choice. Please enter s, o, m, or d."
+                ;;
+        esac
+    done
+}
+
+merge_file() {
+    local src="$1"
+    local dest="$2"
+    local separator
+
+    separator="
+# ─────────────────────────────────────────────────────────────
+# Ralph Kit Template (merged $(date +%Y-%m-%d))
+# ─────────────────────────────────────────────────────────────
+"
+
+    # Append separator and template content to existing file
+    {
+        echo "$separator"
+        cat "$src"
+    } >> "$dest"
+}
+
 install_file() {
     local src="$1"
     local dest="$2"
 
-    if [ -e "$dest" ] && [ "$FORCE" != "true" ]; then
-        echo "skip: $dest (exists)"
-        return 0
+    if [ -e "$dest" ]; then
+        if [ "$FORCE" = "true" ]; then
+            # Force mode: overwrite silently
+            mkdir -p "$(dirname "$dest")"
+            cp "$src" "$dest"
+            echo "write: $dest (overwritten)"
+            return 0
+        fi
+
+        local action
+        action="$(prompt_conflict "$dest" "$src")"
+
+        case "$action" in
+            skip)
+                echo "skip: $dest (exists)"
+                return 0
+                ;;
+            overwrite)
+                mkdir -p "$(dirname "$dest")"
+                cp "$src" "$dest"
+                echo "write: $dest (overwritten)"
+                return 0
+                ;;
+            merge)
+                merge_file "$src" "$dest"
+                echo "merge: $dest (template appended)"
+                return 0
+                ;;
+        esac
     fi
 
     mkdir -p "$(dirname "$dest")"

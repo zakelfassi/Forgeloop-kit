@@ -15,6 +15,7 @@ What it does:
   --codex-global  Copy skills into ~/.codex/skills (Codex user dir)
   --amp           Copy skills into ~/.config/amp/skills (Amp)
   --all           Enable all targets
+  --force-symlinks  Overwrite non-symlink files/dirs that would collide
 
 Notes:
   - Skills are sourced from ralph/skills when vendored, or ./skills when running in this repo.
@@ -30,6 +31,7 @@ want_codex_global=false
 want_amp=false
 include_project=false
 project_prefix=""
+FORCE_SYMLINKS=false
 
 explicit_targets=false
 
@@ -84,6 +86,10 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       shift 2
+      ;;
+    --force-symlinks)
+      FORCE_SYMLINKS=true
+      shift
       ;;
     *)
       echo "Unknown arg: $1" >&2
@@ -187,6 +193,24 @@ ensure_dir_writable() {
   return 1
 }
 
+# Check for collision before symlinking
+# Returns 0 if safe to proceed, 1 if collision detected and should skip
+check_symlink_collision() {
+  local link_path="$1"
+  local link_name="$2"
+
+  if [[ -e "$link_path" && ! -L "$link_path" ]]; then
+    # Exists but is NOT a symlink - likely user's custom content
+    echo "warning: $link_path exists and is not a symlink" >&2
+    echo "         This may shadow your custom skill '$link_name'." >&2
+    if [[ "$FORCE_SYMLINKS" != "true" ]]; then
+      echo "         Use --force-symlinks to overwrite." >&2
+      return 1
+    fi
+  fi
+  return 0
+}
+
 sync_claude() {
   local dst_dir="$repo_dir/.claude/skills"
   mkdir -p "$dst_dir"
@@ -206,8 +230,12 @@ sync_claude() {
     target="../../$rel"
     link_name="ralph-$skill_name"
 
-    ln -snf "$target" "$dst_dir/$link_name"
-    echo "claude: linked $link_name -> $target"
+    if check_symlink_collision "$dst_dir/$link_name" "$link_name"; then
+      ln -snf "$target" "$dst_dir/$link_name"
+      echo "claude: linked $link_name -> $target"
+    else
+      echo "claude: skipped $link_name (collision)"
+    fi
   done < <(find "$kit_skills_root" -type f -name SKILL.md -print0)
 
   if [[ "$link_repo_skills" == "true" ]]; then
@@ -220,8 +248,12 @@ sync_claude() {
       target="../../$rel"
       link_name="$skill_name"
 
-      ln -snf "$target" "$dst_dir/$link_name"
-      echo "claude: linked $link_name -> $target"
+      if check_symlink_collision "$dst_dir/$link_name" "$link_name"; then
+        ln -snf "$target" "$dst_dir/$link_name"
+        echo "claude: linked $link_name -> $target"
+      else
+        echo "claude: skipped $link_name (collision)"
+      fi
     done < <(find "$project_skills_root" -type f -name SKILL.md -print0)
   fi
 }
@@ -247,8 +279,12 @@ sync_codex_repo() {
     target="../../$rel"
     link_name="ralph-$skill_name"
 
-    ln -snf "$target" "$dst_dir/$link_name"
-    echo "codex: linked $link_name -> $target"
+    if check_symlink_collision "$dst_dir/$link_name" "$link_name"; then
+      ln -snf "$target" "$dst_dir/$link_name"
+      echo "codex: linked $link_name -> $target"
+    else
+      echo "codex: skipped $link_name (collision)"
+    fi
   done < <(find "$kit_skills_root" -type f -name SKILL.md -print0)
 
   if [[ "$link_repo_skills" == "true" ]]; then
@@ -261,8 +297,12 @@ sync_codex_repo() {
       target="../../$rel"
       link_name="$skill_name"
 
-      ln -snf "$target" "$dst_dir/$link_name"
-      echo "codex: linked $link_name -> $target"
+      if check_symlink_collision "$dst_dir/$link_name" "$link_name"; then
+        ln -snf "$target" "$dst_dir/$link_name"
+        echo "codex: linked $link_name -> $target"
+      else
+        echo "codex: skipped $link_name (collision)"
+      fi
     done < <(find "$project_skills_root" -type f -name SKILL.md -print0)
   fi
 }

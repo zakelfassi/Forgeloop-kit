@@ -110,10 +110,12 @@ Install the kit:
 Then run a loop in the target repo:
 ```bash
 cd /path/to/target-repo
-./ralph.sh sync-skills      # optional: refresh repo-scoped skill mirrors (.claude/skills; .codex/skills when writable)
+./ralph.sh sync-skills      # refresh repo-scoped skill mirrors (.claude/skills; .codex/skills when writable)
 ./ralph.sh plan 1
 ./ralph.sh build 10
 ```
+
+**Note:** `sync-skills` warns if a destination exists and is not a symlink (e.g., your custom skill directory). Use `--force-symlinks` to overwrite.
 
 Or use the tasks lane with `prd.json`:
 ```bash
@@ -133,6 +135,23 @@ If the kit is already vendored in a target repo at `./ralph`:
 ```bash
 ./ralph/install.sh --wrapper
 ```
+
+### Conflict Handling
+
+When files already exist, the installer offers several options:
+
+| Flag | Behavior |
+|------|----------|
+| (default in TTY) | Interactive prompt: skip, overwrite, merge, or diff |
+| `--batch` / `-b` | Silently skip existing files (CI-safe) |
+| `--interactive` / `-i` | Force interactive prompts even in non-TTY |
+| `--force` | Overwrite all existing files |
+
+**Interactive options:**
+- **skip** — Keep existing file (default)
+- **overwrite** — Replace with template
+- **merge** — Append template below a separator
+- **diff** — Show differences, then ask again
 
 ## Kickoff (greenfield)
 

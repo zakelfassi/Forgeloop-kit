@@ -1156,6 +1156,11 @@ cd "$REPO"
 ./ralph.sh build 10
 # Or use tasks lane: ./ralph.sh tasks 10</pre>
                 </div>
+                <div class="chiprow" role="list" style="margin-top: 12px">
+                  <span class="chip" role="listitem"><span class="tag"></span><span>--batch (CI mode)</span></span>
+                  <span class="chip blue" role="listitem"><span class="tag"></span><span>--interactive</span></span>
+                  <span class="chip pink" role="listitem"><span class="tag"></span><span>merge on conflict</span></span>
+                </div>
               </div>
             </div>
           </div>
@@ -1319,13 +1324,15 @@ flowchart LR
             <p>
               Project skills live at <code>skills/</code> (repo root). The kit ships a base library under <code>ralph/skills/</code>.
               Sync them into <code>.claude/skills</code> (Claude Code) and <code>.codex/skills</code> (Codex) so agents can discover and reuse them.
-              If a sandbox blocks Codex mirroring, <code>sync-skills</code> will warn and continue.
+              If a sandbox blocks Codex mirroring or a destination exists as a non-symlink (your custom skill), <code>sync-skills</code> will warn and skip.
             </p>
             <div class="code" style="margin-top: 12px">
               <button class="copy" data-copy="#cmd-sync-skills">Copy</button>
               <pre id="cmd-sync-skills">./ralph.sh sync-skills
 # Optional: also install to user skill dirs (Codex/Claude/Amp)
-./ralph.sh sync-skills --all</pre>
+./ralph.sh sync-skills --all
+# Force overwrite non-symlink collisions
+./ralph.sh sync-skills --force-symlinks</pre>
             </div>
           </div>
 
@@ -1618,6 +1625,9 @@ flowchart LR
 cd /path/to/your/new-repo
 ./ralph.sh sync-skills</pre>
                   </div>
+                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
+                    Tip: In TTY, existing files prompt for <b>skip/overwrite/merge/diff</b>. Use <code>--batch</code> for CI or <code>--force</code> to overwrite all.
+                  </p>
                 </li>
                 <li>
                   Generate a kickoff prompt (paste into your memory-backed agent):
@@ -1658,6 +1668,9 @@ cd /path/to/your/new-repo
 cd /path/to/existing-repo
 ./ralph.sh sync-skills</pre>
                   </div>
+                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
+                    When files exist: <b>skip</b> (default), <b>overwrite</b>, <b>merge</b> (append template), or <b>diff</b> (view changes).
+                  </p>
                 </li>
                 <li>
                   Write/curate specs for the system you want (3–8 files is a great start). Then run planning:
