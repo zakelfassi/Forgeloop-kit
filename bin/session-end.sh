@@ -323,11 +323,16 @@ update_index() {
 
     # Count entries
     local d_count p_count pr_count i_count a_count
-    d_count=$(grep -cE "^### D-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/decisions.md" 2>/dev/null || echo 0)
-    p_count=$(grep -cE "^### P-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/patterns.md" 2>/dev/null || echo 0)
-    pr_count=$(grep -cE "^### PR-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/preferences.md" 2>/dev/null || echo 0)
-    i_count=$(grep -cE "^### I-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/insights.md" 2>/dev/null || echo 0)
-    a_count=$(grep -cE "^### [A-Za-z]{1,2}-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/archive.md" 2>/dev/null || echo 0)
+    d_count=$(grep -cE "^### D-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/decisions.md" 2>/dev/null || true)
+    d_count=${d_count:-0}
+    p_count=$(grep -cE "^### P-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/patterns.md" 2>/dev/null || true)
+    p_count=${p_count:-0}
+    pr_count=$(grep -cE "^### PR-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/preferences.md" 2>/dev/null || true)
+    pr_count=${pr_count:-0}
+    i_count=$(grep -cE "^### I-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/insights.md" 2>/dev/null || true)
+    i_count=${i_count:-0}
+    a_count=$(grep -cE "^### [A-Za-z]{1,2}-[0-9]{3}[[:space:]]*[|]" "$KNOWLEDGE_DIR/archive.md" 2>/dev/null || true)
+    a_count=${a_count:-0}
 
     # Update Quick Stats section (best-effort; preserves the rest of the file)
     local tmp

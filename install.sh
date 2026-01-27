@@ -399,9 +399,9 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./forgeloop.sh plan [max_iters] [--lite|--full]
-  ./forgeloop.sh plan-work "scope" [max_iters]
-  ./forgeloop.sh build [max_iters] [--lite|--full]
+  ./forgeloop.sh plan [max_iters] [--lite|--full] [--watch|--infinite]
+  ./forgeloop.sh plan-work "scope" [max_iters] [--watch|--infinite]
+  ./forgeloop.sh build [max_iters] [--lite|--full] [--watch|--infinite]
   ./forgeloop.sh tasks [max_iters]
   ./forgeloop.sh review
   ./forgeloop.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
@@ -427,6 +427,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --lite) FORGELOOP_LITE=true; shift ;;
     --full) FORGELOOP_LITE=false; shift ;;
+    --watch|--infinite) args+=("$1"); shift ;;
     --) shift; while [[ $# -gt 0 ]]; do args+=("$1"); shift; done; break ;;
     *) args+=("$1"); shift ;;
   esac
@@ -438,14 +439,30 @@ export FORGELOOP_LITE
 cmd="${1:-}"
 case "$cmd" in
   plan)
-    exec "$REPO_DIR/forgeloop/bin/loop.sh" plan "${2:-0}"
+    shift
+    max="${1:-}"
+    if [[ "$max" =~ ^[0-9]+$ ]]; then
+      max_iters="$max"
+      shift
+    else
+      max_iters="1"
+    fi
+    exec "$REPO_DIR/forgeloop/bin/loop.sh" plan "$max_iters" "$@"
     ;;
   plan-work)
     shift
     exec "$REPO_DIR/forgeloop/bin/loop.sh" plan-work "$@"
     ;;
   build)
-    exec "$REPO_DIR/forgeloop/bin/loop.sh" "${2:-10}"
+    shift
+    max="${1:-}"
+    if [[ "$max" =~ ^[0-9]+$ ]]; then
+      max_iters="$max"
+      shift
+    else
+      max_iters="10"
+    fi
+    exec "$REPO_DIR/forgeloop/bin/loop.sh" "$max_iters" "$@"
     ;;
   review)
     exec "$REPO_DIR/forgeloop/bin/loop.sh" review

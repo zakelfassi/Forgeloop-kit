@@ -33,6 +33,8 @@ source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
 source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
+forgeloop_core__require_cmd "jq"
+
 # Setup runtime directories
 RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
 LOG_FILE="${FORGELOOP_INGEST_LOG_FILE:-$RUNTIME_DIR/logs/ingest.log}"
@@ -197,14 +199,13 @@ Respond with ONLY a JSON object (no markdown, no code fences):
 
     # Try to extract JSON from result
     local json_text
-    json_text=$(echo "$result" | grep -E '^\{' | head -1 || echo "")
-
+    json_text=$(printf "%s" "$result" | forgeloop_core__extract_json_object_with_required_keys \
+        priority_item description work_scope acceptance_criteria priority type 2>/dev/null || true)
     if [[ -z "$json_text" ]]; then
-        # Try to find JSON block in output
-        json_text=$(echo "$result" | sed -n '/^{/,/^}/p' | head -20)
+        json_text=$(printf "%s" "$result" | forgeloop_core__extract_first_json_object 2>/dev/null || true)
     fi
 
-    if ! echo "$json_text" | jq . >/dev/null 2>&1; then
+    if [[ -z "$json_text" ]] || ! echo "$json_text" | jq . >/dev/null 2>&1; then
         echo "Error: Could not parse LLM response as JSON" >&2
         echo "Response: $result" >&2
         exit 1

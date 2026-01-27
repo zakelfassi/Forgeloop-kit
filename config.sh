@@ -16,6 +16,9 @@ export FORGELOOP_GIT_REMOTE="${FORGELOOP_GIT_REMOTE:-origin}"
 # Safe default is false for new repos; enable on a dedicated branch/runner.
 export FORGELOOP_AUTOPUSH="${FORGELOOP_AUTOPUSH:-false}"
 
+# If true, plan/plan-work modes will push after each iteration (no CI gate).
+export FORGELOOP_PLAN_AUTOPUSH="${FORGELOOP_PLAN_AUTOPUSH:-false}"
+
 # Prompt files (relative to repo root)
 export FORGELOOP_PROMPT_PLAN="${FORGELOOP_PROMPT_PLAN:-PROMPT_plan.md}"
 export FORGELOOP_PROMPT_BUILD="${FORGELOOP_PROMPT_BUILD:-PROMPT_build.md}"
@@ -30,6 +33,18 @@ export FORGELOOP_CHANGELOG_FILE="${FORGELOOP_CHANGELOG_FILE:-CHANGELOG.md}"
 
 # Optional: command to run after Codex review auto-fixes (e.g. "pnpm test:ci", "npm test", "pytest -q")
 export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"
+
+# Optional: verification command run before CI gate/push (loop.sh) or per-task (loop-tasks.sh)
+export FORGELOOP_VERIFY_CMD="${FORGELOOP_VERIFY_CMD:-}"
+
+# If true, prd.json may provide per-task or global `verify_cmd` (tasks lane).
+export FORGELOOP_ALLOW_PRD_VERIFY_CMD="${FORGELOOP_ALLOW_PRD_VERIFY_CMD:-false}"
+
+# Max diff size to send into review/security gates (chars)
+export FORGELOOP_MAX_DIFF_CHARS="${FORGELOOP_MAX_DIFF_CHARS:-120000}"
+
+# Max chars for untrusted context injection (CI/verify outputs)
+export FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
 
 # Optional: CI gate command to run before pushing to protected branches (main/master).
 # Auto-detected during installation based on project type. Examples:

@@ -2,6 +2,7 @@
 .forgeloop/
 *.log
 .env.local
+reports/
 
 # Claude Code local config + repo-local skill mirrors
 .claude/settings.local.json

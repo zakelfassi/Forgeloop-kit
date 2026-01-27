@@ -2,6 +2,7 @@
   "project": "MyProject",
   "branchName": "forgeloop/feature-name",
   "description": "Brief description of the feature being built",
+  "verify_cmd": "npm test",
   "tasks": [
     {
       "id": "T-001",
@@ -15,7 +16,8 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": ""
+      "notes": "",
+      "verify_cmd": "npm test"
     },
     {
       "id": "T-002",

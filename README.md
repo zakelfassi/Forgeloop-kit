@@ -115,6 +115,11 @@ cd /path/to/target-repo
 ./forgeloop.sh build 10
 ```
 
+For continuous looping, add `--watch` (or `--infinite`) to any loop command:
+```bash
+./forgeloop.sh build 10 --watch
+```
+
 **Note:** `sync-skills` warns if a destination exists and is not a symlink (e.g., your custom skill directory). Use `--force-symlinks` to overwrite.
 
 Or use the tasks lane with `prd.json`:
@@ -315,6 +320,8 @@ The daemon includes blocker detection to prevent infinite loops when the agent i
 
 Edit `forgeloop/config.sh` (in the target repo) to set:
 - `FORGELOOP_AUTOPUSH=true` if you want auto-push
+- `FORGELOOP_PLAN_AUTOPUSH=true` if you want plan/plan-work loops to push (no CI gate)
+- `FORGELOOP_ALLOW_PRD_VERIFY_CMD=true` if you want `prd.json` to provide `verify_cmd` (tasks lane; runs as shell)
 - `FORGELOOP_TEST_CMD` (optional) to run after review auto-fixes
 - `FORGELOOP_DEPLOY_CMD` (optional) used by the daemon on `[DEPLOY]`
 - `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE` (optional) used by the daemon on `[INGEST_LOGS]`

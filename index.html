@@ -1154,7 +1154,8 @@ cd "$REPO"
 ./forgeloop.sh sync-skills
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
-# Or use tasks lane: ./forgeloop.sh tasks 10</pre>
+# Or use tasks lane: ./forgeloop.sh tasks 10
+# Continuous mode: add --watch or --infinite</pre>
                 </div>
                 <div class="chiprow" role="list" style="margin-top: 12px">
                   <span class="chip" role="listitem"><span class="tag"></span><span>--batch (CI mode)</span></span>
@@ -1581,6 +1582,8 @@ flowchart LR
               <ul style="margin: 10px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 14px">
                 <li><code>AI_MODEL=claude|codex</code> force one model</li>
                 <li><code>FORGELOOP_AUTOPUSH=false</code> by default</li>
+                <li><code>FORGELOOP_PLAN_AUTOPUSH</code> push on plan/plan-work iterations (no CI gate)</li>
+                <li><code>FORGELOOP_ALLOW_PRD_VERIFY_CMD</code> allow <code>verify_cmd</code> from <code>prd.json</code> (tasks lane)</li>
                 <li><code>./forgeloop.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
                 <li><code>FORGELOOP_TEST_CMD</code> run after review auto-fixes</li>
                 <li><code>FORGELOOP_DEPLOY_CMD</code> used by daemon on <code>[DEPLOY]</code></li>
@@ -1642,7 +1645,8 @@ cd /path/to/your/new-repo
                   <div class="code" style="margin-top: 8px">
                     <button class="copy" data-copy="#cmd-new-run">Copy</button>
                     <pre id="cmd-new-run">./forgeloop.sh plan 1
-./forgeloop.sh build 10</pre>
+./forgeloop.sh build 10
+# Add --watch or --infinite for continuous looping</pre>
                   </div>
                 </li>
               </ul>
@@ -1683,7 +1687,8 @@ cd /path/to/existing-repo
                   Build in loops with backpressure:
                   <div class="code" style="margin-top: 8px">
                     <button class="copy" data-copy="#cmd-old-build">Copy</button>
-                    <pre id="cmd-old-build">./forgeloop.sh build 10</pre>
+                    <pre id="cmd-old-build">./forgeloop.sh build 10
+# Add --watch or --infinite for continuous looping</pre>
                   </div>
                 </li>
               </ul>

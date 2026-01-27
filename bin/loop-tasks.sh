@@ -29,6 +29,7 @@ source "$FORGELOOP_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
 RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
+export FORGELOOP_RUNTIME_DIR="$RUNTIME_DIR"
 LOG_FILE="${FORGELOOP_TASKS_LOG_FILE:-$RUNTIME_DIR/logs/tasks.log}"
 STATE_FILE="$RUNTIME_DIR/tasks.state"
 LAST_BRANCH_FILE="$RUNTIME_DIR/.tasks-last-branch"
@@ -141,6 +142,78 @@ all_tasks_complete() {
 get_prd_branch() {
     local prd_path="$1"
     jq -r '.branchName // empty' "$prd_path" 2>/dev/null || echo ""
+}
+
+get_task_verify_cmd() {
+    local prd_path="$1"
+    local task_id="$2"
+
+    # PRD-derived verify commands are effectively arbitrary shell execution.
+    # Only allow them when explicitly opted in.
+    if [[ "${FORGELOOP_ALLOW_PRD_VERIFY_CMD:-false}" == "true" ]]; then
+        local tasks_key
+        tasks_key=$(get_tasks_key "$prd_path")
+
+        if [[ -n "$tasks_key" ]]; then
+            local task_cmd
+            task_cmd=$(jq -r --arg id "$task_id" ".${tasks_key}[] | select(.id==\$id) | .verify_cmd // empty" "$prd_path" 2>/dev/null || echo "")
+            if [[ -n "$task_cmd" ]] && [[ "$task_cmd" != "null" ]]; then
+                echo "$task_cmd"
+                return
+            fi
+        fi
+
+        local prd_cmd
+        prd_cmd=$(jq -r '.verify_cmd // empty' "$prd_path" 2>/dev/null || echo "")
+        if [[ -n "$prd_cmd" ]] && [[ "$prd_cmd" != "null" ]]; then
+            echo "$prd_cmd"
+            return
+        fi
+    fi
+
+    if [[ -n "${FORGELOOP_VERIFY_CMD:-}" ]]; then
+        echo "$FORGELOOP_VERIFY_CMD"
+    fi
+}
+
+mark_task_passes() {
+    local prd_path="$1"
+    local task_id="$2"
+    local passes="$3"
+    local tasks_key
+    tasks_key=$(get_tasks_key "$prd_path")
+
+    if [[ -z "$tasks_key" ]]; then
+        return 1
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    jq --arg id "$task_id" --argjson passes "$passes" \
+        ".${tasks_key} |= map(if .id==\$id then .passes=\$passes else . end)" \
+        "$prd_path" > "$tmp" && mv "$tmp" "$prd_path"
+}
+
+run_verify_cmd() {
+    local cmd="$1"
+    local out_file="$2"
+    local task_id="$3"
+
+    log "Running verify command for $task_id: $cmd"
+    local exit_code=0
+    forgeloop_core__run_cmd_capture "$REPO_DIR" "$cmd" "$out_file" || exit_code=$?
+
+    if [[ "$exit_code" -ne 0 ]]; then
+        local untrusted_file="${out_file%.txt}.untrusted.md"
+        local max_chars="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
+        forgeloop_core__wrap_untrusted_context "Verify Command Failure Output ($task_id)" "$out_file" "$untrusted_file" "$max_chars" || true
+        forgeloop_core__append_extra_context_file "$untrusted_file"
+        log "Verify command failed for $task_id"
+        return 1
+    fi
+
+    log "Verify command passed for $task_id"
+    return 0
 }
 
 # =============================================================================
@@ -289,6 +362,13 @@ main() {
     # Load LLM state
     forgeloop_llm__load_state "$STATE_FILE"
 
+    # Session knowledge context (best-effort): write $RUNTIME_DIR/session-context.md and inject into prompts.
+    local session_context
+    session_context=$(forgeloop_core__init_session_context "$REPO_DIR" "$FORGELOOP_DIR" "$RUNTIME_DIR")
+    if [[ -n "$session_context" ]]; then
+        export FORGELOOP_SESSION_CONTEXT="$session_context"
+    fi
+
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Mode:       tasks"
     echo "Branch:     $current_branch"
@@ -338,6 +418,20 @@ main() {
 
         # Security gate
         forgeloop_llm__security_gate "$REPO_DIR" "$SECURITY_SCHEMA" "$STATE_FILE" "$LOG_FILE"
+
+        # Optional verify command (task or global)
+        local verify_cmd
+        verify_cmd=$(get_task_verify_cmd "$PRD_FILE" "$next_task_id")
+        if [[ -n "$verify_cmd" ]]; then
+            local verify_dir="$RUNTIME_DIR/verify"
+            mkdir -p "$verify_dir"
+            local verify_out="$verify_dir/verify-$next_task_id.txt"
+            if ! run_verify_cmd "$verify_cmd" "$verify_out" "$next_task_id"; then
+                mark_task_passes "$PRD_FILE" "$next_task_id" false
+                continue
+            fi
+            mark_task_passes "$PRD_FILE" "$next_task_id" true
+        fi
 
         # Push if enabled
         forgeloop_core__git_push_branch "$REPO_DIR" "$current_branch" "$LOG_FILE"

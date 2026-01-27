@@ -11,6 +11,7 @@ if [[ ! -f "$FORGELOOP_DIR/config.sh" ]]; then
     FORGELOOP_DIR="$REPO_DIR"
 fi
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
+source "$FORGELOOP_DIR/lib/core.sh"
 source "$REPO_DIR/.env.local" 2>/dev/null || true
 
 if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
@@ -68,9 +69,11 @@ fi
 # Post to Slack
 text="$emoji *Forgeloop needs input* [$category]\\n\\n$question\\n\\n_Reply by editing $QUESTIONS_FILE_REL (Q-$question_id) and pushing to git_\\n_${host} • ${ts}_"
 
+payload=$(forgeloop_core__json_slack_text_payload "$text")
+
 curl -s -X POST "$SLACK_WEBHOOK_URL" \
     -H 'Content-type: application/json' \
-    -d "{\"text\":\"$text\"}"
+    --data-binary "$payload"
 
 echo ""
 echo "Question Q-$question_id posted to Slack and logged to $QUESTIONS_FILE_REL"
