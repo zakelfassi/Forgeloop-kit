@@ -45,6 +45,12 @@ BLOCKER_PAUSE_SECONDS="${FORGELOOP_BLOCKER_PAUSE_SECONDS:-1800}"  # 30 minutes
 BLOCKED_ITERATION_COUNT=0
 LAST_BLOCKER_HASH=""
 
+# Loop timeouts (avoid a single stuck build holding the daemon lock forever)
+# - FORGELOOP_LOOP_TIMEOUT_SECONDS applies to build runs
+# - FORGELOOP_PLAN_TIMEOUT_SECONDS applies to planning runs
+FORGELOOP_LOOP_TIMEOUT_SECONDS="${FORGELOOP_LOOP_TIMEOUT_SECONDS:-3600}"   # 60 minutes
+FORGELOOP_PLAN_TIMEOUT_SECONDS="${FORGELOOP_PLAN_TIMEOUT_SECONDS:-900}"    # 15 minutes
+
 # Convenience wrappers
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
@@ -151,17 +157,49 @@ has_pending_tasks() {
     [ -f "$REPO_DIR/$PLAN_FILE" ] && grep -q '^- \[ \]' "$REPO_DIR/$PLAN_FILE" 2>/dev/null
 }
 
+run_with_timeout() {
+    local seconds="$1"; shift
+    local label="$1"; shift
+
+    if command -v timeout >/dev/null 2>&1; then
+        # TERM first, then KILL after 30s grace
+        timeout --signal=TERM --kill-after=30s "${seconds}s" "$@"
+        return $?
+    fi
+
+    log "Warning: 'timeout' not available; running without timeout ($label)"
+    "$@"
+}
+
 run_plan() {
     log "Running planning..."
     notify "📋" "Forgeloop Planning" "Starting plan"
-    (cd "$REPO_DIR" && "$REPO_DIR/forgeloop/bin/loop.sh" plan 1) || true
+
+    local rc=0
+    (cd "$REPO_DIR" && run_with_timeout "$FORGELOOP_PLAN_TIMEOUT_SECONDS" "plan" "$REPO_DIR/forgeloop/bin/loop.sh" plan 1) || rc=$?
+
+    if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+        log "Planning timed out after ${FORGELOOP_PLAN_TIMEOUT_SECONDS}s (rc=$rc)"
+        notify "⏱️" "Forgeloop Planning Timed Out" "Planning exceeded ${FORGELOOP_PLAN_TIMEOUT_SECONDS}s. Will retry next cycle."
+    fi
+
+    return 0
 }
 
 run_build() {
     local iters="${1:-10}"
     log "Running build ($iters iterations)..."
     notify "🔨" "Forgeloop Build" "Starting build ($iters iterations)"
-    (cd "$REPO_DIR" && "$REPO_DIR/forgeloop/bin/loop.sh" "$iters") || true
+
+    local rc=0
+    (cd "$REPO_DIR" && run_with_timeout "$FORGELOOP_LOOP_TIMEOUT_SECONDS" "build" "$REPO_DIR/forgeloop/bin/loop.sh" "$iters") || rc=$?
+
+    if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+        log "Build timed out after ${FORGELOOP_LOOP_TIMEOUT_SECONDS}s (rc=$rc)"
+        notify "⏱️" "Forgeloop Build Timed Out" "Build exceeded ${FORGELOOP_LOOP_TIMEOUT_SECONDS}s. Will retry next cycle."
+    fi
+
+    return 0
 }
 
 run_deploy() {
