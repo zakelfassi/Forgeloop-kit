@@ -169,6 +169,15 @@ cd /path/to/target-repo
 
 - Guide: `docs/kickoff.md`
 
+## GitHub as Source of Truth (Project v2)
+
+If you want a minimal roadmap workflow backed by GitHub Projects (v2):
+
+- Bootstrap a private repo + Project v2 + seed roadmap issues: `./forgeloop/bin/gh-bootstrap.sh`
+- One-way sync (Project -> local derived views): `./forgeloop/bin/gh-sync-project.sh`
+
+Guide: `docs/github-projects.md`
+
 ## Run (in the target repo)
 
 **Checklist lane** (default):

@@ -225,21 +225,41 @@ install_file() {
 
 ensure_gitignore() {
     local gitignore="$TARGET_REPO_DIR/.gitignore"
-    local line=".forgeloop/"
+
+    # We want to ignore runtime artifacts, but allow committing small config/cache files.
+    # IMPORTANT: do not ignore the directory itself (".forgeloop/") if you want negate rules to work.
+    local block
+    block=$(cat <<'EOF'
+# Forgeloop runtime (generated)
+.forgeloop/*
+!.forgeloop/gh.json
+!.forgeloop/project-cache/
+!.forgeloop/project-cache/**
+EOF
+)
 
     if [ ! -f "$gitignore" ]; then
-        echo "$line" > "$gitignore"
+        printf "%s\n" "$block" > "$gitignore"
         echo "write: $gitignore"
         return 0
     fi
 
-    if grep -qF "$line" "$gitignore" 2>/dev/null; then
+    # Already configured
+    if grep -qF ".forgeloop/*" "$gitignore" 2>/dev/null && grep -qF "!.forgeloop/gh.json" "$gitignore" 2>/dev/null; then
         return 0
     fi
 
-    echo "" >> "$gitignore"
-    echo "$line" >> "$gitignore"
-    echo "update: $gitignore (+$line)"
+    # If a legacy ignore exists (.forgeloop/), remove it so negate rules can work.
+    if grep -qE '^\.forgeloop/?$' "$gitignore" 2>/dev/null; then
+        tmp="$(mktemp)"
+        # remove legacy lines, keep everything else
+        grep -vE '^\.forgeloop/?$' "$gitignore" > "$tmp" || true
+        mv "$tmp" "$gitignore"
+        echo "update: $gitignore (removed legacy .forgeloop/)"
+    fi
+
+    printf "\n%s\n" "$block" >> "$gitignore"
+    echo "update: $gitignore (+forgeloop runtime ignore block)"
 }
 
 install_skills() {
