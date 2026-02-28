@@ -124,14 +124,22 @@ forgeloop_llm__preflight_auth() {
     local state_file="${2:-}"
     local log_file="${3:-}"
 
-    if forgeloop_llm__has_claude && ! forgeloop_llm__check_claude_auth; then
-        FORGELOOP_LAST_ERROR="auth_failure:claude"
-        forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
+    if forgeloop_llm__has_claude; then
+        if ! forgeloop_llm__check_claude_auth; then
+            FORGELOOP_LAST_ERROR="auth_failure:claude"
+            forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
+        else
+            forgeloop_llm__clear_auth_failure "claude"
+        fi
     fi
 
-    if forgeloop_llm__has_codex && ! forgeloop_llm__check_codex_auth; then
-        FORGELOOP_LAST_ERROR="auth_failure:codex"
-        forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
+    if forgeloop_llm__has_codex; then
+        if ! forgeloop_llm__check_codex_auth; then
+            FORGELOOP_LAST_ERROR="auth_failure:codex"
+            forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
+        else
+            forgeloop_llm__clear_auth_failure "codex"
+        fi
     fi
 
     [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
