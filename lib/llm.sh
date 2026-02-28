@@ -190,9 +190,38 @@ forgeloop_llm__preflight_auth() {
 
     [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
-    if forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
+    local has_claude has_codex
+    has_claude=0
+    has_codex=0
+    if forgeloop_llm__has_claude; then
+        has_claude=1
+    fi
+    if forgeloop_llm__has_codex; then
+        has_codex=1
+    fi
+
+    if [[ $has_claude -eq 1 && $has_codex -eq 1 ]] && \
+       forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
         forgeloop_core__log "Preflight: both models unauthenticated; aborting" "$log_file"
         forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on both Claude and Codex. Run 'claude auth login' or 'codex login' then retry."
+        return 1
+    fi
+
+    if [[ $has_claude -eq 1 && $has_codex -eq 0 ]] && forgeloop_llm__has_auth_failure "claude"; then
+        forgeloop_core__log "Preflight: Claude unauthenticated and no other providers available; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on Claude and no other providers available. Run 'claude auth login' then retry."
+        return 1
+    fi
+
+    if [[ $has_codex -eq 1 && $has_claude -eq 0 ]] && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Preflight: Codex unauthenticated and no other providers available; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on Codex and no other providers available. Run 'codex login' then retry."
+        return 1
+    fi
+
+    if [[ $has_claude -eq 0 && $has_codex -eq 0 ]]; then
+        forgeloop_core__log "Preflight: no providers installed/enabled; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "No LLM providers are installed or enabled. Install/enable Claude or Codex then retry."
         return 1
     fi
 }
