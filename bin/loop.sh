@@ -164,6 +164,12 @@ on_loop_error() {
     local detail="loop failed (exit ${exit_code}) at line ${line_no}"
     if [[ -n "${FORGELOOP_LAST_ERROR:-}" ]]; then
         detail="loop failed: ${FORGELOOP_LAST_ERROR} (exit ${exit_code}) at line ${line_no}"
+    elif [[ -f "$LOG_FILE" ]]; then
+        local last_line
+        last_line=$(tail -1 "$LOG_FILE" 2>/dev/null | tr -d '\r')
+        if [[ -n "$last_line" ]]; then
+            detail="loop failed (exit ${exit_code}) at line ${line_no} — last log: ${last_line}"
+        fi
     fi
     write_ralph_state "$RALPH_STATE_STATUS" "$detail"
 }
