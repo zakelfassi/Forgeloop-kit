@@ -239,13 +239,19 @@ while true; do
 
     case "$MODE" in
         review)
-            git diff 2>/dev/null | forgeloop_llm__exec "$REPO_DIR" "stdin" "review" "$STATE_FILE" "$LOG_FILE"
+            if ! git diff 2>/dev/null | forgeloop_llm__exec "$REPO_DIR" "stdin" "review" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
         plan|plan-work)
-            forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "$MODE" "$STATE_FILE" "$LOG_FILE"
+            if ! forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "$MODE" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
         *)
-            forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "build" "$STATE_FILE" "$LOG_FILE"
+            if ! forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "build" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
     esac
 
