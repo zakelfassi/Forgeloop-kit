@@ -14,9 +14,10 @@ source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
 source "$FORGELOOP_DIR/lib/core.sh"
 source "$REPO_DIR/.env.local" 2>/dev/null || true
 
+slack_enabled=1
 if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
-    echo "Error: SLACK_WEBHOOK_URL not set"
-    exit 1
+    echo "Warning: SLACK_WEBHOOK_URL not set; skipping Slack post"
+    slack_enabled=0
 fi
 
 category="${1:-question}"
@@ -69,11 +70,16 @@ fi
 # Post to Slack
 text="$emoji *Forgeloop needs input* [$category]\\n\\n$question\\n\\n_Reply by editing $QUESTIONS_FILE_REL (Q-$question_id) and pushing to git_\\n_${host} • ${ts}_"
 
-payload=$(forgeloop_core__json_slack_text_payload "$text")
+if [ "$slack_enabled" -eq 1 ]; then
+    payload=$(forgeloop_core__json_slack_text_payload "$text")
 
-curl -s -X POST "$SLACK_WEBHOOK_URL" \
-    -H 'Content-type: application/json' \
-    --data-binary "$payload"
+    curl -s -X POST "$SLACK_WEBHOOK_URL" \
+        -H 'Content-type: application/json' \
+        --data-binary "$payload"
 
-echo ""
-echo "Question Q-$question_id posted to Slack and logged to $QUESTIONS_FILE_REL"
+    echo ""
+    echo "Question Q-$question_id posted to Slack and logged to $QUESTIONS_FILE_REL"
+else
+    echo ""
+    echo "Question Q-$question_id logged to $QUESTIONS_FILE_REL (Slack disabled)"
+fi
