@@ -31,6 +31,7 @@ RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
 export FORGELOOP_RUNTIME_DIR="$RUNTIME_DIR"
 LOG_FILE="${FORGELOOP_LOOP_LOG_FILE:-$RUNTIME_DIR/logs/loop.log}"
 STATE_FILE="$RUNTIME_DIR/state"
+RALPH_STATE_FILE="${FORGELOOP_RALPH_STATE_FILE:-$REPO_DIR/memory/ralph-loop/state.json}"
 
 REVIEW_SCHEMA="${FORGELOOP_REVIEW_SCHEMA:-$REPO_DIR/forgeloop/schemas/review.schema.json}"
 SECURITY_SCHEMA="${FORGELOOP_SECURITY_SCHEMA:-$REPO_DIR/forgeloop/schemas/security.schema.json}"
@@ -42,6 +43,24 @@ PROMPT_PLAN_WORK="${FORGELOOP_PROMPT_PLAN_WORK:-PROMPT_plan_work.md}"
 # Convenience wrappers using library functions
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
+
+write_ralph_state() {
+    local status="$1"
+    local detail="${2:-}"
+    local state_dir
+    state_dir="$(dirname "$RALPH_STATE_FILE")"
+    mkdir -p "$state_dir"
+    cat > "$RALPH_STATE_FILE" << EOF
+{
+  "status": "${status}",
+  "mode": "${MODE}",
+  "currentBranch": "${CURRENT_BRANCH}",
+  "iterations": ${ITERATION:-0},
+  "lastRunAt": "$(date -Iseconds)",
+  "detail": "${detail//"/\\"}"
+}
+EOF
+}
 
 run_verify_cmd() {
     local cmd="$1"
@@ -134,6 +153,11 @@ fi
 
 ITERATION=0
 CURRENT_BRANCH=$(forgeloop_core__git_current_branch)
+
+RALPH_STATE_STATUS="running"
+write_ralph_state "$RALPH_STATE_STATUS" "loop started"
+trap 'RALPH_STATE_STATUS="error"; write_ralph_state "$RALPH_STATE_STATUS" "loop failed (exit $?)"' ERR
+trap 'if [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT
 
 if [ "$MODE" = "plan-work" ]; then
     if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
