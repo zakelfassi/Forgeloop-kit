@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+if [[ -z "${HOME:-}" ]]; then
+    export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+fi
+if [[ -z "${XDG_CONFIG_HOME:-}" ]]; then
+    export XDG_CONFIG_HOME="$HOME/.config"
+fi
+
 # =============================================================================
 # Forgeloop Loop (Portable)
 # =============================================================================
