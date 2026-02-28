@@ -105,7 +105,13 @@ forgeloop_llm__check_claude_auth() {
     if ! forgeloop_llm__has_claude; then
         return 1
     fi
-    $CLAUDE_CLI auth status &>/dev/null
+    local timeout_seconds
+    timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --signal=KILL "$timeout_seconds" $CLAUDE_CLI auth status &>/dev/null
+    else
+        $CLAUDE_CLI auth status &>/dev/null
+    fi
 }
 
 # Check if Codex CLI is authenticated
@@ -114,7 +120,13 @@ forgeloop_llm__check_codex_auth() {
     if ! forgeloop_llm__has_codex; then
         return 1
     fi
-    $CODEX_CLI login status &>/dev/null
+    local timeout_seconds
+    timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --signal=KILL "$timeout_seconds" $CODEX_CLI login status &>/dev/null
+    else
+        $CODEX_CLI login status &>/dev/null
+    fi
 }
 
 # Preflight model auth and persist failures in state
