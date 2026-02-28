@@ -105,13 +105,25 @@ forgeloop_llm__check_claude_auth() {
     if ! forgeloop_llm__has_claude; then
         return 1
     fi
-    local timeout_seconds
+    local timeout_seconds output_file exit_code
     timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    output_file=$(mktemp)
+    exit_code=0
     if command -v timeout >/dev/null 2>&1; then
-        timeout --signal=KILL "$timeout_seconds" $CLAUDE_CLI auth status &>/dev/null
+        timeout --signal=KILL "$timeout_seconds" $CLAUDE_CLI auth status >"$output_file" 2>&1 || exit_code=$?
     else
-        $CLAUDE_CLI auth status &>/dev/null
+        $CLAUDE_CLI auth status >"$output_file" 2>&1 || exit_code=$?
     fi
+    if [[ "$exit_code" -ne 0 ]]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    if grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+        rm -f "$output_file"
+        return 1
+    fi
+    rm -f "$output_file"
+    return 0
 }
 
 # Check if Codex CLI is authenticated
@@ -120,13 +132,25 @@ forgeloop_llm__check_codex_auth() {
     if ! forgeloop_llm__has_codex; then
         return 1
     fi
-    local timeout_seconds
+    local timeout_seconds output_file exit_code
     timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    output_file=$(mktemp)
+    exit_code=0
     if command -v timeout >/dev/null 2>&1; then
-        timeout --signal=KILL "$timeout_seconds" $CODEX_CLI login status &>/dev/null
+        timeout --signal=KILL "$timeout_seconds" $CODEX_CLI login status >"$output_file" 2>&1 || exit_code=$?
     else
-        $CODEX_CLI login status &>/dev/null
+        $CODEX_CLI login status >"$output_file" 2>&1 || exit_code=$?
     fi
+    if [[ "$exit_code" -ne 0 ]]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    if grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+        rm -f "$output_file"
+        return 1
+    fi
+    rm -f "$output_file"
+    return 0
 }
 
 # Preflight model auth and persist failures in state
