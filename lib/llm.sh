@@ -32,6 +32,10 @@ fi
 : "${SECURITY_MODEL:=codex}"
 : "${BUILD_MODEL:=claude}"
 
+# Allow disabling providers without uninstalling their CLIs.
+: "${FORGELOOP_DISABLE_CLAUDE:=false}"
+: "${FORGELOOP_DISABLE_CODEX:=false}"
+
 : "${CLAUDE_CLI:=claude}"
 : "${CLAUDE_MODEL:=opus}"
 : "${CLAUDE_FLAGS:=--dangerously-skip-permissions --output-format=stream-json --verbose}"
@@ -96,8 +100,14 @@ EOF
 # Model Detection & Auth Checks
 # =============================================================================
 
-forgeloop_llm__has_claude() { command -v "$CLAUDE_CLI" &>/dev/null; }
-forgeloop_llm__has_codex() { command -v "$CODEX_CLI" &>/dev/null; }
+forgeloop_llm__has_claude() {
+    [[ "${FORGELOOP_DISABLE_CLAUDE}" == "true" ]] && return 1
+    command -v "$CLAUDE_CLI" &>/dev/null
+}
+forgeloop_llm__has_codex() {
+    [[ "${FORGELOOP_DISABLE_CODEX}" == "true" ]] && return 1
+    command -v "$CODEX_CLI" &>/dev/null
+}
 
 # Check if Claude CLI is authenticated
 # Usage: if forgeloop_llm__check_claude_auth; then ...
