@@ -316,6 +316,11 @@ forgeloop_llm__exec() {
     local log_file="${5:-}"
     local work_scope="${WORK_SCOPE:-}"
     local mode="${MODE:-build}"
+    local timeout_seconds="${FORGELOOP_LLM_TIMEOUT_SECONDS:-0}"
+    local timeout_prefix=()
+    if [[ -n "$timeout_seconds" ]] && [[ "$timeout_seconds" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
+        timeout_prefix=(timeout --signal=KILL "$timeout_seconds")
+    fi
 
     local preferred_model
     preferred_model=$(forgeloop_llm__get_model_for_task "$task_type")
@@ -391,10 +396,15 @@ forgeloop_llm__exec() {
                 return 127
             fi
 
-            echo "$prompt_content" | $CLAUDE_CLI -p \
+            echo "$prompt_content" | "${timeout_prefix[@]}" $CLAUDE_CLI -p \
                 $CLAUDE_FLAGS \
                 --model "$CLAUDE_MODEL" \
                 2>&1 | tee "$output_file" || exit_code=$?
+
+            if [[ "$exit_code" -eq 124 ]]; then
+                forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
+                forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(\"error\":\{\"type\":\"rate_limit|anthropic.*rate.*limit|Usage limit reached|You.ve run out of|credit balance is too low)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Claude rate limited!" "$log_file"
@@ -465,11 +475,16 @@ forgeloop_llm__exec() {
 
             forgeloop_core__log "Codex config: model=$codex_model reasoning=$codex_reasoning" "$log_file"
 
-            echo "$prompt_content" | $CODEX_CLI exec \
+            echo "$prompt_content" | "${timeout_prefix[@]}" $CODEX_CLI exec \
                 $CODEX_FLAGS \
                 -m "$codex_model" \
                 -c "model_reasoning_effort=\"$codex_reasoning\"" \
                 - 2>&1 | tee "$output_file" || exit_code=$?
+
+            if [[ "$exit_code" -eq 124 ]]; then
+                forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
+                forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(openai.*rate.*limit|Rate limit reached for|You exceeded your current quota|Request too large)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Codex rate limited!" "$log_file"

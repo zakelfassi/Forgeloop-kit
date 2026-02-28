@@ -46,6 +46,9 @@ export FORGELOOP_MAX_DIFF_CHARS="${FORGELOOP_MAX_DIFF_CHARS:-120000}"
 # Max chars for untrusted context injection (CI/verify outputs)
 export FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
 
+# Optional: hard timeout (seconds) for each LLM call. 0 disables.
+export FORGELOOP_LLM_TIMEOUT_SECONDS="${FORGELOOP_LLM_TIMEOUT_SECONDS:-600}"
+
 # Optional: CI gate command to run before pushing to protected branches (main/master).
 # Auto-detected during installation based on project type. Examples:
 #   Node.js: "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
