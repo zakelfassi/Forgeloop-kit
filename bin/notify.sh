@@ -13,9 +13,8 @@ source "$FORGELOOP_DIR/lib/core.sh"
 source "$REPO_DIR/.env.local" 2>/dev/null || true
 
 if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
-    echo "Error: SLACK_WEBHOOK_URL not set"
-    echo "Create .env.local with: SLACK_WEBHOOK_URL=your-webhook-url"
-    exit 1
+    # No webhook configured; skip silently.
+    exit 0
 fi
 
 emoji="${1:-📢}"
