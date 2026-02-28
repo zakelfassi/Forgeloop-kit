@@ -39,9 +39,9 @@ fi
 : "${CODEX_CLI:=codex}"
 : "${CODEX_FLAGS:=--dangerously-bypass-approvals-and-sandbox}"
 
-: "${CODEX_PLANNING_CONFIG:=gpt-5.2-codex:high}"
-: "${CODEX_REVIEW_CONFIG:=gpt-5.2-codex:medium}"
-: "${CODEX_SECURITY_CONFIG:=gpt-5.2-codex:medium}"
+: "${CODEX_PLANNING_CONFIG:=gpt-5.2:high}"
+: "${CODEX_REVIEW_CONFIG:=gpt-5.2:medium}"
+: "${CODEX_SECURITY_CONFIG:=gpt-5.2:medium}"
 
 : "${ENABLE_FAILOVER:=true}"
 : "${ENABLE_CODEX_REVIEW:=true}"
