@@ -161,7 +161,11 @@ on_loop_error() {
     local exit_code=$?
     local line_no=${1:-}
     RALPH_STATE_STATUS="error"
-    write_ralph_state "$RALPH_STATE_STATUS" "loop failed (exit ${exit_code}) at line ${line_no}"
+    local detail="loop failed (exit ${exit_code}) at line ${line_no}"
+    if [[ -n "${FORGELOOP_LAST_ERROR:-}" ]]; then
+        detail="loop failed: ${FORGELOOP_LAST_ERROR} (exit ${exit_code}) at line ${line_no}"
+    fi
+    write_ralph_state "$RALPH_STATE_STATUS" "$detail"
 }
 trap 'on_loop_error $LINENO' ERR
 trap 'if [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT

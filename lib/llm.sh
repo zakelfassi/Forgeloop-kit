@@ -329,6 +329,15 @@ forgeloop_llm__exec() {
     output_file=$(mktemp)
     local exit_code=0
     local prompt_content=""
+    FORGELOOP_LAST_ERROR=""
+
+    if forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Both models have auth failures; aborting LLM exec" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on both Claude and Codex. Reauthenticate and retry."
+        FORGELOOP_LAST_ERROR="auth_failure:both"
+        rm -f "$output_file"
+        return 1
+    fi
 
     # Check rate limiting and failover
     if forgeloop_llm__is_rate_limited "$model" && [[ "$ENABLE_FAILOVER" = "true" ]]; then
@@ -436,6 +445,7 @@ forgeloop_llm__exec() {
             # Check for auth errors (distinct from rate limits)
             # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
             if grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+                FORGELOOP_LAST_ERROR="auth_failure:claude"
                 forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
@@ -517,6 +527,7 @@ forgeloop_llm__exec() {
             # Check for auth errors (distinct from rate limits)
             # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
             if grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+                FORGELOOP_LAST_ERROR="auth_failure:codex"
                 forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
