@@ -181,7 +181,7 @@ on_loop_error() {
     write_ralph_state "$RALPH_STATE_STATUS" "$detail"
 }
 trap 'on_loop_error $LINENO' ERR
-trap 'if [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT
+trap 'exit_code=$?; if [[ "$exit_code" -ne 0 ]]; then RALPH_STATE_STATUS="error"; detail="loop failed (exit ${exit_code})"; if [[ -n "${FORGELOOP_LAST_ERROR:-}" ]]; then detail="loop failed: ${FORGELOOP_LAST_ERROR} (exit ${exit_code})"; elif [[ -f "$LOG_FILE" ]]; then last_line=$(tail -1 "$LOG_FILE" 2>/dev/null | tr -d '\r'); if [[ -n "$last_line" ]]; then detail="loop failed (exit ${exit_code}) — last log: ${last_line}"; fi; fi; write_ralph_state "$RALPH_STATE_STATUS" "$detail"; elif [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT
 
 if [ "$MODE" = "plan-work" ]; then
     if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
