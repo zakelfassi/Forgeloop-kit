@@ -99,15 +99,13 @@ EOF
 forgeloop_llm__has_claude() { command -v "$CLAUDE_CLI" &>/dev/null; }
 forgeloop_llm__has_codex() { command -v "$CODEX_CLI" &>/dev/null; }
 
-# Check if Claude CLI is authenticated (quick version check)
+# Check if Claude CLI is authenticated
 # Usage: if forgeloop_llm__check_claude_auth; then ...
 forgeloop_llm__check_claude_auth() {
     if ! forgeloop_llm__has_claude; then
         return 1
     fi
-    # Quick check: --version should work without auth, but --help with model info needs it
-    # A simple "claude --version" should succeed if the CLI is installed
-    $CLAUDE_CLI --version &>/dev/null
+    $CLAUDE_CLI auth status &>/dev/null
 }
 
 # Check if Codex CLI is authenticated
@@ -116,7 +114,33 @@ forgeloop_llm__check_codex_auth() {
     if ! forgeloop_llm__has_codex; then
         return 1
     fi
-    $CODEX_CLI --version &>/dev/null
+    $CODEX_CLI login status &>/dev/null
+}
+
+# Preflight model auth and persist failures in state
+# Usage: forgeloop_llm__preflight_auth "$REPO_DIR" "$STATE_FILE" "$LOG_FILE"
+forgeloop_llm__preflight_auth() {
+    local repo_dir="$1"
+    local state_file="${2:-}"
+    local log_file="${3:-}"
+
+    if forgeloop_llm__has_claude && ! forgeloop_llm__check_claude_auth; then
+        FORGELOOP_LAST_ERROR="auth_failure:claude"
+        forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
+    fi
+
+    if forgeloop_llm__has_codex && ! forgeloop_llm__check_codex_auth; then
+        FORGELOOP_LAST_ERROR="auth_failure:codex"
+        forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
+    fi
+
+    [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
+
+    if forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Preflight: both models unauthenticated; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on both Claude and Codex. Run 'claude auth login' or 'codex login' then retry."
+        return 1
+    fi
 }
 
 # Check if a model has a recent auth failure

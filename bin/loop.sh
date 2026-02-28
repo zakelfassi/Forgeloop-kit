@@ -218,6 +218,12 @@ if [[ -n "$SESSION_CONTEXT_FILE" ]]; then
     export FORGELOOP_SESSION_CONTEXT="$SESSION_CONTEXT_FILE"
 fi
 
+if declare -F forgeloop_llm__preflight_auth >/dev/null 2>&1; then
+    if ! forgeloop_llm__preflight_auth "$REPO_DIR" "$STATE_FILE" "$LOG_FILE"; then
+        exit 1
+    fi
+fi
+
 while true; do
     if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then
         echo "Reached max iterations: $MAX_ITERATIONS"
