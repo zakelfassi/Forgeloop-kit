@@ -39,7 +39,7 @@ fi
 : "${CODEX_CLI:=codex}"
 : "${CODEX_FLAGS:=--dangerously-bypass-approvals-and-sandbox}"
 
-: "${CODEX_PLANNING_CONFIG:=gpt-5.2:high}"
+: "${CODEX_PLANNING_CONFIG:=gpt-5.2-codex:high}"
 : "${CODEX_REVIEW_CONFIG:=gpt-5.2-codex:medium}"
 : "${CODEX_SECURITY_CONFIG:=gpt-5.2-codex:medium}"
 
@@ -442,9 +442,11 @@ forgeloop_llm__exec() {
                 --model "$CLAUDE_MODEL" \
                 2>&1 | tee "$output_file" || exit_code=$?
 
-            if [[ "$exit_code" -eq 124 ]]; then
+            if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
                 forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
                 forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+                rm -f "$output_file"
+                return $exit_code
             fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(\"error\":\{\"type\":\"rate_limit|anthropic.*rate.*limit|Usage limit reached|You.ve run out of|credit balance is too low)" "$output_file" 2>/dev/null; then
@@ -524,9 +526,11 @@ forgeloop_llm__exec() {
                 -c "model_reasoning_effort=\"$codex_reasoning\"" \
                 - 2>&1 | tee "$output_file" || exit_code=$?
 
-            if [[ "$exit_code" -eq 124 ]]; then
+            if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
                 forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
                 forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+                rm -f "$output_file"
+                return $exit_code
             fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(openai.*rate.*limit|Rate limit reached for|You exceeded your current quota|Request too large)" "$output_file" 2>/dev/null; then
