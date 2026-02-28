@@ -434,7 +434,8 @@ forgeloop_llm__exec() {
             fi
 
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
+            if grep -qE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
@@ -514,7 +515,8 @@ forgeloop_llm__exec() {
             fi
 
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
+            if grep -qE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
