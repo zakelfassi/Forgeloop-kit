@@ -156,7 +156,14 @@ CURRENT_BRANCH=$(forgeloop_core__git_current_branch)
 
 RALPH_STATE_STATUS="running"
 write_ralph_state "$RALPH_STATE_STATUS" "loop started"
-trap 'RALPH_STATE_STATUS="error"; write_ralph_state "$RALPH_STATE_STATUS" "loop failed (exit $?)"' ERR
+
+on_loop_error() {
+    local exit_code=$?
+    local line_no=${1:-}
+    RALPH_STATE_STATUS="error"
+    write_ralph_state "$RALPH_STATE_STATUS" "loop failed (exit ${exit_code}) at line ${line_no}"
+}
+trap 'on_loop_error $LINENO' ERR
 trap 'if [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT
 
 if [ "$MODE" = "plan-work" ]; then
