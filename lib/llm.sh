@@ -48,8 +48,8 @@ fi
 : "${TASK_ROUTING:=true}"
 
 # Auth error patterns (distinct from rate limits)
-CLAUDE_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|Could not resolve authentication|ANTHROPIC_API_KEY|not authenticated|Invalid API Key|Unable to authenticate|credentials|APIKeyInvalid|Unauthorized)"
-CODEX_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|OPENAI_API_KEY|Incorrect API key|Unable to authenticate|credentials|API key not found|Unauthorized)"
+CLAUDE_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|Could not resolve authentication|ANTHROPIC_API_KEY|not authenticated|not logged in|Invalid API Key|Unable to authenticate|credentials|APIKeyInvalid|Unauthorized)"
+CODEX_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|OPENAI_API_KEY|Incorrect API key|Unable to authenticate|credentials|API key not found|not logged in|Unauthorized)"
 
 # Rate limit state (epoch timestamps when limit expires)
 CLAUDE_RATE_LIMITED_UNTIL=${CLAUDE_RATE_LIMITED_UNTIL:-0}
