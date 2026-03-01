@@ -551,9 +551,14 @@ forgeloop_llm__exec() {
                 return $?
             fi
 
+            local claude_success_marker=0
+            if grep -q '"input_tokens"' "$output_file" 2>/dev/null; then
+                claude_success_marker=1
+            fi
+
             # Check for auth errors (distinct from rate limits)
             # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
-            if grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            if [[ "$claude_success_marker" -eq 0 ]] && grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 FORGELOOP_LAST_ERROR="auth_failure:claude"
                 forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
@@ -572,7 +577,7 @@ forgeloop_llm__exec() {
             fi
 
             # Success - clear any previous auth failure
-            if [[ "$exit_code" -eq 0 ]]; then
+            if [[ "$exit_code" -eq 0 ]] || [[ "$claude_success_marker" -eq 1 ]]; then
                 forgeloop_llm__clear_auth_failure "claude"
             fi
             ;;
@@ -635,9 +640,14 @@ forgeloop_llm__exec() {
                 return $?
             fi
 
+            local codex_success_marker=0
+            if grep -q "tokens used" "$output_file" 2>/dev/null; then
+                codex_success_marker=1
+            fi
+
             # Check for auth errors (distinct from rate limits)
             # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
-            if grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            if [[ "$codex_success_marker" -eq 0 ]] && grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 FORGELOOP_LAST_ERROR="auth_failure:codex"
                 forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
@@ -656,7 +666,7 @@ forgeloop_llm__exec() {
             fi
 
             # Success - clear any previous auth failure
-            if [[ "$exit_code" -eq 0 ]]; then
+            if [[ "$exit_code" -eq 0 ]] || [[ "$codex_success_marker" -eq 1 ]]; then
                 forgeloop_llm__clear_auth_failure "codex"
             fi
             ;;
