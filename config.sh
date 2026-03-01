@@ -47,7 +47,13 @@ export FORGELOOP_MAX_DIFF_CHARS="${FORGELOOP_MAX_DIFF_CHARS:-120000}"
 export FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
 
 # Optional: hard timeout (seconds) for each LLM call. 0 disables.
-export FORGELOOP_LLM_TIMEOUT_SECONDS="${FORGELOOP_LLM_TIMEOUT_SECONDS:-600}"
+export FORGELOOP_LLM_TIMEOUT_SECONDS="${FORGELOOP_LLM_TIMEOUT_SECONDS:-900}"
+# Clamp to a sane minimum unless explicitly overridden (avoids frequent LLM timeouts).
+if [[ "${FORGELOOP_ALLOW_SHORT_LLM_TIMEOUT:-false}" != "true" ]]; then
+    if [[ "$FORGELOOP_LLM_TIMEOUT_SECONDS" -lt 900 ]]; then
+        export FORGELOOP_LLM_TIMEOUT_SECONDS=900
+    fi
+fi
 
 # Optional: CI gate command to run before pushing to protected branches (main/master).
 # Auto-detected during installation based on project type. Examples:
