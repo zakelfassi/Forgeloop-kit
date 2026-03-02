@@ -71,6 +71,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$QUIET" == "false" ]]; then
+    if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        if [[ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]]; then
+            echo "Warning: working tree is dirty. Consider cleaning before running Forgeloop." >&2
+        fi
+    fi
+fi
+
 # Resolve runtime directory (prefer core helper if available)
 if declare -F forgeloop_core__ensure_runtime_dirs >/dev/null 2>&1; then
     RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
