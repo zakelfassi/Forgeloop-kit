@@ -46,6 +46,17 @@ forgeloop_core__resolve_repo_dir() {
     fi
 }
 
+# Resolve where the kit itself lives for a repo.
+# Usage: FORGELOOP_DIR=$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")
+forgeloop_core__resolve_forgeloop_dir() {
+    local repo_dir="$1"
+    if [[ -f "$repo_dir/forgeloop/lib/core.sh" ]]; then
+        echo "$repo_dir/forgeloop"
+    else
+        echo "$repo_dir"
+    fi
+}
+
 # Load Forgeloop configuration from config.sh
 # Usage: forgeloop_core__load_config "$REPO_DIR"
 forgeloop_core__load_config() {
@@ -628,6 +639,109 @@ forgeloop_core__hash_file() {
     else
         cat "$file" | head -c 32
     fi
+}
+
+# Produce a stable-ish failure fingerprint from a category, summary, and optional evidence.
+# Usage: signature=$(forgeloop_core__failure_signature "ci" "CI gate failed" "/tmp/output.txt")
+forgeloop_core__failure_signature() {
+    local kind="$1"
+    local summary="$2"
+    local evidence_file="${3:-}"
+    local payload
+    payload=$(printf "kind=%s\nsummary=%s\n" "$kind" "$summary")
+
+    if [[ -n "$evidence_file" ]] && [[ -f "$evidence_file" ]]; then
+        local evidence
+        evidence=$(
+            tail -n 40 "$evidence_file" 2>/dev/null \
+            | sed -E \
+                -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:.+-Z]*/<timestamp>/g' \
+                -e 's/[0-9a-f]{7,40}/<hash>/g' \
+                -e 's/[0-9]+/<num>/g'
+        )
+        payload=$(printf "%s\nevidence=%s\n" "$payload" "$evidence")
+    fi
+
+    forgeloop_core__hash "$payload"
+}
+
+# Clear the remembered repeated-failure state after a healthy iteration.
+# Usage: forgeloop_core__clear_failure_state "$REPO_DIR"
+forgeloop_core__clear_failure_state() {
+    local repo_dir="$1"
+    local runtime_dir
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    rm -f "$runtime_dir/failure-state.env"
+}
+
+# Track repeated identical failures and return the current consecutive count.
+# Usage: count=$(forgeloop_core__record_failure "$REPO_DIR" "ci" "CI gate failed" "/tmp/output.txt")
+forgeloop_core__record_failure() {
+    local repo_dir="$1"
+    local kind="$2"
+    local summary="$3"
+    local evidence_file="${4:-}"
+
+    local runtime_dir state_file signature
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    state_file="$runtime_dir/failure-state.env"
+    signature=$(forgeloop_core__failure_signature "$kind" "$summary" "$evidence_file")
+
+    local last_signature="" last_count=0
+    if [[ -f "$state_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$state_file"
+        last_signature="${LAST_FAILURE_SIGNATURE:-}"
+        last_count="${LAST_FAILURE_COUNT:-0}"
+    fi
+
+    local count=1
+    if [[ "$signature" == "$last_signature" ]]; then
+        count=$((last_count + 1))
+    fi
+
+    {
+        printf 'LAST_FAILURE_SIGNATURE=%q\n' "$signature"
+        printf 'LAST_FAILURE_KIND=%q\n' "$kind"
+        printf 'LAST_FAILURE_COUNT=%q\n' "$count"
+        printf 'LAST_FAILURE_UPDATED_AT=%q\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    } > "$state_file"
+
+    echo "$count"
+}
+
+# Draft a human escalation when the loop is spinning on the same failure.
+# Returns 0 when the caller should stop, 1 when it should retry.
+# Usage: if forgeloop_core__handle_repeated_failure "$REPO_DIR" "ci" "CI gate failed" "$out" "$LOG_FILE"; then exit 1; fi
+forgeloop_core__handle_repeated_failure() {
+    local repo_dir="$1"
+    local kind="$2"
+    local summary="$3"
+    local evidence_file="${4:-}"
+    local log_file="${5:-}"
+    local requested_action="${6:-${FORGELOOP_FAILURE_ESCALATION_ACTION:-issue}}"
+
+    local count threshold
+    count=$(forgeloop_core__record_failure "$repo_dir" "$kind" "$summary" "$evidence_file")
+    threshold="${FORGELOOP_FAILURE_ESCALATE_AFTER:-3}"
+
+    forgeloop_core__log "Repeated failure tracking: kind=$kind count=$count/$threshold summary=$summary" "$log_file"
+
+    if [[ "$count" -lt "$threshold" ]]; then
+        return 1
+    fi
+
+    local forgeloop_dir escalate_script
+    forgeloop_dir=$(forgeloop_core__resolve_forgeloop_dir "$repo_dir")
+    escalate_script="$forgeloop_dir/bin/escalate.sh"
+
+    if [[ -x "$escalate_script" ]]; then
+        "$escalate_script" "$kind" "$summary" "$requested_action" "${evidence_file:-}" "$count" >/dev/null 2>&1 || true
+    fi
+
+    forgeloop_core__notify "$repo_dir" "🧯" "Forgeloop Escalated" "Stopped after repeated $kind failure. Drafted next steps for a human."
+    forgeloop_core__log "Escalated repeated $kind failure after $count attempts; stopping for human intervention" "$log_file"
+    return 0
 }
 
 # =============================================================================

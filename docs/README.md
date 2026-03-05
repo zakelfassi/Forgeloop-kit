@@ -1,6 +1,9 @@
 # Forgeloop Docs
 
 - `kickoff.md` — greenfield workflow to generate `docs/*` + `specs/*` using a memory-backed agent, then hand off to Forgeloop.
+- `harness-readiness.md` — the repo-local checklist for agent legibility, reproducibility, and failure handling.
+- `pr-triage-2026-03-05.md` — merge/skip recommendations for the current open PR queue.
+- `runtime-control.md` — the backpressure and escalation rules for loops and daemon runs.
 - `sandboxing.md` — how to run Forgeloop in full-auto safely (Docker fallback + cloud VM notes + pricing table).
 
 GCP provisioning scripts live in `ops/gcp/`.

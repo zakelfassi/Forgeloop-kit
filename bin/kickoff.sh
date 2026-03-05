@@ -18,7 +18,10 @@ Notes:
 USAGE
 }
 
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
 
 if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
   usage

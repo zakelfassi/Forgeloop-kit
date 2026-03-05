@@ -31,13 +31,12 @@ set -euo pipefail
 # =============================================================================
 
 # Resolve repo directory and load libraries
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
-source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
 forgeloop_core__require_cmd "jq"

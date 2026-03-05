@@ -21,13 +21,12 @@ set -euo pipefail
 INTERVAL=${1:-300}
 
 # Resolve repo directory and load libraries
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
-source "$FORGELOOP_DIR/lib/core.sh"
 
 # Setup runtime directories and paths
 RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
@@ -85,9 +84,14 @@ get_blocker_hash() {
         # Hash the unanswered question IDs without blocking on stdin
         local blocker_ids
         blocker_ids=$(awk '
-            /^## Q-[0-9]+/ { qid=$2; awaiting=0; next }
-            /^## / { if (qid != "" && awaiting==1) print qid; qid=""; awaiting=0; next }
-            /⏳ Awaiting response/ { if (qid != "") awaiting=1 }
+            /^## / {
+                if (qid != "" && awaiting==1) print qid
+                if ($0 ~ /^## Q-[0-9]+/) qid=$2
+                else qid=""
+                awaiting=0
+                next
+            }
+            /Awaiting response/ { if (qid != "") awaiting=1 }
             END { if (qid != "" && awaiting==1) print qid }
         ' "$questions_path" 2>/dev/null | sort)
 

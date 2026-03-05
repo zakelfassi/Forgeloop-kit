@@ -17,13 +17,12 @@ set -euo pipefail
 # =============================================================================
 
 # Resolve repo directory and load libraries
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
-source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
@@ -52,6 +51,8 @@ run_verify_cmd() {
     local verify_dir="$RUNTIME_DIR/verify"
     mkdir -p "$verify_dir"
     local verify_out="$verify_dir/verify-last.txt"
+    FORGELOOP_LAST_VERIFY_OUTPUT_FILE="$verify_out"
+    export FORGELOOP_LAST_VERIFY_OUTPUT_FILE
 
     log "Running verify command: $cmd"
     local exit_code=0
@@ -203,20 +204,38 @@ while true; do
 
     if [[ "$MODE" = "build" ]] && [[ -n "${FORGELOOP_VERIFY_CMD:-}" ]]; then
         if ! run_verify_cmd "$FORGELOOP_VERIFY_CMD"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "verify" "Verify command failed: $FORGELOOP_VERIFY_CMD" "${FORGELOOP_LAST_VERIFY_OUTPUT_FILE:-}" "$LOG_FILE"; then
+                exit 1
+            fi
             continue
         fi
     fi
 
     if [[ "$MODE" = "build" ]]; then
         if ! forgeloop_core__ci_gate "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "ci" "CI gate failed on branch $CURRENT_BRANCH" "${FORGELOOP_LAST_CI_OUTPUT_FILE:-}" "$LOG_FILE"; then
+                exit 1
+            fi
             continue  # Agent should fix issues, loop continues
         fi
-        forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"
+        if ! forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "push" "Push failed for branch $CURRENT_BRANCH" "" "$LOG_FILE" "review"; then
+                exit 1
+            fi
+            continue
+        fi
     elif [[ "$MODE" = "plan" || "$MODE" = "plan-work" ]]; then
         if [[ "${FORGELOOP_PLAN_AUTOPUSH:-false}" == "true" ]]; then
-            forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"
+            if ! forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+                if forgeloop_core__handle_repeated_failure "$REPO_DIR" "push" "Plan push failed for branch $CURRENT_BRANCH" "" "$LOG_FILE" "review"; then
+                    exit 1
+                fi
+                continue
+            fi
         fi
     fi
+
+    forgeloop_core__clear_failure_state "$REPO_DIR"
 
     ITERATION=$((ITERATION + 1))
 
