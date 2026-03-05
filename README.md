@@ -132,7 +132,6 @@ Validate the control loop with the built-in scenario harness:
 ```bash
 ./forgeloop.sh evals
 ```
-
 For continuous looping, add `--watch` (or `--infinite`) to any loop command:
 ```bash
 ./forgeloop.sh build 10 --watch
