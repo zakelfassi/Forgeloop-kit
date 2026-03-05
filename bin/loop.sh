@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+if [[ -z "${HOME:-}" ]]; then
+    export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+fi
+if [[ -z "${XDG_CONFIG_HOME:-}" ]]; then
+    export XDG_CONFIG_HOME="$HOME/.config"
+fi
+
 # =============================================================================
 # Forgeloop Loop (Portable)
 # =============================================================================
@@ -26,11 +33,39 @@ source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
 source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
+# python3 is required for JSON-safe state writes and portable path resolution
+if ! command -v python3 &>/dev/null; then
+    echo "FATAL: python3 is required by forgeloop but was not found in PATH." >&2
+    echo "Install Python 3 or ensure it is available before running loop.sh." >&2
+    exit 1
+fi
+
 # Setup runtime directories and paths
 RUNTIME_DIR=$(forgeloop_core__ensure_runtime_dirs "$REPO_DIR")
 export FORGELOOP_RUNTIME_DIR="$RUNTIME_DIR"
 LOG_FILE="${FORGELOOP_LOOP_LOG_FILE:-$RUNTIME_DIR/logs/loop.log}"
 STATE_FILE="$RUNTIME_DIR/state"
+# Constrain ralph state file to RUNTIME_DIR to prevent arbitrary file writes.
+# Use Python for portable path resolution (no reliance on realpath -m).
+_ralph_state_candidate="${FORGELOOP_RALPH_STATE_FILE:-$RUNTIME_DIR/ralph-state.json}"
+RALPH_STATE_FILE="$(python3 -c '
+import os, sys
+candidate = os.path.realpath(sys.argv[1])
+runtime = os.path.realpath(sys.argv[2])
+fallback = os.path.realpath(os.path.join(sys.argv[2], "ralph-state.json"))
+try:
+    if os.path.commonpath([candidate, runtime]) != runtime:
+        print("SECURITY: FORGELOOP_RALPH_STATE_FILE resolves outside RUNTIME_DIR. Falling back to default.", file=sys.stderr)
+        print(fallback)
+    else:
+        print(candidate)
+except ValueError:
+    # commonpath raises ValueError for paths on different drives (Windows) or empty list
+    print("SECURITY: FORGELOOP_RALPH_STATE_FILE resolves outside RUNTIME_DIR. Falling back to default.", file=sys.stderr)
+    print(fallback)
+' "$_ralph_state_candidate" "$RUNTIME_DIR")"
+unset _ralph_state_candidate
+RUN_ID="$(date +%s)-$$"
 
 REVIEW_SCHEMA="${FORGELOOP_REVIEW_SCHEMA:-$REPO_DIR/forgeloop/schemas/review.schema.json}"
 SECURITY_SCHEMA="${FORGELOOP_SECURITY_SCHEMA:-$REPO_DIR/forgeloop/schemas/security.schema.json}"
@@ -42,6 +77,109 @@ PROMPT_PLAN_WORK="${FORGELOOP_PROMPT_PLAN_WORK:-PROMPT_plan_work.md}"
 # Convenience wrappers using library functions
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
+
+write_ralph_state() {
+    local status="$1"
+    local detail="${2:-}"
+    local state_dir
+    state_dir="$(dirname "$RALPH_STATE_FILE")"
+    mkdir -p "$state_dir"
+
+    # Refuse to write if target or any parent component is a symlink
+    if [[ -L "$RALPH_STATE_FILE" ]]; then
+        echo "SECURITY: RALPH_STATE_FILE ('$RALPH_STATE_FILE') is a symlink — refusing to write." >&2
+        return 1
+    fi
+    if [[ -L "$state_dir" ]]; then
+        echo "SECURITY: RALPH_STATE_FILE parent dir ('$state_dir') is a symlink — refusing to write." >&2
+        return 1
+    fi
+
+    # Ensure iterations is monotonic: never write a value lower than what's on disk
+    local prev_iterations=0
+    if [[ -f "$RALPH_STATE_FILE" ]]; then
+        prev_iterations=$(grep -o '"iterations": *[0-9]*' "$RALPH_STATE_FILE" 2>/dev/null | head -n1 | grep -o '[0-9]*' || echo 0)
+        [[ "$prev_iterations" =~ ^[0-9]+$ ]] || prev_iterations=0
+    fi
+    local cur=${ITERATION:-0}
+    [[ "$cur" =~ ^[0-9]+$ ]] || cur=0
+    if [[ "$cur" -lt "$prev_iterations" ]]; then
+        cur=$prev_iterations
+    fi
+
+    # Atomic write: create temp file via mktemp, generate JSON, then os.replace into place
+    local tmp_file
+    tmp_file="$(mktemp "${state_dir}/ralph-state.json.tmp.XXXXXX")"
+    python3 -c '
+import json, os, sys
+
+tmp = sys.argv[8]
+dest = sys.argv[9]
+runtime = os.path.realpath(sys.argv[10])
+
+# Write JSON to the mktemp-created file (already opened exclusively by mktemp)
+data = {
+    "status": sys.argv[1],
+    "mode": sys.argv[2],
+    "currentBranch": sys.argv[3],
+    "runId": sys.argv[4],
+    "iterations": int(sys.argv[5]),
+    "lastRunAt": sys.argv[6],
+    "detail": sys.argv[7],
+}
+with open(tmp, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.chmod(tmp, 0o600)
+
+# Final safety check: destination must not be a symlink and must resolve under RUNTIME_DIR
+if os.path.islink(dest):
+    os.unlink(tmp)
+    print("SECURITY: RALPH_STATE_FILE is a symlink at replace time — refusing to write.", file=sys.stderr)
+    sys.exit(1)
+dest_real = os.path.realpath(dest)
+try:
+    if os.path.commonpath([dest_real, runtime]) != runtime:
+        os.unlink(tmp)
+        print("SECURITY: RALPH_STATE_FILE resolves outside RUNTIME_DIR at replace time — refusing to write.", file=sys.stderr)
+        sys.exit(1)
+except ValueError:
+    os.unlink(tmp)
+    print("SECURITY: RALPH_STATE_FILE path validation failed — refusing to write.", file=sys.stderr)
+    sys.exit(1)
+
+os.replace(tmp, dest)
+' "$status" "${MODE}" "${CURRENT_BRANCH}" "${RUN_ID}" "$cur" "$(date -Iseconds)" "$detail" "$tmp_file" "$RALPH_STATE_FILE" "$RUNTIME_DIR"
+}
+
+# Validate ralph state file: check required fields and allowed enum values.
+# Returns 0 if valid or file doesn't exist, 1 if invalid.
+validate_ralph_state() {
+    [[ ! -f "$RALPH_STATE_FILE" ]] && return 0
+    local content
+    content=$(cat "$RALPH_STATE_FILE" 2>/dev/null) || return 1
+    # Check required fields exist
+    for field in status mode iterations runId; do
+        if ! echo "$content" | grep -q "\"$field\""; then
+            log "WARN: ralph state missing field '$field', regenerating"
+            return 1
+        fi
+    done
+    # Check status enum
+    local st
+    st=$(echo "$content" | grep -o '"status": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
+    case "$st" in
+        idle|running|complete|error) ;;
+        *) log "WARN: ralph state has invalid status '$st'"; return 1 ;;
+    esac
+    # Check iterations >= 0 (force single match, strict numeric validation)
+    local it
+    it=$(echo "$content" | grep -o '"iterations": *[0-9]*' | head -n1 | grep -o '[0-9]*' || echo "")
+    if [[ -z "$it" ]] || ! [[ "$it" =~ ^[0-9]+$ ]] || [[ "$it" -lt 0 ]]; then
+        log "WARN: ralph state has invalid iterations '$it'"; return 1
+    fi
+    return 0
+}
 
 run_verify_cmd() {
     local cmd="$1"
@@ -135,6 +273,34 @@ fi
 ITERATION=0
 CURRENT_BRANCH=$(forgeloop_core__git_current_branch)
 
+RALPH_STATE_STATUS="running"
+
+# Validate any pre-existing state before overwriting; warn but don't block
+if ! validate_ralph_state; then
+    log "WARN: pre-existing ralph state invalid, will overwrite"
+fi
+
+write_ralph_state "$RALPH_STATE_STATUS" "loop started"
+
+on_loop_error() {
+    local exit_code=$?
+    local line_no=${1:-}
+    RALPH_STATE_STATUS="error"
+    local detail="loop failed (exit ${exit_code}) at line ${line_no}"
+    if [[ -n "${FORGELOOP_LAST_ERROR:-}" ]]; then
+        detail="loop failed: ${FORGELOOP_LAST_ERROR} (exit ${exit_code}) at line ${line_no}"
+    elif [[ -f "$LOG_FILE" ]]; then
+        local last_line
+        last_line=$(tail -1 "$LOG_FILE" 2>/dev/null | tr -d '\r')
+        if [[ -n "$last_line" ]]; then
+            detail="loop failed (exit ${exit_code}) at line ${line_no} — last log: ${last_line}"
+        fi
+    fi
+    write_ralph_state "$RALPH_STATE_STATUS" "$detail"
+}
+trap 'on_loop_error $LINENO' ERR
+trap 'exit_code=$?; if [[ "$exit_code" -ne 0 ]]; then RALPH_STATE_STATUS="error"; detail="loop failed (exit ${exit_code})"; if [[ -n "${FORGELOOP_LAST_ERROR:-}" ]]; then detail="loop failed: ${FORGELOOP_LAST_ERROR} (exit ${exit_code})"; elif [[ -f "$LOG_FILE" ]]; then last_line=$(tail -1 "$LOG_FILE" 2>/dev/null | tr -d '\r'); if [[ -n "$last_line" ]]; then detail="loop failed (exit ${exit_code}) — last log: ${last_line}"; fi; fi; write_ralph_state "$RALPH_STATE_STATUS" "$detail"; elif [[ "$RALPH_STATE_STATUS" != "error" ]]; then RALPH_STATE_STATUS="complete"; write_ralph_state "$RALPH_STATE_STATUS" "loop finished"; fi' EXIT
+
 if [ "$MODE" = "plan-work" ]; then
     if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
         echo "Error: plan-work should be run on a work branch, not main/master"
@@ -177,6 +343,12 @@ if [[ -n "$SESSION_CONTEXT_FILE" ]]; then
     export FORGELOOP_SESSION_CONTEXT="$SESSION_CONTEXT_FILE"
 fi
 
+if declare -F forgeloop_llm__preflight_auth >/dev/null 2>&1; then
+    if ! forgeloop_llm__preflight_auth "$REPO_DIR" "$STATE_FILE" "$LOG_FILE"; then
+        exit 1
+    fi
+fi
+
 while true; do
     if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then
         echo "Reached max iterations: $MAX_ITERATIONS"
@@ -185,13 +357,19 @@ while true; do
 
     case "$MODE" in
         review)
-            git diff 2>/dev/null | forgeloop_llm__exec "$REPO_DIR" "stdin" "review" "$STATE_FILE" "$LOG_FILE"
+            if ! git diff 2>/dev/null | forgeloop_llm__exec "$REPO_DIR" "stdin" "review" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
         plan|plan-work)
-            forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "$MODE" "$STATE_FILE" "$LOG_FILE"
+            if ! forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "$MODE" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
         *)
-            forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "build" "$STATE_FILE" "$LOG_FILE"
+            if ! forgeloop_llm__exec "$REPO_DIR" "file:$PROMPT_FILE" "build" "$STATE_FILE" "$LOG_FILE"; then
+                exit 1
+            fi
             ;;
     esac
 
