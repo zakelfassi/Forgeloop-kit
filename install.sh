@@ -6,7 +6,7 @@ usage() {
 Forgeloop framework installer.
 
 Usage:
-  ./install.sh [target_repo_dir] [--force] [--wrapper] [--skills]
+  ./install.sh [target_repo_dir] [--force] [--wrapper] [--skills] [--upgrade-from <kit_dir>]
 
 Examples:
   # From the forgeloop repo:
@@ -15,30 +15,36 @@ Examples:
   # From within a target repo where this kit is vendored at ./forgeloop:
   ./forgeloop/install.sh --wrapper
 
+  # Upgrade an existing vendored repo from a newer Forgeloop checkout:
+  ./forgeloop/install.sh --wrapper --upgrade-from /path/to/newer-forgeloop-kit --force
+
 Flags:
   --force         Overwrite existing files
   --wrapper       Create ./forgeloop.sh convenience wrapper
   --skills        Install skills to user agent directories (~/.claude/skills, ~/.codex/skills, etc.)
+  --upgrade-from  Install/refresh from another Forgeloop kit checkout
   --interactive   Force interactive prompts for conflicts (even in non-TTY)
   --batch         Skip conflicts silently (no prompts, like CI)
 USAGE
 }
 
-SRC_KIT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC_KIT_NAME="$(basename "$SRC_KIT_DIR")"
+INSTALLER_DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALLER_KIT_NAME="$(basename "$INSTALLER_DIR")"
+SRC_KIT_DIR="$INSTALLER_DIR"
 
 FORCE="false"
 WRAPPER="false"
 SKILLS="false"
 INTERACTIVE="auto"  # auto, true, false
+UPGRADE_FROM=""
 
 # Default target:
 # - If this installer lives in a folder named "forgeloop", assume it's vendored into a repo at ./forgeloop and
 #   default to the parent directory (repo root).
 # - Otherwise (e.g., running from the standalone forgeloop repo), require an explicit target path.
 TARGET_REPO_DIR=""
-if [ "$SRC_KIT_NAME" = "forgeloop" ]; then
-    TARGET_REPO_DIR="$(cd "$SRC_KIT_DIR/.." && pwd)"
+if [ "$INSTALLER_KIT_NAME" = "forgeloop" ]; then
+    TARGET_REPO_DIR="$(cd "$INSTALLER_DIR/.." && pwd)"
 fi
 
 while [ $# -gt 0 ]; do
@@ -57,6 +63,24 @@ while [ $# -gt 0 ]; do
             ;;
         --skills)
             SKILLS="true"
+            shift
+            ;;
+        --upgrade-from|--from)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --upgrade-from requires a path." >&2
+                exit 1
+            fi
+            UPGRADE_FROM="$(cd "$1" 2>/dev/null && pwd || true)"
+            if [ -z "$UPGRADE_FROM" ]; then
+                echo "Error: upgrade source not found: $1" >&2
+                exit 1
+            fi
+            if [ ! -f "$UPGRADE_FROM/install.sh" ] || [ ! -d "$UPGRADE_FROM/bin" ] || [ ! -d "$UPGRADE_FROM/templates" ]; then
+                echo "Error: upgrade source does not look like a Forgeloop kit: $UPGRADE_FROM" >&2
+                exit 1
+            fi
+            SRC_KIT_DIR="$UPGRADE_FROM"
             shift
             ;;
         --interactive|-i)
@@ -404,6 +428,7 @@ Usage:
   ./forgeloop.sh build [max_iters] [--lite|--full] [--watch|--infinite]
   ./forgeloop.sh tasks [max_iters]
   ./forgeloop.sh review
+  ./forgeloop.sh upgrade --from <path-to-kit> [--force] [--skills] [--batch|--interactive]
   ./forgeloop.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
   ./forgeloop.sh daemon [interval_seconds]
   ./forgeloop.sh ask "category" "question"
@@ -470,6 +495,10 @@ case "$cmd" in
   tasks)
     exec "$REPO_DIR/forgeloop/bin/loop-tasks.sh" "${2:-10}"
     ;;
+  upgrade)
+    shift
+    exec "$REPO_DIR/forgeloop/install.sh" "$REPO_DIR" --wrapper "$@"
+    ;;
   sync-skills)
     shift
     exec "$REPO_DIR/forgeloop/bin/sync-skills.sh" "$@"
@@ -522,6 +551,9 @@ FORGELOOP_WRAPPER_SH
 
 main() {
     echo "Installing Forgeloop framework into: $TARGET_REPO_DIR"
+    if [ -n "$UPGRADE_FROM" ]; then
+        echo "Using source kit: $UPGRADE_FROM"
+    fi
 
     copy_kit
 

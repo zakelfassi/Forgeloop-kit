@@ -6,6 +6,11 @@
 - `runtime-control.md` — the backpressure and escalation rules for loops and daemon runs.
 - `sandboxing.md` — how to run Forgeloop in full-auto safely (Docker fallback + cloud VM notes + pricing table).
 
+Refresh an existing vendored repo from a newer kit checkout with:
+```bash
+./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
+```
+
 GCP provisioning scripts live in `ops/gcp/`.
 
 ## Skills-Driven Development (SDD)

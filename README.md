@@ -1,13 +1,14 @@
 # Forgeloop
 
-Forgeloop is a portable **agentic build loop** framework, packaged so you can drop it into any repo.
+Forgeloop is a portable control plane for coding agents. Drop it into a repo and you get a repeatable loop that can plan work, build against real checks, pause before it thrashes, and hand problems back to a human with context.
 
-In plain English, Forgeloop is a loop that:
+In plain English, Forgeloop helps an agent:
 1. **Kickoff** (optional): write clear docs/specs for a new project.
 2. **Plan**: translate specs into a prioritized, test-aware task list.
-3. **Build**: execute tasks with backpressure (tests/typecheck/lint), updating plan/status as you go.
+3. **Build**: execute tasks with backpressure from tests/typecheck/lint.
+4. **Pause + escalate**: stop on repeated failures, ask the user for help, and draft the next action instead of looping forever.
 
-Forgeloop adds the scaffolding, prompts, and tooling to make that loop repeatable in real codebases — plus **Skills-Driven Development**: forge reusable agent Skills as you build, and grow a repo-specific “skill factory”.
+Then it adds **Skills-Driven Development**: forge reusable agent Skills as you build, sync them into Codex / Claude Code, and grow a repo-specific skill factory over time.
 
 **Inspiration & Sources:**
 - [how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum) - The original Ralph methodology playbook by Geoff Huntley
@@ -17,6 +18,12 @@ Forgeloop adds the scaffolding, prompts, and tooling to make that loop repeatabl
 **Links:**
 - This repo: scripts + markdown templates you can apply to any codebase
 - Landing page: https://forgeloop.zakelfassi.com
+
+## Why teams use it
+
+- **Portable runtime**: vendor it into an existing repo without rebuilding your whole toolchain.
+- **Fail-closed behavior**: repeated verify/CI/push failures pause the loop and create human-readable escalation artifacts.
+- **Repo-local memory**: persistent knowledge, domain experts, and skills stay close to the code instead of vanishing into chat history.
 
 ## How the Workflow Works
 
@@ -115,6 +122,12 @@ cd /path/to/target-repo
 ./forgeloop.sh build 10
 ```
 
+When you update Forgeloop itself, refresh an existing repo from a newer kit checkout:
+```bash
+cd /path/to/target-repo
+./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
+```
+
 For continuous looping, add `--watch` (or `--infinite`) to any loop command:
 ```bash
 ./forgeloop.sh build 10 --watch
@@ -139,6 +152,18 @@ From this repo:
 If the kit is already vendored in a target repo at `./forgeloop`:
 ```bash
 ./forgeloop/install.sh --wrapper
+```
+
+### Upgrade an existing repo
+
+From inside a repo that already vendors Forgeloop:
+```bash
+./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
+```
+
+Or from a fresh Forgeloop checkout:
+```bash
+./install.sh /path/to/target-repo --wrapper --upgrade-from /path/to/newer-forgeloop-kit --force
 ```
 
 ### Conflict Handling
@@ -314,7 +339,7 @@ The daemon watches for changes and runs loops automatically:
 - `[INGEST_LOGS]` — Run log ingestion (uses `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`)
 
 **Blocker detection:**
-The daemon includes blocker detection to prevent infinite loops when the agent is stuck waiting for human input (e.g., unanswered questions in `QUESTIONS.md`).
+The daemon includes blocker detection and repeated-failure backpressure. When the loop is stuck waiting for human input or keeps hitting the same verify/CI/push failure, it pauses, records the reason, and writes escalation artifacts instead of retrying forever.
 
 ## Config
 
@@ -325,6 +350,8 @@ Edit `forgeloop/config.sh` (in the target repo) to set:
 - `FORGELOOP_TEST_CMD` (optional) to run after review auto-fixes
 - `FORGELOOP_DEPLOY_CMD` (optional) used by the daemon on `[DEPLOY]`
 - `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE` (optional) used by the daemon on `[INGEST_LOGS]`
+- `FORGELOOP_FAILURE_ESCALATE_AFTER` to set how many repeated failures trigger a pause
+- `FORGELOOP_FAILURE_ESCALATION_ACTION` to choose the drafted human handoff action
 
 ## Notes
 - Optional Slack integration uses `.env.local` with `SLACK_WEBHOOK_URL=...`.
