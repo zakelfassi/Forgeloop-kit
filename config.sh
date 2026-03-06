@@ -7,6 +7,7 @@ set -euo pipefail
 
 # Runtime dir (relative to repo root if not absolute)
 export FORGELOOP_RUNTIME_DIR="${FORGELOOP_RUNTIME_DIR:-.forgeloop}"
+export FORGELOOP_RUNTIME_STATE_FILE="${FORGELOOP_RUNTIME_STATE_FILE:-}"
 
 # Git defaults
 export FORGELOOP_DEFAULT_BRANCH="${FORGELOOP_DEFAULT_BRANCH:-main}"

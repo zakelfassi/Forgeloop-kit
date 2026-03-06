@@ -145,9 +145,14 @@ if [ "$MODE" = "plan-work" ]; then
 fi
 
 export MODE
+export FORGELOOP_RUNTIME_SURFACE="loop"
+export FORGELOOP_RUNTIME_MODE="$MODE"
+export FORGELOOP_RUNTIME_BRANCH="$CURRENT_BRANCH"
 
 cd "$REPO_DIR"
 forgeloop_llm__load_state "$STATE_FILE"
+forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "loop" "Initializing $MODE loop" \
+    "mode=$MODE" "branch=$CURRENT_BRANCH" "max_iterations=$MAX_ITERATIONS"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Mode:       $MODE"
@@ -180,9 +185,20 @@ fi
 
 while true; do
     if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then
+        forgeloop_core__write_runtime_state "$REPO_DIR" "complete" "loop" "Reached max iterations for $MODE loop" \
+            "mode=$MODE" "branch=$CURRENT_BRANCH" "iterations=$ITERATION"
         echo "Reached max iterations: $MAX_ITERATIONS"
         break
     fi
+
+    loop_status="building"
+    if [[ "$MODE" = "plan" || "$MODE" = "plan-work" ]]; then
+        loop_status="planning"
+    elif [[ "$MODE" = "review" ]]; then
+        loop_status="reviewing"
+    fi
+    forgeloop_core__write_runtime_state "$REPO_DIR" "$loop_status" "loop" "Running $MODE iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH" "iteration=$ITERATION"
 
     case "$MODE" in
         review)
@@ -236,6 +252,8 @@ while true; do
     fi
 
     forgeloop_core__clear_failure_state "$REPO_DIR"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "healthy" "loop" "Completed $MODE iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH" "iteration=$((ITERATION + 1))"
 
     ITERATION=$((ITERATION + 1))
 
@@ -245,3 +263,8 @@ while true; do
 
     echo -e "\n\n======================== LOOP $ITERATION ($AI_MODEL) ========================\n"
 done
+
+if [[ "$ITERATION" -eq 0 ]]; then
+    forgeloop_core__write_runtime_state "$REPO_DIR" "idle" "loop" "Loop exited without running an iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH"
+fi

@@ -128,6 +128,11 @@ cd /path/to/target-repo
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
 
+Validate the control loop with the built-in scenario harness:
+```bash
+./forgeloop.sh evals
+```
+
 For continuous looping, add `--watch` (or `--infinite`) to any loop command:
 ```bash
 ./forgeloop.sh build 10 --watch
@@ -340,6 +345,9 @@ The daemon watches for changes and runs loops automatically:
 
 **Blocker detection:**
 The daemon includes blocker detection and repeated-failure backpressure. When the loop is stuck waiting for human input or keeps hitting the same verify/CI/push failure, it pauses, records the reason, and writes escalation artifacts instead of retrying forever.
+
+**Operator state:**
+Forgeloop writes the current machine-readable loop state to `.forgeloop/runtime-state.json` so operators can tell whether the runtime is `running`, `blocked`, `paused`, `awaiting-human`, `recovered`, or `idle`.
 
 ## Config
 

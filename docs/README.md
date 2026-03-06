@@ -11,6 +11,11 @@ Refresh an existing vendored repo from a newer kit checkout with:
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
 
+Run the control-plane scenario harness with:
+```bash
+./forgeloop.sh evals
+```
+
 GCP provisioning scripts live in `ops/gcp/`.
 
 ## Skills-Driven Development (SDD)

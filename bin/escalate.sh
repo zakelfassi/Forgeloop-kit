@@ -33,6 +33,10 @@ ESCALATIONS_FILE="$REPO_DIR/$ESCALATIONS_FILE_REL"
 mkdir -p "$(dirname "$QUESTIONS_FILE")" "$(dirname "$ESCALATIONS_FILE")" "$(dirname "$REQUESTS_FILE")"
 touch "$QUESTIONS_FILE" "$ESCALATIONS_FILE" "$REQUESTS_FILE"
 
+surface="${FORGELOOP_RUNTIME_SURFACE:-loop}"
+mode="${FORGELOOP_RUNTIME_MODE:-build}"
+branch="${FORGELOOP_RUNTIME_BRANCH:-$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "")}"
+
 case "$requested_action" in
     pr)
         action_label="push a PR with the fix"
@@ -60,6 +64,8 @@ fi
 if ! grep -q '\[PAUSE\]' "$REQUESTS_FILE" 2>/dev/null; then
     printf '\n[PAUSE]\n' >> "$REQUESTS_FILE"
 fi
+
+forgeloop_core__set_runtime_state "$REPO_DIR" "awaiting-human" "$surface" "$mode" "$summary" "escalated" "$requested_action" "$branch"
 
 {
     echo ""

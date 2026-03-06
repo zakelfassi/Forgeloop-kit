@@ -7,6 +7,7 @@ This file contains project-specific guidance for Forgeloop. Keep it brief and op
 specs/           # Feature specifications (Forgeloop reads these)
 docs/            # Product/tech docs (Forgeloop reads these)
 ESCALATIONS.md   # Drafted human handoffs when Forgeloop pauses itself
+.forgeloop/      # Runtime logs + runtime-state.json
 src/             # Source code (adjust paths as needed)
 system/knowledge # Persistent session memory (decisions, patterns, preferences, insights)
 system/experts   # Domain expert guidance (architecture, security, testing, etc.)
@@ -50,6 +51,7 @@ Load relevant experts from `system/experts/` based on task keywords:
 - Update `IMPLEMENTATION_PLAN.md` when scope changes
 - Use `./forgeloop/bin/ask.sh` when blocked or decisions needed
 - When Forgeloop pauses itself, inspect `ESCALATIONS.md` and answer the matching item in `QUESTIONS.md`
+- Inspect `.forgeloop/runtime-state.json` for the current machine-readable loop state
 
 ## Modes
 

@@ -18,8 +18,10 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 ## Current Paved Paths
 
 - `tests/run.sh` is the default shell test gate.
+- `evals/run.sh` is the scenario harness for runtime-state and pause/escalation behavior.
 - `docs/runtime-control.md` defines the loop stop/escalation rules.
 - `ESCALATIONS.md`, `QUESTIONS.md`, and `REQUESTS.md` form the human handoff surface.
+- `.forgeloop/runtime-state.json` is the machine-readable runtime state surface.
 
 ## Next Gaps To Close
 

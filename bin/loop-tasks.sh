@@ -228,6 +228,8 @@ ensure_on_branch() {
 
     local current_branch
     current_branch=$(forgeloop_core__git_current_branch)
+    forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "tasks" "Initializing tasks loop" \
+        "mode=tasks" "branch=$current_branch" "max_iterations=$MAX_ITERATIONS"
 
     if [[ "$current_branch" != "$target_branch" ]]; then
         log "Switching to branch: $target_branch"
@@ -329,6 +331,8 @@ EOF
 
 main() {
     cd "$REPO_DIR"
+    export FORGELOOP_RUNTIME_SURFACE="tasks"
+    export FORGELOOP_RUNTIME_MODE="tasks"
 
     # Validate prd.json exists
     if [[ ! -f "$PRD_FILE" ]]; then
@@ -357,6 +361,7 @@ main() {
 
     local current_branch
     current_branch=$(forgeloop_core__git_current_branch)
+    export FORGELOOP_RUNTIME_BRANCH="$current_branch"
 
     # Load LLM state
     forgeloop_llm__load_state "$STATE_FILE"
@@ -384,6 +389,8 @@ main() {
         # Check if all tasks are complete
         if all_tasks_complete "$PRD_FILE"; then
             forgeloop_core__clear_failure_state "$REPO_DIR"
+            forgeloop_core__write_runtime_state "$REPO_DIR" "complete" "tasks" "All tasks passed" \
+                "mode=tasks" "branch=$current_branch" "iterations=$iteration"
             log "All tasks complete!"
             notify "✅" "Forgeloop Tasks Complete" "All tasks in prd.json are done!"
             echo ""
@@ -401,6 +408,8 @@ main() {
         fi
 
         log "Working on task: $next_task_id"
+        forgeloop_core__write_runtime_state "$REPO_DIR" "building" "tasks" "Working on task $next_task_id" \
+            "mode=tasks" "branch=$current_branch" "iteration=$iteration" "task_id=$next_task_id"
 
         echo ""
         echo "==============================================================="
@@ -445,6 +454,8 @@ main() {
         fi
 
         forgeloop_core__clear_failure_state "$REPO_DIR"
+        forgeloop_core__write_runtime_state "$REPO_DIR" "healthy" "tasks" "Completed task iteration" \
+            "mode=tasks" "branch=$current_branch" "iteration=$((iteration + 1))" "task_id=$next_task_id"
 
         iteration=$((iteration + 1))
 
@@ -460,6 +471,8 @@ main() {
     echo ""
     echo "Reached max iterations ($MAX_ITERATIONS)."
     echo "Check $PROGRESS_FILE for status."
+    forgeloop_core__write_runtime_state "$REPO_DIR" "paused" "tasks" "Reached max task iterations without completion" \
+        "mode=tasks" "branch=$current_branch" "iterations=$iteration"
     exit 1
 }
 

@@ -37,6 +37,10 @@ STATE_FILE="$RUNTIME_DIR/daemon.state"
 REQUESTS_FILE="${FORGELOOP_REQUESTS_FILE:-REQUESTS.md}"
 PLAN_FILE="${FORGELOOP_IMPLEMENTATION_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
 QUESTIONS_FILE="${FORGELOOP_QUESTIONS_FILE:-QUESTIONS.md}"
+CURRENT_BRANCH="$(forgeloop_core__git_current_branch)"
+export FORGELOOP_RUNTIME_SURFACE="daemon"
+export FORGELOOP_RUNTIME_MODE="daemon"
+export FORGELOOP_RUNTIME_BRANCH="$CURRENT_BRANCH"
 
 # Blocker detection settings
 MAX_BLOCKED_ITERATIONS="${FORGELOOP_MAX_BLOCKED_ITERATIONS:-3}"
@@ -53,6 +57,9 @@ FORGELOOP_PLAN_TIMEOUT_SECONDS="${FORGELOOP_PLAN_TIMEOUT_SECONDS:-900}"    # 15 
 # Convenience wrappers
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
+export FORGELOOP_RUNTIME_SURFACE="daemon"
+export FORGELOOP_RUNTIME_MODE="watch"
+export FORGELOOP_RUNTIME_BRANCH="$(forgeloop_core__git_current_branch)"
 
 # =============================================================================
 # State Persistence
@@ -132,6 +139,11 @@ check_blocker_loop() {
         BLOCKED_ITERATION_COUNT=1
         LAST_BLOCKER_HASH="$current_hash"
         log "New blocker detected, tracking..."
+
+        if [ "$BLOCKED_ITERATION_COUNT" -ge "$MAX_BLOCKED_ITERATIONS" ]; then
+            save_state
+            return 0
+        fi
     fi
 
     save_state
@@ -140,17 +152,13 @@ check_blocker_loop() {
 
 # Pause when stuck on same blocker
 pause_for_blocker() {
-    local pause_mins=$((BLOCKER_PAUSE_SECONDS / 60))
-    log "Stuck on same blocker for $BLOCKED_ITERATION_COUNT iterations. Pausing for ${pause_mins}m..."
+    local summary="Daemon hit the same unanswered blocker for $BLOCKED_ITERATION_COUNT consecutive cycles"
+    log "$summary. Escalating for human input..."
+    "$FORGELOOP_DIR/bin/escalate.sh" "blocker" "$summary" "review" "" "$BLOCKED_ITERATION_COUNT" >/dev/null 2>&1 || true
     notify "⏸️" "Forgeloop Paused - Awaiting Input" \
-        "Stuck on same blocker for $BLOCKED_ITERATION_COUNT iterations. Pausing for ${pause_mins}m. Check QUESTIONS.md for unanswered questions."
+        "Stuck on the same blocker for $BLOCKED_ITERATION_COUNT iterations. Forgeloop paused itself and drafted a handoff."
 
-    sleep "$BLOCKER_PAUSE_SECONDS"
-
-    # Reset counter after pause to give it another try
-    BLOCKED_ITERATION_COUNT=0
     save_state
-    log "Resuming after blocker pause..."
 }
 
 is_paused() {
@@ -178,6 +186,8 @@ run_with_timeout() {
 run_plan() {
     log "Running planning..."
     notify "📋" "Forgeloop Planning" "Starting plan"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "planning" "daemon" "Daemon requested a planning pass" \
+        "mode=daemon" "interval_seconds=$INTERVAL"
 
     local rc=0
     (cd "$REPO_DIR" && run_with_timeout "$FORGELOOP_PLAN_TIMEOUT_SECONDS" "plan" "$REPO_DIR/forgeloop/bin/loop.sh" plan 1) || rc=$?
@@ -185,6 +195,9 @@ run_plan() {
     if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
         log "Planning timed out after ${FORGELOOP_PLAN_TIMEOUT_SECONDS}s (rc=$rc)"
         notify "⏱️" "Forgeloop Planning Timed Out" "Planning exceeded ${FORGELOOP_PLAN_TIMEOUT_SECONDS}s. Will retry next cycle."
+        if forgeloop_core__handle_repeated_failure "$REPO_DIR" "timeout" "Planning exceeded ${FORGELOOP_PLAN_TIMEOUT_SECONDS}s" "" "$LOG_FILE" "review"; then
+            return 1
+        fi
     fi
 
     return 0
@@ -194,6 +207,8 @@ run_build() {
     local iters="${1:-10}"
     log "Running build ($iters iterations)..."
     notify "🔨" "Forgeloop Build" "Starting build ($iters iterations)"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "building" "daemon" "Daemon requested a build pass" \
+        "mode=daemon" "interval_seconds=$INTERVAL" "iterations=$iters"
 
     local rc=0
     (cd "$REPO_DIR" && run_with_timeout "$FORGELOOP_LOOP_TIMEOUT_SECONDS" "build" "$REPO_DIR/forgeloop/bin/loop.sh" "$iters") || rc=$?
@@ -201,6 +216,9 @@ run_build() {
     if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
         log "Build timed out after ${FORGELOOP_LOOP_TIMEOUT_SECONDS}s (rc=$rc)"
         notify "⏱️" "Forgeloop Build Timed Out" "Build exceeded ${FORGELOOP_LOOP_TIMEOUT_SECONDS}s. Will retry next cycle."
+        if forgeloop_core__handle_repeated_failure "$REPO_DIR" "timeout" "Build exceeded ${FORGELOOP_LOOP_TIMEOUT_SECONDS}s" "" "$LOG_FILE" "review"; then
+            return 1
+        fi
     fi
 
     return 0
@@ -261,6 +279,8 @@ main_loop() {
     load_state
     log "Forgeloop daemon starting (interval: ${INTERVAL}s)"
     log "Blocker detection: max $MAX_BLOCKED_ITERATIONS consecutive blocked iterations before ${BLOCKER_PAUSE_SECONDS}s pause"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "daemon" "Daemon starting" \
+        "mode=daemon" "interval_seconds=$INTERVAL"
 
     exec 200>"$LOCK_FILE"
     if ! flock -n 200; then
@@ -272,9 +292,18 @@ main_loop() {
 
     while true; do
         if is_paused; then
+            if [[ "$(forgeloop_core__runtime_state_status "$REPO_DIR")" != "awaiting-human" ]]; then
+                forgeloop_core__write_runtime_state "$REPO_DIR" "paused" "daemon" "Daemon paused by operator flag" \
+                    "mode=daemon" "flag=PAUSE"
+            fi
             log "Paused ([PAUSE] in $REQUESTS_FILE). Sleeping..."
             sleep "$INTERVAL"
             continue
+        fi
+
+        if [[ "$(forgeloop_core__runtime_state_status "$REPO_DIR")" == "paused" ]] || [[ "$(forgeloop_core__runtime_state_status "$REPO_DIR")" == "awaiting-human" ]]; then
+            forgeloop_core__write_runtime_state "$REPO_DIR" "resuming" "daemon" "Daemon resumed after pause was cleared" \
+                "mode=daemon" "interval_seconds=$INTERVAL"
         fi
 
         # Check for blocker loop before running tasks
@@ -284,7 +313,9 @@ main_loop() {
         fi
 
         if forgeloop_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "REPLAN"; then
-            run_plan
+            if ! run_plan; then
+                continue
+            fi
         fi
 
         if forgeloop_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "DEPLOY"; then
@@ -296,12 +327,18 @@ main_loop() {
         fi
 
         if [ ! -f "$REPO_DIR/$PLAN_FILE" ]; then
-            run_plan
+            if ! run_plan; then
+                continue
+            fi
         fi
 
         if has_pending_tasks; then
-            run_build 10
+            if ! run_build 10; then
+                continue
+            fi
         else
+            forgeloop_core__write_runtime_state "$REPO_DIR" "idle" "daemon" "No pending tasks; sleeping" \
+                "mode=daemon" "interval_seconds=$INTERVAL"
             log "No pending tasks. Sleeping..."
         fi
 

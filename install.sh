@@ -428,6 +428,7 @@ Usage:
   ./forgeloop.sh build [max_iters] [--lite|--full] [--watch|--infinite]
   ./forgeloop.sh tasks [max_iters]
   ./forgeloop.sh review
+  ./forgeloop.sh evals
   ./forgeloop.sh upgrade --from <path-to-kit> [--force] [--skills] [--batch|--interactive]
   ./forgeloop.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
   ./forgeloop.sh daemon [interval_seconds]
@@ -495,6 +496,10 @@ case "$cmd" in
   tasks)
     exec "$REPO_DIR/forgeloop/bin/loop-tasks.sh" "${2:-10}"
     ;;
+  evals)
+    shift
+    exec bash "$REPO_DIR/forgeloop/evals/run.sh" "$@"
+    ;;
   upgrade)
     shift
     exec "$REPO_DIR/forgeloop/install.sh" "$REPO_DIR" --wrapper "$@"
@@ -558,7 +563,7 @@ main() {
     copy_kit
 
     # Ensure scripts are executable
-    chmod +x "$DEST_KIT_DIR/bin/"*.sh "$DEST_KIT_DIR/config.sh" "$DEST_KIT_DIR/install.sh" 2>/dev/null || true
+    chmod +x "$DEST_KIT_DIR/bin/"*.sh "$DEST_KIT_DIR/evals/"*.sh "$DEST_KIT_DIR/config.sh" "$DEST_KIT_DIR/install.sh" 2>/dev/null || true
 
     # Root coordination files
     install_file "$DEST_KIT_DIR/templates/AGENTS.md" "$TARGET_REPO_DIR/AGENTS.md"
