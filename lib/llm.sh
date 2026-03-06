@@ -32,6 +32,10 @@ fi
 : "${SECURITY_MODEL:=codex}"
 : "${BUILD_MODEL:=claude}"
 
+# Allow disabling providers without uninstalling their CLIs.
+: "${FORGELOOP_DISABLE_CLAUDE:=false}"
+: "${FORGELOOP_DISABLE_CODEX:=false}"
+
 : "${CLAUDE_CLI:=claude}"
 : "${CLAUDE_MODEL:=opus}"
 : "${CLAUDE_FLAGS:=--dangerously-skip-permissions --output-format=stream-json --verbose}"
@@ -40,16 +44,16 @@ fi
 : "${CODEX_FLAGS:=--dangerously-bypass-approvals-and-sandbox}"
 
 : "${CODEX_PLANNING_CONFIG:=gpt-5.2:high}"
-: "${CODEX_REVIEW_CONFIG:=gpt-5.2-codex:medium}"
-: "${CODEX_SECURITY_CONFIG:=gpt-5.2-codex:medium}"
+: "${CODEX_REVIEW_CONFIG:=gpt-5.2:medium}"
+: "${CODEX_SECURITY_CONFIG:=gpt-5.2:medium}"
 
 : "${ENABLE_FAILOVER:=true}"
 : "${ENABLE_CODEX_REVIEW:=true}"
 : "${TASK_ROUTING:=true}"
 
 # Auth error patterns (distinct from rate limits)
-CLAUDE_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|Could not resolve authentication|ANTHROPIC_API_KEY|not authenticated|Invalid API Key|Unable to authenticate|credentials|APIKeyInvalid|Unauthorized)"
-CODEX_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|OPENAI_API_KEY|Incorrect API key|Unable to authenticate|credentials|API key not found|Unauthorized)"
+CLAUDE_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|Could not resolve authentication|ANTHROPIC_API_KEY|not authenticated|not logged in|Invalid API Key|Unable to authenticate|APIKeyInvalid|Unauthorized|missing credentials|credentials not found|invalid credentials)"
+CODEX_AUTH_ERROR_PATTERN="(invalid_api_key|authentication_error|OPENAI_API_KEY|Incorrect API key|Unable to authenticate|API key not found|not logged in|Unauthorized|missing credentials|credentials not found|invalid credentials)"
 
 # Rate limit state (epoch timestamps when limit expires)
 CLAUDE_RATE_LIMITED_UNTIL=${CLAUDE_RATE_LIMITED_UNTIL:-0}
@@ -96,18 +100,40 @@ EOF
 # Model Detection & Auth Checks
 # =============================================================================
 
-forgeloop_llm__has_claude() { command -v "$CLAUDE_CLI" &>/dev/null; }
-forgeloop_llm__has_codex() { command -v "$CODEX_CLI" &>/dev/null; }
+forgeloop_llm__has_claude() {
+    [[ "${FORGELOOP_DISABLE_CLAUDE}" == "true" ]] && return 1
+    command -v "$CLAUDE_CLI" &>/dev/null
+}
+forgeloop_llm__has_codex() {
+    [[ "${FORGELOOP_DISABLE_CODEX}" == "true" ]] && return 1
+    command -v "$CODEX_CLI" &>/dev/null
+}
 
-# Check if Claude CLI is authenticated (quick version check)
+# Check if Claude CLI is authenticated
 # Usage: if forgeloop_llm__check_claude_auth; then ...
 forgeloop_llm__check_claude_auth() {
     if ! forgeloop_llm__has_claude; then
         return 1
     fi
-    # Quick check: --version should work without auth, but --help with model info needs it
-    # A simple "claude --version" should succeed if the CLI is installed
-    $CLAUDE_CLI --version &>/dev/null
+    local timeout_seconds output_file exit_code
+    timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    output_file=$(mktemp)
+    exit_code=0
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --signal=KILL "$timeout_seconds" $CLAUDE_CLI auth status >"$output_file" 2>&1 || exit_code=$?
+    else
+        $CLAUDE_CLI auth status >"$output_file" 2>&1 || exit_code=$?
+    fi
+    if [[ "$exit_code" -ne 0 ]]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    if grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+        rm -f "$output_file"
+        return 1
+    fi
+    rm -f "$output_file"
+    return 0
 }
 
 # Check if Codex CLI is authenticated
@@ -116,7 +142,88 @@ forgeloop_llm__check_codex_auth() {
     if ! forgeloop_llm__has_codex; then
         return 1
     fi
-    $CODEX_CLI --version &>/dev/null
+    local timeout_seconds output_file exit_code
+    timeout_seconds=${FORGELOOP_AUTH_TIMEOUT_SECONDS:-10}
+    output_file=$(mktemp)
+    exit_code=0
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --signal=KILL "$timeout_seconds" $CODEX_CLI login status >"$output_file" 2>&1 || exit_code=$?
+    else
+        $CODEX_CLI login status >"$output_file" 2>&1 || exit_code=$?
+    fi
+    if [[ "$exit_code" -ne 0 ]]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    if grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+        rm -f "$output_file"
+        return 1
+    fi
+    rm -f "$output_file"
+    return 0
+}
+
+# Preflight model auth and persist failures in state
+# Usage: forgeloop_llm__preflight_auth "$REPO_DIR" "$STATE_FILE" "$LOG_FILE"
+forgeloop_llm__preflight_auth() {
+    local repo_dir="$1"
+    local state_file="${2:-}"
+    local log_file="${3:-}"
+
+    if forgeloop_llm__has_claude; then
+        if ! forgeloop_llm__check_claude_auth; then
+            FORGELOOP_LAST_ERROR="auth_failure:claude"
+            forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
+        else
+            forgeloop_llm__clear_auth_failure "claude"
+        fi
+    fi
+
+    if forgeloop_llm__has_codex; then
+        if ! forgeloop_llm__check_codex_auth; then
+            FORGELOOP_LAST_ERROR="auth_failure:codex"
+            forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
+        else
+            forgeloop_llm__clear_auth_failure "codex"
+        fi
+    fi
+
+    [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
+
+    local has_claude has_codex
+    has_claude=0
+    has_codex=0
+    if forgeloop_llm__has_claude; then
+        has_claude=1
+    fi
+    if forgeloop_llm__has_codex; then
+        has_codex=1
+    fi
+
+    if [[ $has_claude -eq 1 && $has_codex -eq 1 ]] && \
+       forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Preflight: both models unauthenticated; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on both Claude and Codex. Run 'claude auth login' or 'codex login' then retry."
+        return 1
+    fi
+
+    if [[ $has_claude -eq 1 && $has_codex -eq 0 ]] && forgeloop_llm__has_auth_failure "claude"; then
+        forgeloop_core__log "Preflight: Claude unauthenticated and no other providers available; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on Claude and no other providers available. Run 'claude auth login' then retry."
+        return 1
+    fi
+
+    if [[ $has_codex -eq 1 && $has_claude -eq 0 ]] && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Preflight: Codex unauthenticated and no other providers available; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on Codex and no other providers available. Run 'codex login' then retry."
+        return 1
+    fi
+
+    if [[ $has_claude -eq 0 && $has_codex -eq 0 ]]; then
+        forgeloop_core__log "Preflight: no providers installed/enabled; aborting" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "No LLM providers are installed or enabled. Install/enable Claude or Codex then retry."
+        return 1
+    fi
 }
 
 # Check if a model has a recent auth failure
@@ -292,6 +399,7 @@ forgeloop_llm__get_codex_config_for_task() {
         plan|plan-work) config="$CODEX_PLANNING_CONFIG" ;;
         review) config="$CODEX_REVIEW_CONFIG" ;;
         security) config="$CODEX_SECURITY_CONFIG" ;;
+        build) config="${CODEX_BUILD_CONFIG:-$CODEX_PLANNING_CONFIG}" ;;
         *) config="$CODEX_PLANNING_CONFIG" ;;
     esac
 
@@ -316,6 +424,11 @@ forgeloop_llm__exec() {
     local log_file="${5:-}"
     local work_scope="${WORK_SCOPE:-}"
     local mode="${MODE:-build}"
+    local timeout_seconds="${FORGELOOP_LLM_TIMEOUT_SECONDS:-0}"
+    local timeout_prefix=()
+    if [[ -n "$timeout_seconds" ]] && [[ "$timeout_seconds" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
+        timeout_prefix=(timeout --signal=KILL "$timeout_seconds")
+    fi
 
     local preferred_model
     preferred_model=$(forgeloop_llm__get_model_for_task "$task_type")
@@ -324,6 +437,15 @@ forgeloop_llm__exec() {
     output_file=$(mktemp)
     local exit_code=0
     local prompt_content=""
+    FORGELOOP_LAST_ERROR=""
+
+    if forgeloop_llm__has_auth_failure "claude" && forgeloop_llm__has_auth_failure "codex"; then
+        forgeloop_core__log "Both models have auth failures; aborting LLM exec" "$log_file"
+        forgeloop_core__notify "$repo_dir" "🚨" "Forgeloop Stopped" "Auth failure on both Claude and Codex. Reauthenticate and retry."
+        FORGELOOP_LAST_ERROR="auth_failure:both"
+        rm -f "$output_file"
+        return 1
+    fi
 
     # Check rate limiting and failover
     if forgeloop_llm__is_rate_limited "$model" && [[ "$ENABLE_FAILOVER" = "true" ]]; then
@@ -391,10 +513,17 @@ forgeloop_llm__exec() {
                 return 127
             fi
 
-            echo "$prompt_content" | $CLAUDE_CLI -p \
+            echo "$prompt_content" | "${timeout_prefix[@]}" $CLAUDE_CLI -p \
                 $CLAUDE_FLAGS \
                 --model "$CLAUDE_MODEL" \
                 2>&1 | tee "$output_file" || exit_code=$?
+
+            if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
+                forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
+                forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+                rm -f "$output_file"
+                return $exit_code
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(\"error\":\{\"type\":\"rate_limit|anthropic.*rate.*limit|Usage limit reached|You.ve run out of|credit balance is too low)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Claude rate limited!" "$log_file"
@@ -423,8 +552,15 @@ forgeloop_llm__exec() {
                 return $?
             fi
 
+            local claude_success_marker=0
+            if grep -q '"input_tokens"' "$output_file" 2>/dev/null; then
+                claude_success_marker=1
+            fi
+
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
+            if [[ "$claude_success_marker" -eq 0 ]] && grep -qiE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+                FORGELOOP_LAST_ERROR="auth_failure:claude"
                 forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
@@ -442,7 +578,7 @@ forgeloop_llm__exec() {
             fi
 
             # Success - clear any previous auth failure
-            if [[ "$exit_code" -eq 0 ]]; then
+            if [[ "$exit_code" -eq 0 ]] || [[ "$claude_success_marker" -eq 1 ]]; then
                 forgeloop_llm__clear_auth_failure "claude"
             fi
             ;;
@@ -465,11 +601,18 @@ forgeloop_llm__exec() {
 
             forgeloop_core__log "Codex config: model=$codex_model reasoning=$codex_reasoning" "$log_file"
 
-            echo "$prompt_content" | $CODEX_CLI exec \
+            echo "$prompt_content" | "${timeout_prefix[@]}" $CODEX_CLI exec \
                 $CODEX_FLAGS \
                 -m "$codex_model" \
                 -c "model_reasoning_effort=\"$codex_reasoning\"" \
                 - 2>&1 | tee "$output_file" || exit_code=$?
+
+            if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
+                forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
+                forgeloop_core__notify "$repo_dir" "⏱️" "Forgeloop Timeout" "LLM call exceeded ${timeout_seconds}s"
+                rm -f "$output_file"
+                return $exit_code
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(openai.*rate.*limit|Rate limit reached for|You exceeded your current quota|Request too large)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Codex rate limited!" "$log_file"
@@ -498,8 +641,15 @@ forgeloop_llm__exec() {
                 return $?
             fi
 
+            local codex_success_marker=0
+            if grep -q "tokens used" "$output_file" 2>/dev/null; then
+                codex_success_marker=1
+            fi
+
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            # Some CLIs exit 0 even when not logged in, so don't gate on exit_code.
+            if [[ "$codex_success_marker" -eq 0 ]] && grep -qiE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+                FORGELOOP_LAST_ERROR="auth_failure:codex"
                 forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
@@ -517,7 +667,7 @@ forgeloop_llm__exec() {
             fi
 
             # Success - clear any previous auth failure
-            if [[ "$exit_code" -eq 0 ]]; then
+            if [[ "$exit_code" -eq 0 ]] || [[ "$codex_success_marker" -eq 1 ]]; then
                 forgeloop_llm__clear_auth_failure "codex"
             fi
             ;;
