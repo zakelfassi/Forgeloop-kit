@@ -441,7 +441,7 @@ forgeloop_llm__exec() {
     local work_scope="${WORK_SCOPE:-}"
     local mode="${MODE:-build}"
     local timeout_seconds="${FORGELOOP_LLM_TIMEOUT_SECONDS:-0}"
-    local timeout_prefix=()
+    local -a timeout_prefix=()
     if [[ -n "$timeout_seconds" ]] && [[ "$timeout_seconds" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
         timeout_prefix=(timeout --signal=KILL "$timeout_seconds")
     fi
@@ -529,10 +529,17 @@ forgeloop_llm__exec() {
                 return 127
             fi
 
-            echo "$prompt_content" | "${timeout_prefix[@]}" $CLAUDE_CLI -p \
-                $CLAUDE_FLAGS \
-                --model "$CLAUDE_MODEL" \
-                2>&1 | tee "$output_file" || exit_code=$?
+            if ((${#timeout_prefix[@]})); then
+                echo "$prompt_content" | "${timeout_prefix[@]}" $CLAUDE_CLI -p \
+                    $CLAUDE_FLAGS \
+                    --model "$CLAUDE_MODEL" \
+                    2>&1 | tee "$output_file" || exit_code=$?
+            else
+                echo "$prompt_content" | $CLAUDE_CLI -p \
+                    $CLAUDE_FLAGS \
+                    --model "$CLAUDE_MODEL" \
+                    2>&1 | tee "$output_file" || exit_code=$?
+            fi
 
             if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
                 forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"
@@ -617,11 +624,19 @@ forgeloop_llm__exec() {
 
             forgeloop_core__log "Codex config: model=$codex_model reasoning=$codex_reasoning" "$log_file"
 
-            echo "$prompt_content" | "${timeout_prefix[@]}" $CODEX_CLI exec \
-                $CODEX_FLAGS \
-                -m "$codex_model" \
-                -c "model_reasoning_effort=\"$codex_reasoning\"" \
-                - 2>&1 | tee "$output_file" || exit_code=$?
+            if ((${#timeout_prefix[@]})); then
+                echo "$prompt_content" | "${timeout_prefix[@]}" $CODEX_CLI exec \
+                    $CODEX_FLAGS \
+                    -m "$codex_model" \
+                    -c "model_reasoning_effort=\"$codex_reasoning\"" \
+                    - 2>&1 | tee "$output_file" || exit_code=$?
+            else
+                echo "$prompt_content" | $CODEX_CLI exec \
+                    $CODEX_FLAGS \
+                    -m "$codex_model" \
+                    -c "model_reasoning_effort=\"$codex_reasoning\"" \
+                    - 2>&1 | tee "$output_file" || exit_code=$?
+            fi
 
             if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 || "$exit_code" -eq 143 ]]; then
                 forgeloop_core__log "LLM call timed out after ${timeout_seconds}s" "$log_file"

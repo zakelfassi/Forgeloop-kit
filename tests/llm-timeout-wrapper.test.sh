@@ -15,6 +15,9 @@ cat > "$fake_bin/timeout" <<'EOF'
 #!/usr/bin/env bash
 log_file="${FORGELOOP_TIMEOUT_LOG:?}"
 printf '%s\n' "$*" > "$log_file"
+if [[ "${1:-}" == --signal=* ]]; then
+  shift
+fi
 seconds="$1"
 shift
 "$@"
