@@ -119,6 +119,22 @@ forgeloop_llm__check_codex_auth() {
     $CODEX_CLI --version &>/dev/null
 }
 
+# Resolve the configured timeout wrapper for LLM CLI calls.
+# Usage: timeout_cmd=$(forgeloop_llm__timeout_prefix)
+forgeloop_llm__timeout_prefix() {
+    local timeout_secs="${FORGELOOP_LLM_TIMEOUT_SECONDS:-900}"
+
+    if ! [[ "$timeout_secs" =~ ^[0-9]+$ ]] || (( timeout_secs <= 0 )); then
+        return 0
+    fi
+
+    if command -v timeout >/dev/null 2>&1; then
+        printf 'timeout %s' "$timeout_secs"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        printf 'gtimeout %s' "$timeout_secs"
+    fi
+}
+
 # Check if a model has a recent auth failure
 # Usage: if forgeloop_llm__has_auth_failure "claude"; then ...
 forgeloop_llm__has_auth_failure() {
@@ -324,6 +340,9 @@ forgeloop_llm__exec() {
     output_file=$(mktemp)
     local exit_code=0
     local prompt_content=""
+    local timeout_prefix=""
+
+    timeout_prefix=$(forgeloop_llm__timeout_prefix)
 
     # Check rate limiting and failover
     if forgeloop_llm__is_rate_limited "$model" && [[ "$ENABLE_FAILOVER" = "true" ]]; then
@@ -391,10 +410,19 @@ forgeloop_llm__exec() {
                 return 127
             fi
 
-            echo "$prompt_content" | $CLAUDE_CLI -p \
-                $CLAUDE_FLAGS \
-                --model "$CLAUDE_MODEL" \
-                2>&1 | tee "$output_file" || exit_code=$?
+            if [[ -n "$timeout_prefix" ]]; then
+                echo "$prompt_content" | eval "$timeout_prefix \"\$CLAUDE_CLI\" -p $CLAUDE_FLAGS --model \"\$CLAUDE_MODEL\"" \
+                    2>&1 | tee "$output_file" || exit_code=$?
+            else
+                echo "$prompt_content" | $CLAUDE_CLI -p \
+                    $CLAUDE_FLAGS \
+                    --model "$CLAUDE_MODEL" \
+                    2>&1 | tee "$output_file" || exit_code=$?
+            fi
+
+            if [[ "$exit_code" -eq 124 ]]; then
+                forgeloop_core__log "Claude timed out after ${FORGELOOP_LLM_TIMEOUT_SECONDS:-900}s" "$log_file"
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(\"error\":\{\"type\":\"rate_limit|anthropic.*rate.*limit|Usage limit reached|You.ve run out of|credit balance is too low)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Claude rate limited!" "$log_file"
@@ -424,7 +452,7 @@ forgeloop_llm__exec() {
             fi
 
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            if grep -qE "$CLAUDE_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 forgeloop_llm__mark_auth_failure "claude" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
@@ -465,11 +493,20 @@ forgeloop_llm__exec() {
 
             forgeloop_core__log "Codex config: model=$codex_model reasoning=$codex_reasoning" "$log_file"
 
-            echo "$prompt_content" | $CODEX_CLI exec \
-                $CODEX_FLAGS \
-                -m "$codex_model" \
-                -c "model_reasoning_effort=\"$codex_reasoning\"" \
-                - 2>&1 | tee "$output_file" || exit_code=$?
+            if [[ -n "$timeout_prefix" ]]; then
+                echo "$prompt_content" | eval "$timeout_prefix \"\$CODEX_CLI\" exec $CODEX_FLAGS -m \"\$codex_model\" -c \"model_reasoning_effort=\\\"\$codex_reasoning\\\"\" -" \
+                    2>&1 | tee "$output_file" || exit_code=$?
+            else
+                echo "$prompt_content" | $CODEX_CLI exec \
+                    $CODEX_FLAGS \
+                    -m "$codex_model" \
+                    -c "model_reasoning_effort=\"$codex_reasoning\"" \
+                    - 2>&1 | tee "$output_file" || exit_code=$?
+            fi
+
+            if [[ "$exit_code" -eq 124 ]]; then
+                forgeloop_core__log "Codex timed out after ${FORGELOOP_LLM_TIMEOUT_SECONDS:-900}s" "$log_file"
+            fi
 
             if [[ "$exit_code" -ne 0 ]] && grep -qE "(openai.*rate.*limit|Rate limit reached for|You exceeded your current quota|Request too large)" "$output_file" 2>/dev/null; then
                 forgeloop_core__log "Codex rate limited!" "$log_file"
@@ -499,7 +536,7 @@ forgeloop_llm__exec() {
             fi
 
             # Check for auth errors (distinct from rate limits)
-            if [[ "$exit_code" -ne 0 ]] && grep -qE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
+            if grep -qE "$CODEX_AUTH_ERROR_PATTERN" "$output_file" 2>/dev/null; then
                 forgeloop_llm__mark_auth_failure "codex" "$repo_dir" "$log_file"
                 [[ -n "$state_file" ]] && forgeloop_llm__save_state "$state_file"
 
