@@ -16,29 +16,10 @@ It supports these flags in `REQUESTS.md`:
 
 - `[PAUSE]` — pause the daemon until the flag is removed
 - `[REPLAN]` — run a planning pass before continuing build work
-- `[DEPLOY]` — run the deploy lifecycle, if configured
+- `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`, if configured
 - `[INGEST_LOGS]` — run log ingestion using `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`
 
 There is **no** daemon-side `[KNOWLEDGE_SYNC]` flag.
-
-### Deploy lifecycle
-
-`[DEPLOY]` now runs up to three explicit stages:
-
-1. `FORGELOOP_DEPLOY_PRE_CMD` — optional deploy preparation such as artifact builds or database migrations
-2. `FORGELOOP_DEPLOY_CMD` — the actual restart, rollout, or release step
-3. `FORGELOOP_DEPLOY_SMOKE_CMD` — optional post-deploy smoke checks
-
-If a deploy stage fails, Forgeloop records the failure and uses the same repeated-failure backpressure path as other runtime failures.
-
-## Verify command safety
-
-`FORGELOOP_VERIFY_CMD` is for validation only.
-
-- Good examples: typecheck, tests, lint, build
-- Bad examples: `systemctl restart`, `docker compose up`, `kubectl rollout restart`
-
-By default, Forgeloop rejects deploy-like verify commands so deployment side effects do not get hidden inside a "verify passed" message.
 
 ## Escalation artifact chain
 
@@ -61,7 +42,6 @@ This is the core fail-closed path for repeated failures and repeated unanswered 
 ## Runtime state model
 
 `.forgeloop/runtime-state.json` is the machine-readable source of truth.
-Forgeloop keeps the runtime directory private (`0700`) and rewrites the state file as owner-only (`0600`) on each update.
 
 It uses:
 
