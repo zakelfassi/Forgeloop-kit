@@ -58,7 +58,7 @@ FORGELOOP_PLAN_TIMEOUT_SECONDS="${FORGELOOP_PLAN_TIMEOUT_SECONDS:-900}"    # 15 
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
 export FORGELOOP_RUNTIME_SURFACE="daemon"
-export FORGELOOP_RUNTIME_MODE="watch"
+export FORGELOOP_RUNTIME_MODE="daemon"
 export FORGELOOP_RUNTIME_BRANCH="$(forgeloop_core__git_current_branch)"
 
 # =============================================================================

@@ -620,8 +620,15 @@ main() {
     echo "Done."
     echo "Next (in the target repo):"
     echo "  cd \"$TARGET_REPO_DIR\""
-    echo "  ./forgeloop/bin/loop.sh plan 1"
-    echo "  ./forgeloop/bin/loop.sh 5"
+    if [ "$WRAPPER" = "true" ]; then
+        echo "  ./forgeloop.sh evals"
+        echo "  ./forgeloop.sh plan 1"
+        echo "  ./forgeloop.sh build 5"
+    else
+        echo "  bash ./forgeloop/evals/run.sh"
+        echo "  ./forgeloop/bin/loop.sh plan 1"
+        echo "  ./forgeloop/bin/loop.sh 5"
+    fi
 }
 
 main
