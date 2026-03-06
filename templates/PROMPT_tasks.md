@@ -13,7 +13,7 @@ Read these files to understand the current state:
 
 1. **Read `prd.json`** and find the highest priority task where `passes: false`
 2. **Read `progress.txt`** for codebase patterns and learnings
-2b. **Skill Forge preflight (always):** Before implementing, decide if this task introduces a repeatable workflow worth capturing as a Skill. If yes, create/update a focused Skill under `skills/<type>/<name>/SKILL.md` (repo-root) and run `./forgeloop/bin/sync-skills.sh`. (Avoid editing `forgeloop/skills` unless you’re changing the kit itself.)
+2b. **Optional skill capture:** Before implementing, decide if this task introduces a repeatable workflow worth capturing as a Skill. If yes, create/update a focused Skill under `skills/<type>/<name>/SKILL.md` (repo-root) and run `./forgeloop/bin/sync-skills.sh`. (Avoid editing `forgeloop/skills` unless you’re changing the kit itself.)
 3. **Implement ONLY that one task** - no more, no less
 4. **Verify acceptance criteria** by running the specified checks
 5. **Update files** when done:

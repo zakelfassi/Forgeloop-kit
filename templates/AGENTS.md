@@ -13,6 +13,15 @@ system/knowledge # Persistent session memory (decisions, patterns, preferences, 
 system/experts   # Domain expert guidance (architecture, security, testing, etc.)
 ```
 
+## Runtime Control Surfaces
+
+- `REQUESTS.md` holds work requests plus daemon control flags (`[PAUSE]`, `[REPLAN]`, `[DEPLOY]`, `[INGEST_LOGS]`)
+- `QUESTIONS.md` is the human inbox when Forgeloop is blocked
+- `ESCALATIONS.md` is the drafted handoff when Forgeloop pauses itself
+- `.forgeloop/runtime-state.json` is the machine-readable source of truth for runtime status
+
+When Forgeloop pauses itself, inspect `ESCALATIONS.md`, answer the matching item in `QUESTIONS.md`, clear `[PAUSE]` when appropriate, then resume the loop.
+
 ## Expert Loading
 
 Load relevant experts from `system/experts/` based on task keywords:
@@ -50,8 +59,7 @@ Load relevant experts from `system/experts/` based on task keywords:
 - Prefer small, focused commits
 - Update `IMPLEMENTATION_PLAN.md` when scope changes
 - Use `./forgeloop/bin/ask.sh` when blocked or decisions needed
-- When Forgeloop pauses itself, inspect `ESCALATIONS.md` and answer the matching item in `QUESTIONS.md`
-- Inspect `.forgeloop/runtime-state.json` for the current machine-readable loop state
+- Inspect `.forgeloop/runtime-state.json` for the current machine-readable loop state before guessing what the runtime is doing
 
 ## Modes
 

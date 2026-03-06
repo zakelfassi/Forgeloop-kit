@@ -1,364 +1,250 @@
 # Forgeloop
 
-Forgeloop is a portable control plane for coding agents. Drop it into a repo and you get a repeatable loop that can plan work, build against real checks, pause before it thrashes, and hand problems back to a human with context.
+> **Forgeloop is the safe-autonomy layer for coding agents.**
+>
+> Install it in a repo, let Claude / Codex do real work, and when they start thrashing, Forgeloop pauses, preserves state, and drafts a clean human handoff instead of spinning forever.
 
-In plain English, Forgeloop helps an agent:
-1. **Kickoff** (optional): write clear docs/specs for a new project.
-2. **Plan**: translate specs into a prioritized, test-aware task list.
-3. **Build**: execute tasks with backpressure from tests/typecheck/lint.
-4. **Pause + escalate**: stop on repeated failures, ask the user for help, and draft the next action instead of looping forever.
+Forgeloop is a vendorable, repo-local control plane for agentic software work.
 
-Then it adds **Skills-Driven Development**: forge reusable agent Skills as you build, sync them into Codex / Claude Code, and grow a repo-specific skill factory over time.
+It gives you four things that matter in practice:
 
-**Inspiration & Sources:**
-- [how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum) - The original Ralph methodology playbook by Geoff Huntley
-- [marge-simpson](https://github.com/Soupernerd/marge-simpson) - Knowledge persistence & expert routing patterns (integrated in v2)
-- [compound-product](https://github.com/snarktank/compound-product) - Product development patterns
+1. **A repeatable loop** for planning and building against real repo checks
+2. **Fail-closed backpressure** when the same failure keeps repeating
+3. **Reviewable escalation artifacts** instead of silent retries and lost context
+4. **Machine-readable runtime state** so humans and tooling can see what the agent is doing
 
-**Links:**
-- This repo: scripts + markdown templates you can apply to any codebase
-- Landing page: https://forgeloop.zakelfassi.com
+Everything else in the kit—skills, knowledge capture, kickoff prompts, task lanes, log ingestion, runner provisioning—compounds on top of that control plane.
 
-## Why teams use it
+## The core promise
 
-- **Portable runtime**: vendor it into an existing repo without rebuilding your whole toolchain.
-- **Fail-closed behavior**: repeated verify/CI/push failures pause the loop and create human-readable escalation artifacts.
-- **Repo-local memory**: persistent knowledge, domain experts, and skills stay close to the code instead of vanishing into chat history.
+Most coding-agent demos show the happy path.
 
-## How the Workflow Works
+Forgeloop is about the unhappy path:
 
-```mermaid
-flowchart LR
-    subgraph SESSION["SESSION (knowledge + experts)"]
-        direction TB
-        SS[session-start.sh]
-        KL[Load knowledge:<br/>decisions, patterns,<br/>preferences, insights]
-        EL[Detect experts:<br/>architecture, security,<br/>testing, implementation]
-        SS --> KL --> EL
-    end
+- the tests keep failing
+- the same blocker stays unanswered
+- auth breaks on one provider
+- the loop needs to stop without losing the trail
 
-    subgraph KICKOFF["1. KICKOFF (optional)"]
-        K1[Memory-backed agent]
-        K2[docs/* + specs/*]
-        K1 --> K2
-    end
+When that happens, Forgeloop is designed to **fail closed, not spin**.
 
-    subgraph PLAN["2. PLAN"]
-        P1[Compare specs to code]
-        P2[IMPLEMENTATION_PLAN.md<br/>or prd.json]
-        P1 --> P2
-    end
+## What happens when an agent gets stuck
 
-    subgraph BUILD["3. BUILD (with SDD preflight)"]
-        S1{Should this become a Skill?}
-        S2[Forge or update Skill: skillforge]
-        S3[Sync skills: sync-skills]
-        B1[Implement task]
-        B2[Run tests/lint/types]
-        B3{Pass?}
-        B4[Next task]
-        B5[Fix + retry]
-        S1 -->|Yes| S2
-        S2 --> S3
-        S1 -->|No| B1
-        S3 --> B1
-        B1 --> B2
-        B2 --> B3
-        B3 -->|Yes| B4
-        B3 -->|No| B5
-        B5 -->|Backpressure| B1
-        B4 --> S1
-    end
+When a loop crosses the repeated-failure threshold, Forgeloop:
 
-    subgraph CAPTURE["SESSION END"]
-        SE[session-end.sh]
-        KC[Capture new:<br/>decisions, patterns,<br/>insights]
-        SE --> KC
-    end
+1. **Stops retrying**
+2. **Writes `[PAUSE]` to `REQUESTS.md`**
+3. **Drafts a human handoff in `ESCALATIONS.md`**
+4. **Appends the blocking question to `QUESTIONS.md`**
+5. **Writes machine-readable state to `.forgeloop/runtime-state.json`**
 
-    SESSION --> KICKOFF
-    KICKOFF --> PLAN
-    PLAN --> BUILD
-    BUILD --> CAPTURE
-```
+That artifact chain is the product.
 
-**Key concepts:**
-- **Backpressure**: when tests fail, the agent retries the task instead of moving on. This keeps the codebase in a working state.
-- **Knowledge persistence**: decisions, patterns, and insights persist across sessions via `system/knowledge/`.
-- **Expert routing**: domain experts (architecture, security, testing, etc.) are loaded based on task keywords.
+## Prove it in under a minute
 
-## What it adds (augmentations)
-- **Portable kit** vendorable as `forgeloop/` into any repo
-- **Multi-model routing** (Codex for plan/review/security; Claude for build) + optional failover
-- **Shared libraries** (`lib/core.sh`, `lib/llm.sh`) with rate-limiting, logging, notifications, and model failover
-- **Two workflow lanes**: Checklist (IMPLEMENTATION_PLAN.md) or Tasks (prd.json with passes flags)
-- **`plan-work` mode** for branch-scoped planning (avoids unreliable "filter tasks at runtime")
-- **Safer defaults**: `FORGELOOP_AUTOPUSH=false` by default
-- **Runtime isolation**: logs/state in `.forgeloop/` (auto gitignored by installer)
-- **Greenfield kickoff** helper to generate docs/specs via a memory-backed agent
-- **Report ingestion** (`ingest-report.sh`) to convert analysis reports into requests
-- **Log ingestion** (`ingest-logs.sh`) to turn runtime errors/logs into actionable requests (optional daemon trigger: `[INGEST_LOGS]`)
-- **Optional Slack loop**: `ask.sh` + `QUESTIONS.md`, `notify.sh`
-- **Optional daemon** with `[PAUSE]`, `[REPLAN]`, `[DEPLOY]`, `[INGEST_LOGS]`, `[KNOWLEDGE_SYNC]` triggers in `REQUESTS.md`
-- **Optional structured review/security gate** via JSON schemas
-- **Skills-Driven Development** primitives: `skillforge` + `sync-skills` + a typed skills library (`operational/`, `meta/`, `composed/`)
-- **Knowledge persistence** (from marge-simpson): session-to-session memory via `system/knowledge/` (decisions, patterns, preferences, insights)
-- **Domain expert system** (from marge-simpson): specialized guidance via `system/experts/` (architecture, security, testing, devops)
-- **Lite mode**: `--lite` flag for one-shot simple tasks (uses `AGENTS-lite.md`)
-- **Session hooks**: `session-start.sh` / `session-end.sh` for loading and capturing knowledge
+Install the kit into a target repo:
 
-## Quickstart (new or existing repo)
-
-Install the kit:
-```bash
-./install.sh /path/to/target-repo --wrapper --skills
-```
-
-Then run a loop in the target repo:
-```bash
-cd /path/to/target-repo
-./forgeloop.sh sync-skills      # refresh repo-scoped skill mirrors (.claude/skills; .codex/skills when writable)
-./forgeloop.sh plan 1
-./forgeloop.sh build 10
-```
-
-When you update Forgeloop itself, refresh an existing repo from a newer kit checkout:
-```bash
-cd /path/to/target-repo
-./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
-```
-
-Validate the control loop with the built-in scenario harness:
-```bash
-./forgeloop.sh evals
-```
-For continuous looping, add `--watch` (or `--infinite`) to any loop command:
-```bash
-./forgeloop.sh build 10 --watch
-```
-
-**Note:** `sync-skills` warns if a destination exists and is not a symlink (e.g., your custom skill directory). Use `--force-symlinks` to overwrite.
-
-Or use the tasks lane with `prd.json`:
-```bash
-./forgeloop.sh tasks 10
-```
-
-If you're starting from scratch, run a kickoff to generate docs/specs first (see below).
-
-## Install into another repo
-
-From this repo:
 ```bash
 ./install.sh /path/to/target-repo --wrapper
 ```
 
-If the kit is already vendored in a target repo at `./forgeloop`:
+Then validate the control plane in that repo:
+
+```bash
+cd /path/to/target-repo
+./forgeloop.sh evals
+```
+
+The eval suite is curated around the safe-autonomy story:
+
+- daemon pause behavior
+- repeated-failure escalation
+- blocker escalation
+- runtime-state transitions
+- auth failover
+- vendored vs repo-root entrypoint portability
+
+See `evals/README.md` for the public proof surface.
+
+## Quickstart
+
+In the target repo:
+
+```bash
+./forgeloop.sh evals
+./forgeloop.sh plan 1
+./forgeloop.sh build 10
+```
+
+For continuous operation:
+
+```bash
+./forgeloop.sh daemon 300
+```
+
+That daemon is **interval-based**. It does not watch git in real time. It periodically checks the repo and control files, then decides whether to plan, build, pause, deploy, or ingest logs.
+
+### Supported daemon control flags
+
+Add these anywhere in `REQUESTS.md`:
+
+- `[PAUSE]` — pause the daemon until removed
+- `[REPLAN]` — run a planning pass before continuing
+- `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`
+- `[INGEST_LOGS]` — analyze logs into a new request
+
+`[PAUSE]` may also be inserted automatically by Forgeloop when it escalates a repeated failure or blocker.
+
+## Why teams use it
+
+- **Repo-local control plane** — vendor it into an existing repo without rebuilding your whole stack
+- **Trust architecture** — repeated failures become explicit pauses and handoffs
+- **State you can inspect** — the runtime always writes a machine-readable status file
+- **Safer defaults** — `FORGELOOP_AUTOPUSH=false` by default
+- **Model failover** — Claude/Codex routing with auth/rate-limit failover
+- **Isolated-runner friendly** — designed for disposable VMs / containers when you run full-auto
+
+## The runtime contract
+
+The runtime source of truth lives in:
+
+- `bin/loop.sh`
+- `bin/forgeloop-daemon.sh`
+- `bin/escalate.sh`
+- `lib/core.sh`
+- `lib/llm.sh`
+
+The operator contract is documented in:
+
+- `docs/runtime-control.md`
+- `docs/sandboxing.md`
+- `evals/README.md`
+
+### Runtime states
+
+`.forgeloop/runtime-state.json` is the machine-readable source of truth.
+
+- `status` is the coarse operator state (`running`, `blocked`, `paused`, `awaiting-human`, `recovered`, `idle`)
+- `transition` carries the detailed lifecycle step (`planning`, `building`, `retrying`, `escalated`, `completed`, etc.)
+- `surface` tells you which surface wrote the state (`loop`, `daemon`, etc.)
+- `mode` tells you which run mode is active (`build`, `plan`, `tasks`, `daemon`, etc.)
+
+## Run safely
+
+If you use auto-permissions / full-auto mode, treat the **VM or container as the security boundary**.
+
+- Guide: `docs/sandboxing.md`
+- GCP runner helper: `ops/gcp/provision.sh`
+
+Quick provision example:
+
+```bash
+OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
+  ops/gcp/provision.sh --name forgeloop-runner \
+  --project <gcp-project> --zone us-central1-a
+```
+
+## What it installs
+
+Forgeloop vendors into `./forgeloop` and writes the control surfaces at repo root:
+
+- `AGENTS.md`
+- `PROMPT_plan.md`
+- `PROMPT_build.md`
+- `IMPLEMENTATION_PLAN.md`
+- `REQUESTS.md`
+- `QUESTIONS.md`
+- `STATUS.md`
+- `CHANGELOG.md`
+- `system/knowledge/*`
+- `system/experts/*`
+
+That gives agents and operators a consistent repo-local operating surface instead of ad hoc prompt glue.
+
+## Secondary systems that compound
+
+These are real capabilities, but they are not the lead story.
+
+### Skills
+
+Forgeloop includes Skills tooling (`skillforge`, `sync-skills`, repo-local `skills/`) so repeated workflows can become reusable procedures for Codex / Claude Code.
+
+```bash
+./forgeloop.sh sync-skills
+./forgeloop.sh sync-skills --all
+```
+
+### Knowledge capture
+
+Session hooks can load and capture durable repo-local knowledge:
+
+```bash
+./forgeloop.sh session-start
+./forgeloop.sh session-end
+```
+
+### Kickoff
+
+For greenfield projects, generate a prompt for a memory-backed agent to produce `docs/*` and `specs/*`:
+
+```bash
+./forgeloop.sh kickoff "<one paragraph project brief>"
+```
+
+### Tasks lane
+
+If you want machine-readable task execution instead of a markdown checklist:
+
+```bash
+./forgeloop.sh tasks 10
+```
+
+### Log ingestion
+
+Turn runtime logs into new requests:
+
+```bash
+./forgeloop.sh ingest-logs --file /path/to/logs.txt
+```
+
+or configure `[INGEST_LOGS]` in `REQUESTS.md` for daemon-driven ingestion.
+
+## Install / upgrade patterns
+
+Install into another repo from this repo:
+
+```bash
+./install.sh /path/to/target-repo --wrapper
+```
+
+If the kit is already vendored:
+
 ```bash
 ./forgeloop/install.sh --wrapper
 ```
 
-### Upgrade an existing repo
+Upgrade an existing vendored repo:
 
-From inside a repo that already vendors Forgeloop:
 ```bash
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
 
-Or from a fresh Forgeloop checkout:
-```bash
-./install.sh /path/to/target-repo --wrapper --upgrade-from /path/to/newer-forgeloop-kit --force
-```
+## Project layout
 
-### Conflict Handling
+Key top-level paths in this repo:
 
-When files already exist, the installer offers several options:
+- `bin/` — loop runtime, daemon, escalation, sync, kickoff, ingestion
+- `lib/` — shared runtime helpers and LLM routing
+- `docs/` — operator docs
+- `evals/` — public proof suite
+- `templates/` — installed repo surfaces
+- `tests/` — broader regression suite
+- `ops/gcp/` — dedicated runner provisioning
 
-| Flag | Behavior |
-|------|----------|
-| (default in TTY) | Interactive prompt: skip, overwrite, merge, or diff |
-| `--batch` / `-b` | Silently skip existing files (CI-safe) |
-| `--interactive` / `-i` | Force interactive prompts even in non-TTY |
-| `--force` | Overwrite all existing files |
+## Credits / inspiration
 
-**Interactive options:**
-- **skip** — Keep existing file (default)
-- **overwrite** — Replace with template
-- **merge** — Append template below a separator
-- **diff** — Show differences, then ask again
+- [how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum)
+- [marge-simpson](https://github.com/Soupernerd/marge-simpson)
+- [compound-product](https://github.com/snarktank/compound-product)
 
-## Kickoff (greenfield)
-
-For projects starting from scratch, generate a prompt you can paste into a memory-backed agent (ChatGPT Projects, Claude Projects, etc.) to create high-quality `docs/*` + `specs/*`:
-
-```bash
-cd /path/to/target-repo
-./forgeloop.sh kickoff "<one paragraph project brief>"
-```
-
-- Guide: `docs/kickoff.md`
-
-## Run (in the target repo)
-
-**Checklist lane** (default):
-```bash
-./forgeloop.sh plan 1        # Plan first iteration
-./forgeloop.sh build 10      # Build up to 10 iterations
-```
-
-**Tasks lane** (prd.json-based):
-```bash
-./forgeloop.sh tasks 10      # Execute prd.json tasks
-```
-
-**Daemon mode** (watches for changes):
-```bash
-./forgeloop.sh daemon 300    # Check every 5 minutes
-```
-
-**Ingest a report** (convert to requests):
-```bash
-./forgeloop.sh ingest --report /path/to/report.md --mode request
-```
-
-## Run safely (GCP VM / Docker)
-
-If you’re using auto-permissions (`--dangerously-skip-permissions`, `--full-auto`), run in an isolated environment.
-
-- Full guide + pricing notes: `docs/sandboxing.md`
-- One-command GCP VM provisioner: `ops/gcp/provision.sh`
-
-## Workflow Lanes
-
-Forgeloop supports two approaches to task tracking:
-
-### Checklist Lane (default)
-Uses `IMPLEMENTATION_PLAN.md` with markdown checkboxes. Best for human-in-the-loop workflows where you want to review and modify the plan.
-
-```bash
-./forgeloop.sh plan 1    # Generate plan
-./forgeloop.sh build 10  # Execute tasks
-```
-
-### Tasks Lane (optional)
-Uses `prd.json` with machine-readable `passes: true/false` flags. Best for full automation with structured task definitions.
-
-```bash
-./forgeloop.sh tasks 10  # Execute prd.json tasks
-```
-
-**Comparison:**
-| Aspect | Checklist Lane | Tasks Lane |
-|--------|---------------|------------|
-| Task file | `IMPLEMENTATION_PLAN.md` | `prd.json` |
-| Progress tracking | Markdown checkboxes | `passes: true/false` |
-| Run command | `./forgeloop.sh build N` | `./forgeloop.sh tasks N` |
-| Best for | Human review/edits | Full automation |
-| Status tracking | `STATUS.md` | `progress.txt` |
-
-## Knowledge Persistence (from marge-simpson)
-
-Session-to-session memory that persists across loops. Located at `system/knowledge/`:
-
-```
-system/knowledge/
-├── _index.md          # Tag index, quick stats, recent entries
-├── decisions.md       # D-### entries: architectural choices
-├── patterns.md        # P-### entries: observed behaviors
-├── preferences.md     # PR-### entries: user-stated preferences
-├── insights.md        # I-### entries: discovered codebase facts
-└── archive.md         # Decayed entries (90+ days without access)
-```
-
-**Usage:**
-```bash
-./forgeloop.sh session-start     # Load knowledge context before work
-./forgeloop.sh session-end       # Capture new knowledge after work
-./forgeloop.sh session-end --capture decision "Title" "Context" "Decision" "Consequences" "tags"
-```
-
-## Domain Expert System (from marge-simpson)
-
-Specialized guidance loaded based on task keywords. Located at `system/experts/`:
-
-| Keywords | Expert File | Expertise |
-|----------|-------------|-----------|
-| `api`, `schema`, `architecture` | architecture.md | Systems design, API contracts |
-| `auth`, `security`, `encryption` | security.md | OWASP, compliance, access control |
-| `test`, `QA`, `coverage` | testing.md | Test strategy, automation |
-| `code`, `refactor`, `debug` | implementation.md | Clean code, debugging |
-| `deploy`, `CI/CD`, `docker` | devops.md | Pipelines, infrastructure |
-
-**Key insight:** Experts provide *guidance*, Skills provide *procedures*. Use both together.
-
-## Lite Mode
-
-For simple one-shot tasks that don't need full planning overhead:
-
-```bash
-./forgeloop.sh build --lite 1    # Uses AGENTS-lite.md
-./forgeloop.sh build --full 10   # Explicit full mode (default)
-```
-
-Lite mode constraints:
-- Single response, no follow-ups
-- No IMPLEMENTATION_PLAN.md updates
-- Direct execution only
-
-## Shared Libraries
-
-The kit includes reusable bash libraries under `lib/`:
-
-### lib/core.sh
-- `forgeloop_core__log()` — Timestamped logging with levels (info, warn, error)
-- `forgeloop_core__notify()` — Slack webhook notifications (requires `SLACK_WEBHOOK_URL`)
-- `forgeloop_core__git_push_branch()` — Safe branch pushing with conflict handling
-- `forgeloop_core__consume_flag()` — Read and clear control flags from `REQUESTS.md`
-- `forgeloop_core__hash()` — String hashing for idempotency checks
-- `forgeloop_core__hash_file()` — File hashing for idempotency checks
-
-### lib/llm.sh
-- `forgeloop_llm__exec()` — Unified LLM execution with automatic model failover
-- Supports both `claude` and `codex` CLIs
-- Rate-limiting with exponential backoff
-- Optional Codex security/review gates
-
-## Daemon Mode
-
-The daemon watches for changes and runs loops automatically:
-
-```bash
-./forgeloop.sh daemon 300  # Check every 5 minutes
-```
-
-**What it monitors:**
-- Git changes (new commits, branch updates)
-- `REQUESTS.md` modifications
-- Control flags in `REQUESTS.md`
-
-**Control flags:**
-- `[PAUSE]` — Stop the daemon loop until flag is removed
-- `[REPLAN]` — Trigger a re-planning pass before continuing build
-- `[DEPLOY]` — Run `FORGELOOP_DEPLOY_CMD` after successful build
-- `[INGEST_LOGS]` — Run log ingestion (uses `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`)
-
-**Blocker detection:**
-The daemon includes blocker detection and repeated-failure backpressure. When the loop is stuck waiting for human input or keeps hitting the same verify/CI/push failure, it pauses, records the reason, and writes escalation artifacts instead of retrying forever.
-
-**Operator state:**
-Forgeloop writes the current machine-readable loop state to `.forgeloop/runtime-state.json` so operators can tell whether the runtime is `running`, `blocked`, `paused`, `awaiting-human`, `recovered`, or `idle`.
-
-## Config
-
-Edit `forgeloop/config.sh` (in the target repo) to set:
-- `FORGELOOP_AUTOPUSH=true` if you want auto-push
-- `FORGELOOP_PLAN_AUTOPUSH=true` if you want plan/plan-work loops to push (no CI gate)
-- `FORGELOOP_ALLOW_PRD_VERIFY_CMD=true` if you want `prd.json` to provide `verify_cmd` (tasks lane; runs as shell)
-- `FORGELOOP_TEST_CMD` (optional) to run after review auto-fixes
-- `FORGELOOP_DEPLOY_CMD` (optional) used by the daemon on `[DEPLOY]`
-- `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE` (optional) used by the daemon on `[INGEST_LOGS]`
-- `FORGELOOP_FAILURE_ESCALATE_AFTER` to set how many repeated failures trigger a pause
-- `FORGELOOP_FAILURE_ESCALATION_ACTION` to choose the drafted human handoff action
-
-## Notes
-- Optional Slack integration uses `.env.local` with `SLACK_WEBHOOK_URL=...`.
+Landing page: https://forgeloop.zakelfassi.com
