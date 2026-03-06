@@ -226,6 +226,22 @@ forgeloop_llm__preflight_auth() {
     fi
 }
 
+# Resolve the configured timeout wrapper for LLM CLI calls.
+# Usage: timeout_cmd=$(forgeloop_llm__timeout_prefix)
+forgeloop_llm__timeout_prefix() {
+    local timeout_secs="${FORGELOOP_LLM_TIMEOUT_SECONDS:-900}"
+
+    if ! [[ "$timeout_secs" =~ ^[0-9]+$ ]] || (( timeout_secs <= 0 )); then
+        return 0
+    fi
+
+    if command -v timeout >/dev/null 2>&1; then
+        printf 'timeout %s' "$timeout_secs"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        printf 'gtimeout %s' "$timeout_secs"
+    fi
+}
+
 # Check if a model has a recent auth failure
 # Usage: if forgeloop_llm__has_auth_failure "claude"; then ...
 forgeloop_llm__has_auth_failure() {
