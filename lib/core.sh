@@ -46,6 +46,17 @@ forgeloop_core__resolve_repo_dir() {
     fi
 }
 
+# Resolve where the kit itself lives for a repo.
+# Usage: FORGELOOP_DIR=$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")
+forgeloop_core__resolve_forgeloop_dir() {
+    local repo_dir="$1"
+    if [[ -f "$repo_dir/forgeloop/lib/core.sh" ]]; then
+        echo "$repo_dir/forgeloop"
+    else
+        echo "$repo_dir"
+    fi
+}
+
 # Load Forgeloop configuration from config.sh
 # Usage: forgeloop_core__load_config "$REPO_DIR"
 forgeloop_core__load_config() {
@@ -71,6 +82,160 @@ forgeloop_core__ensure_runtime_dirs() {
 
     mkdir -p "$runtime_dir/logs"
     echo "$runtime_dir"
+}
+
+# Resolve the runtime state file used for operator-visible loop state.
+# Usage: state_file=$(forgeloop_core__runtime_state_file "$REPO_DIR")
+forgeloop_core__runtime_state_file() {
+    local repo_dir="$1"
+    local runtime_dir state_file
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    state_file="${FORGELOOP_RUNTIME_STATE_FILE:-$runtime_dir/runtime-state.json}"
+
+    if [[ "$state_file" != /* ]]; then
+        state_file="$repo_dir/$state_file"
+    fi
+
+    mkdir -p "$(dirname "$state_file")"
+    echo "$state_file"
+}
+
+# Read the current runtime status enum from the state file.
+# Usage: status=$(forgeloop_core__runtime_state_status "$REPO_DIR")
+forgeloop_core__runtime_state_status() {
+    local repo_dir="$1"
+    local state_file
+    state_file=$(forgeloop_core__runtime_state_file "$repo_dir")
+
+    if [[ ! -f "$state_file" ]]; then
+        echo "unknown"
+        return 0
+    fi
+
+    if forgeloop_core__has_cmd "jq"; then
+        jq -r '.status // "unknown"' "$state_file" 2>/dev/null || echo "unknown"
+        return 0
+    fi
+
+    if forgeloop_core__has_cmd "python3"; then
+        python3 - "$state_file" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    print(data.get("status", "unknown"))
+except Exception:
+    print("unknown")
+PY
+        return 0
+    fi
+
+    echo "unknown"
+}
+
+# Persist the current runtime state as JSON with previous-state tracking.
+# Usage: forgeloop_core__set_runtime_state "$REPO_DIR" "running" "loop" "build" "Loop started" "started" "issue" "feature-branch"
+forgeloop_core__set_runtime_state() {
+    local repo_dir="$1"
+    local status="$2"
+    local surface="${3:-unknown}"
+    local mode="${4:-unknown}"
+    local reason="${5:-}"
+    local transition="${6:-$status}"
+    local requested_action="${7:-}"
+    local branch="${8:-}"
+
+    local state_file
+    state_file=$(forgeloop_core__runtime_state_file "$repo_dir")
+
+    if forgeloop_core__has_cmd "python3"; then
+        python3 - "$state_file" "$status" "$surface" "$mode" "$reason" "$transition" "$requested_action" "$branch" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+path, status, surface, mode, reason, transition, requested_action, branch = sys.argv[1:9]
+previous = {}
+if os.path.exists(path):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            previous = json.load(fh) or {}
+    except Exception:
+        previous = {}
+
+payload = dict(previous)
+payload["previous_status"] = previous.get("status", "")
+payload["status"] = status
+payload["transition"] = transition
+payload["surface"] = surface
+payload["mode"] = mode
+payload["reason"] = reason
+payload["requested_action"] = requested_action
+payload["branch"] = branch
+payload["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+tmp_path = f"{path}.tmp"
+with open(tmp_path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2, sort_keys=True)
+    fh.write("\n")
+os.replace(tmp_path, path)
+PY
+        return 0
+    fi
+
+    cat > "$state_file" <<EOF
+{"status":"$status","previous_status":"","transition":"$transition","surface":"$surface","mode":"$mode","reason":"$reason","requested_action":"$requested_action","branch":"$branch"}
+EOF
+}
+
+# Backward-compatible wrapper for older callers that emit actor/status/context tuples.
+# Usage: forgeloop_core__write_runtime_state "$REPO_DIR" "building" "loop" "Running build" "mode=build"
+forgeloop_core__write_runtime_state() {
+    local repo_dir="$1"
+    local legacy_status="$2"
+    local surface="${3:-unknown}"
+    local summary="${4:-}"
+    shift 4
+
+    local mode="${FORGELOOP_RUNTIME_MODE:-unknown}"
+    local branch="${FORGELOOP_RUNTIME_BRANCH:-}"
+    local requested_action=""
+    local item key value
+    for item in "$@"; do
+        key="${item%%=*}"
+        value="${item#*=}"
+        case "$key" in
+            mode) mode="$value" ;;
+            branch) branch="$value" ;;
+            requested_action) requested_action="$value" ;;
+        esac
+    done
+
+    local normalized_status="$legacy_status"
+    local transition="$legacy_status"
+    case "$legacy_status" in
+        starting|planning|building|running)
+            normalized_status="running"
+            ;;
+        retrying|blocked)
+            normalized_status="blocked"
+            ;;
+        healthy|resuming|recovered)
+            normalized_status="recovered"
+            ;;
+        complete|completed|idle)
+            normalized_status="idle"
+            ;;
+        paused|awaiting-human)
+            normalized_status="$legacy_status"
+            ;;
+    esac
+
+    forgeloop_core__set_runtime_state "$repo_dir" "$normalized_status" "$surface" "$mode" "$summary" "$transition" "$requested_action" "$branch"
 }
 
 # Initialize session context (knowledge + experts) if available.
@@ -628,6 +793,115 @@ forgeloop_core__hash_file() {
     else
         cat "$file" | head -c 32
     fi
+}
+
+# Produce a stable-ish failure fingerprint from a category, summary, and optional evidence.
+# Usage: signature=$(forgeloop_core__failure_signature "ci" "CI gate failed" "/tmp/output.txt")
+forgeloop_core__failure_signature() {
+    local kind="$1"
+    local summary="$2"
+    local evidence_file="${3:-}"
+    local payload
+    payload=$(printf "kind=%s\nsummary=%s\n" "$kind" "$summary")
+
+    if [[ -n "$evidence_file" ]] && [[ -f "$evidence_file" ]]; then
+        local evidence
+        evidence=$(
+            tail -n 40 "$evidence_file" 2>/dev/null \
+            | sed -E \
+                -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:.+-Z]*/<timestamp>/g' \
+                -e 's/[0-9a-f]{7,40}/<hash>/g' \
+                -e 's/[0-9]+/<num>/g'
+        )
+        payload=$(printf "%s\nevidence=%s\n" "$payload" "$evidence")
+    fi
+
+    forgeloop_core__hash "$payload"
+}
+
+# Clear the remembered repeated-failure state after a healthy iteration.
+# Usage: forgeloop_core__clear_failure_state "$REPO_DIR"
+forgeloop_core__clear_failure_state() {
+    local repo_dir="$1"
+    local runtime_dir
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    rm -f "$runtime_dir/failure-state.env"
+}
+
+# Track repeated identical failures and return the current consecutive count.
+# Usage: count=$(forgeloop_core__record_failure "$REPO_DIR" "ci" "CI gate failed" "/tmp/output.txt")
+forgeloop_core__record_failure() {
+    local repo_dir="$1"
+    local kind="$2"
+    local summary="$3"
+    local evidence_file="${4:-}"
+
+    local runtime_dir state_file signature
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    state_file="$runtime_dir/failure-state.env"
+    signature=$(forgeloop_core__failure_signature "$kind" "$summary" "$evidence_file")
+
+    local last_signature="" last_count=0
+    if [[ -f "$state_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$state_file"
+        last_signature="${LAST_FAILURE_SIGNATURE:-}"
+        last_count="${LAST_FAILURE_COUNT:-0}"
+    fi
+
+    local count=1
+    if [[ "$signature" == "$last_signature" ]]; then
+        count=$((last_count + 1))
+    fi
+
+    {
+        printf 'LAST_FAILURE_SIGNATURE=%q\n' "$signature"
+        printf 'LAST_FAILURE_KIND=%q\n' "$kind"
+        printf 'LAST_FAILURE_COUNT=%q\n' "$count"
+        printf 'LAST_FAILURE_UPDATED_AT=%q\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    } > "$state_file"
+
+    echo "$count"
+}
+
+# Draft a human escalation when the loop is spinning on the same failure.
+# Returns 0 when the caller should stop, 1 when it should retry.
+# Usage: if forgeloop_core__handle_repeated_failure "$REPO_DIR" "ci" "CI gate failed" "$out" "$LOG_FILE"; then exit 1; fi
+forgeloop_core__handle_repeated_failure() {
+    local repo_dir="$1"
+    local kind="$2"
+    local summary="$3"
+    local evidence_file="${4:-}"
+    local log_file="${5:-}"
+    local requested_action="${6:-${FORGELOOP_FAILURE_ESCALATION_ACTION:-issue}}"
+
+    local count threshold
+    count=$(forgeloop_core__record_failure "$repo_dir" "$kind" "$summary" "$evidence_file")
+    threshold="${FORGELOOP_FAILURE_ESCALATE_AFTER:-3}"
+    local surface mode branch
+    surface="${FORGELOOP_RUNTIME_SURFACE:-loop}"
+    mode="${FORGELOOP_RUNTIME_MODE:-build}"
+    branch="${FORGELOOP_RUNTIME_BRANCH:-$(forgeloop_core__git_current_branch)}"
+
+    forgeloop_core__log "Repeated failure tracking: kind=$kind count=$count/$threshold summary=$summary" "$log_file"
+
+    if [[ "$count" -lt "$threshold" ]]; then
+        forgeloop_core__set_runtime_state "$repo_dir" "blocked" "$surface" "$mode" "$summary" "blocked" "$requested_action" "$branch"
+        return 1
+    fi
+
+    local forgeloop_dir escalate_script
+    forgeloop_dir=$(forgeloop_core__resolve_forgeloop_dir "$repo_dir")
+    escalate_script="$forgeloop_dir/bin/escalate.sh"
+
+    if [[ -x "$escalate_script" ]]; then
+        "$escalate_script" "$kind" "$summary" "$requested_action" "${evidence_file:-}" "$count" >/dev/null 2>&1 || true
+    fi
+
+    forgeloop_core__set_runtime_state "$repo_dir" "awaiting-human" "$surface" "$mode" "$summary" "escalated" "$requested_action" "$branch"
+    forgeloop_core__notify "$repo_dir" "🧯" "Forgeloop Escalated" "Stopped after repeated $kind failure. Drafted next steps for a human."
+    forgeloop_core__log "Escalated repeated $kind failure after $count attempts; stopping for human intervention" "$log_file"
+    return 0
 }
 
 # =============================================================================

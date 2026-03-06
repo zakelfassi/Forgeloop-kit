@@ -18,13 +18,12 @@ set -euo pipefail
 # =============================================================================
 
 # Resolve repo directory and load libraries
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
-source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
@@ -229,6 +228,8 @@ ensure_on_branch() {
 
     local current_branch
     current_branch=$(forgeloop_core__git_current_branch)
+    forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "tasks" "Initializing tasks loop" \
+        "mode=tasks" "branch=$current_branch" "max_iterations=$MAX_ITERATIONS"
 
     if [[ "$current_branch" != "$target_branch" ]]; then
         log "Switching to branch: $target_branch"
@@ -330,6 +331,8 @@ EOF
 
 main() {
     cd "$REPO_DIR"
+    export FORGELOOP_RUNTIME_SURFACE="tasks"
+    export FORGELOOP_RUNTIME_MODE="tasks"
 
     # Validate prd.json exists
     if [[ ! -f "$PRD_FILE" ]]; then
@@ -358,6 +361,7 @@ main() {
 
     local current_branch
     current_branch=$(forgeloop_core__git_current_branch)
+    export FORGELOOP_RUNTIME_BRANCH="$current_branch"
 
     # Load LLM state
     forgeloop_llm__load_state "$STATE_FILE"
@@ -384,6 +388,9 @@ main() {
     while [[ "$iteration" -lt "$MAX_ITERATIONS" ]]; do
         # Check if all tasks are complete
         if all_tasks_complete "$PRD_FILE"; then
+            forgeloop_core__clear_failure_state "$REPO_DIR"
+            forgeloop_core__write_runtime_state "$REPO_DIR" "complete" "tasks" "All tasks passed" \
+                "mode=tasks" "branch=$current_branch" "iterations=$iteration"
             log "All tasks complete!"
             notify "✅" "Forgeloop Tasks Complete" "All tasks in prd.json are done!"
             echo ""
@@ -401,6 +408,8 @@ main() {
         fi
 
         log "Working on task: $next_task_id"
+        forgeloop_core__write_runtime_state "$REPO_DIR" "building" "tasks" "Working on task $next_task_id" \
+            "mode=tasks" "branch=$current_branch" "iteration=$iteration" "task_id=$next_task_id"
 
         echo ""
         echo "==============================================================="
@@ -428,13 +437,25 @@ main() {
             local verify_out="$verify_dir/verify-$next_task_id.txt"
             if ! run_verify_cmd "$verify_cmd" "$verify_out" "$next_task_id"; then
                 mark_task_passes "$PRD_FILE" "$next_task_id" false
+                if forgeloop_core__handle_repeated_failure "$REPO_DIR" "verify" "Task verify failed for $next_task_id: $verify_cmd" "$verify_out" "$LOG_FILE"; then
+                    exit 1
+                fi
                 continue
             fi
             mark_task_passes "$PRD_FILE" "$next_task_id" true
         fi
 
         # Push if enabled
-        forgeloop_core__git_push_branch "$REPO_DIR" "$current_branch" "$LOG_FILE"
+        if ! forgeloop_core__git_push_branch "$REPO_DIR" "$current_branch" "$LOG_FILE"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "push" "Push failed for tasks branch $current_branch" "" "$LOG_FILE" "review"; then
+                exit 1
+            fi
+            continue
+        fi
+
+        forgeloop_core__clear_failure_state "$REPO_DIR"
+        forgeloop_core__write_runtime_state "$REPO_DIR" "healthy" "tasks" "Completed task iteration" \
+            "mode=tasks" "branch=$current_branch" "iteration=$((iteration + 1))" "task_id=$next_task_id"
 
         iteration=$((iteration + 1))
 
@@ -450,6 +471,8 @@ main() {
     echo ""
     echo "Reached max iterations ($MAX_ITERATIONS)."
     echo "Check $PROGRESS_FILE for status."
+    forgeloop_core__write_runtime_state "$REPO_DIR" "paused" "tasks" "Reached max task iterations without completion" \
+        "mode=tasks" "branch=$current_branch" "iterations=$iteration"
     exit 1
 }
 

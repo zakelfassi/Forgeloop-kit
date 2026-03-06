@@ -17,17 +17,12 @@
 set -euo pipefail
 
 # Resolve paths
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-
-# Prefer a vendored kit at $REPO_DIR/forgeloop, otherwise fall back to repo root.
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
-
-# shellcheck disable=SC1090
-source "$FORGELOOP_DIR/lib/core.sh" 2>/dev/null || true
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
+source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
 
 KNOWLEDGE_DIR="$REPO_DIR/system/knowledge"
 EXPERTS_DIR="$REPO_DIR/system/experts"

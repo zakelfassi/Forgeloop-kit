@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>Forgeloop — Skills-Driven Development. Build loops. Ship with backpressure.</title>
+    <title>Forgeloop — Portable control plane for coding agents</title>
     <meta
       name="description"
-      content="Forgeloop is a portable loop for AI-assisted development: kickoff specs, plan tasks, build with backpressure — plus Skills-Driven Development to forge reusable agent skills as you ship. Includes an optional one-command GCP runner provisioner."
+      content="Forgeloop is a portable control plane for coding agents: kickoff specs, plan tasks, build against real checks, pause on repeated failures, and draft human escalations instead of spinning forever."
     />
     <meta name="theme-color" content="#0b0f14" />
 
@@ -15,7 +15,7 @@
     <meta property="og:title" content="Forgeloop" />
     <meta
       property="og:description"
-      content="Build with the Forgeloop loop (kickoff → plan → build) plus Skills-Driven Development: forge reusable agent skills as you ship."
+      content="Plan work, build code, fail closed with backpressure, and keep repo-local skills and memory close to the code."
     />
     <meta property="og:type" content="website" />
 
@@ -1000,7 +1000,7 @@
             <div class="mark" aria-hidden="true"></div>
             <div>
               <h1>Forgeloop</h1>
-              <p>Build loops. Forge skills. Any repo.</p>
+              <p>Plan work. Build code. Stop before you spin.</p>
             </div>
           </div>
 
@@ -1034,19 +1034,20 @@
 
           <div class="heromain">
             <div class="kicker">
-              <b>Skills-Driven Development</b>: <span>kickoff → plan → skill preflight → build</span>
+              <b>Portable control plane</b>: <span>kickoff → plan → build → pause → resume</span>
             </div>
 
             <h2>
               Build in loops.
-              <span class="hl">Forge skills. Ship with backpressure.</span>
+              <span class="hl">Pause before you thrash.</span>
             </h2>
 
             <p class="lead">
-              Forgeloop is a portable workflow for AI-assisted development. It installs prompts + templates and gives
-              you a repeatable loop: <b>kickoff</b> (optional) → <b>plan</b> (specs to tasks) → <b>build</b> (tasks to
-              code with backpressure from tests). Then it adds <b>Skills-Driven Development</b>: before each task,
-              forge reusable Skills (plain Markdown SOPs) and sync them into Codex / Claude Code.
+              Forgeloop is a portable control plane for coding agents. It installs the runtime, prompts, and repo-local
+              docs for a repeatable loop: <b>kickoff</b> (optional) → <b>plan</b> → <b>build</b> with backpressure from
+              tests. When the same failure keeps repeating, it pauses, writes escalation artifacts, and asks the human
+              for the next move instead of looping forever. Then it layers in <b>Skills-Driven Development</b> so the
+              workflow itself compounds over time.
             </p>
 
             <div class="ctas">
@@ -1119,8 +1120,8 @@
               <div class="card" style="grid-column: span 4">
                 <h3>What it adds</h3>
                 <p>
-                  The core loop can be as small as "feed a prompt to an agent, repeat." Forgeloop keeps that simplicity
-                  while adding structure: specs/templates, planning files, safer defaults, and a repeatable runtime.
+                  The raw loop can be "prompt an agent and hope." Forgeloop turns that into an operator-friendly runtime:
+                  repo-local specs, predictable entrypoints, fail-closed backpressure, and a paved upgrade path.
                 </p>
                 <div class="chiprow" role="list">
                   <span class="chip" role="listitem"><span class="tag"></span><span>plan-work</span></span>
@@ -1128,12 +1129,14 @@
                   <span class="chip" role="listitem"><span class="tag"></span><span>GCP provisioner</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>kickoff prompt</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>.forgeloop runtime</span></span>
+                  <span class="chip pink" role="listitem"><span class="tag"></span><span>fail-closed pauses</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>tasks lane</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>report ingestion</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>log ingestion</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>shared libraries</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>skills-driven dev</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>sync-skills</span></span>
+                  <span class="chip blue" role="listitem"><span class="tag"></span><span>upgrade command</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>knowledge persistence</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>domain experts</span></span>
                   <span class="chip" role="listitem"><span class="tag"></span><span>lite mode</span></span>
@@ -1143,8 +1146,8 @@
               <div class="card" style="grid-column: span 8">
                 <h3>Quick install</h3>
                 <p>
-                  Install the kit into any repo (writes docs + prompts + a wrapper), then run planning/build loops.
-                  You'll get a consistent file layout + prompts — plus a small Skills library you can extend as you go.
+                  Install the kit into any repo, run one planning/build cycle, then keep the vendored runtime fresh with
+                  an explicit upgrade command. The result is a consistent operator surface instead of ad hoc shell glue.
                 </p>
                 <div class="code" style="margin-top: 20px">
                   <button class="copy" data-copy="#cmd-install">Copy</button>
@@ -1154,6 +1157,7 @@ cd "$REPO"
 ./forgeloop.sh sync-skills
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
+./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 # Or use tasks lane: ./forgeloop.sh tasks 10
 # Continuous mode: add --watch or --infinite</pre>
                 </div>
@@ -1161,6 +1165,7 @@ cd "$REPO"
                   <span class="chip" role="listitem"><span class="tag"></span><span>--batch (CI mode)</span></span>
                   <span class="chip blue" role="listitem"><span class="tag"></span><span>--interactive</span></span>
                   <span class="chip pink" role="listitem"><span class="tag"></span><span>merge on conflict</span></span>
+                  <span class="chip" role="listitem"><span class="tag"></span><span>upgrade vendored kit</span></span>
                 </div>
               </div>
             </div>
@@ -1173,8 +1178,9 @@ cd "$REPO"
             <p>
               Each session starts by loading <b>persistent knowledge</b> (decisions, patterns, preferences) and detecting
               relevant <b>domain experts</b>. Then the loop runs: <b>kickoff</b> (optional) → <b>planning</b> → <b>building</b>
-              with backpressure. At session end, new knowledge is captured. Add <b>Skills-Driven Development</b>
-              so your agents get better at your workflow over time.
+              with backpressure. Repeated failures move the runtime into a pause/escalate path instead of infinite retry.
+              At session end, new knowledge is captured. Add <b>Skills-Driven Development</b> so your agents get better
+              at your workflow over time.
             </p>
           </div>
 
@@ -1238,6 +1244,7 @@ flowchart LR
           <div class="callout" style="margin-top: 14px">
             <b>Daemon mode:</b> Optionally run <code>./forgeloop.sh daemon 300</code> to watch git + REQUESTS.md and run loops automatically.
             Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, <code>[INGEST_LOGS]</code>, <code>[KNOWLEDGE_SYNC]</code> flags.
+            When verify/CI/push keeps failing, Forgeloop pauses and drafts the handoff instead of free-spinning.
           </div>
 
           <div class="how" style="margin-top: 14px">
@@ -1262,7 +1269,7 @@ flowchart LR
               <h4>Build (tasks → code + backpressure)</h4>
               <p>
                 Building mode executes the next task, runs tests, and updates plan/status/changelog. Failures trigger
-                retries — that's backpressure steering the agent.
+                retries, and repeated failures trigger a pause with escalation artifacts. That's backpressure steering the agent.
               </p>
             </div>
           </div>
@@ -1584,7 +1591,10 @@ flowchart LR
                 <li><code>FORGELOOP_AUTOPUSH=false</code> by default</li>
                 <li><code>FORGELOOP_PLAN_AUTOPUSH</code> push on plan/plan-work iterations (no CI gate)</li>
                 <li><code>FORGELOOP_ALLOW_PRD_VERIFY_CMD</code> allow <code>verify_cmd</code> from <code>prd.json</code> (tasks lane)</li>
+                <li><code>FORGELOOP_FAILURE_ESCALATE_AFTER</code> set the repeated-failure pause threshold</li>
+                <li><code>FORGELOOP_FAILURE_ESCALATION_ACTION</code> choose the drafted human handoff action</li>
                 <li><code>./forgeloop.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
+                <li><code>./forgeloop.sh upgrade --from /path/to/kit</code> refresh the vendored runtime in place</li>
                 <li><code>FORGELOOP_TEST_CMD</code> run after review auto-fixes</li>
                 <li><code>FORGELOOP_DEPLOY_CMD</code> used by daemon on <code>[DEPLOY]</code></li>
                 <li><code>FORGELOOP_INGEST_LOGS_CMD</code> / <code>FORGELOOP_INGEST_LOGS_FILE</code> used by daemon on <code>[INGEST_LOGS]</code></li>
@@ -1603,7 +1613,7 @@ flowchart LR
             <h2>How to use it</h2>
             <p>
               Two common paths: start a new repo from scratch (kickoff + plan + build), or augment an existing repo
-              (specs + plan + build). Either way, the loop is the same.
+              (specs + plan + build + occasional kit upgrades). Either way, the control loop is the same.
             </p>
           </div>
 
@@ -1675,6 +1685,13 @@ cd /path/to/existing-repo
                   <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
                     When files exist: <b>skip</b> (default), <b>overwrite</b>, <b>merge</b> (append template), or <b>diff</b> (view changes).
                   </p>
+                </li>
+                <li>
+                  Refresh the vendored runtime when a newer Forgeloop kit is available:
+                  <div class="code" style="margin-top: 8px">
+                    <button class="copy" data-copy="#cmd-old-upgrade">Copy</button>
+                    <pre id="cmd-old-upgrade">./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force</pre>
+                  </div>
                 </li>
                 <li>
                   Write/curate specs for the system you want (3–8 files is a great start). Then run planning:

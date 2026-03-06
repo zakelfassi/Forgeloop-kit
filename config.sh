@@ -7,6 +7,7 @@ set -euo pipefail
 
 # Runtime dir (relative to repo root if not absolute)
 export FORGELOOP_RUNTIME_DIR="${FORGELOOP_RUNTIME_DIR:-.forgeloop}"
+export FORGELOOP_RUNTIME_STATE_FILE="${FORGELOOP_RUNTIME_STATE_FILE:-}"
 
 # Git defaults
 export FORGELOOP_DEFAULT_BRANCH="${FORGELOOP_DEFAULT_BRANCH:-main}"
@@ -30,6 +31,7 @@ export FORGELOOP_STATUS_FILE="${FORGELOOP_STATUS_FILE:-STATUS.md}"
 export FORGELOOP_REQUESTS_FILE="${FORGELOOP_REQUESTS_FILE:-REQUESTS.md}"
 export FORGELOOP_QUESTIONS_FILE="${FORGELOOP_QUESTIONS_FILE:-QUESTIONS.md}"
 export FORGELOOP_CHANGELOG_FILE="${FORGELOOP_CHANGELOG_FILE:-CHANGELOG.md}"
+export FORGELOOP_ESCALATIONS_FILE="${FORGELOOP_ESCALATIONS_FILE:-ESCALATIONS.md}"
 
 # Optional: command to run after Codex review auto-fixes (e.g. "pnpm test:ci", "npm test", "pytest -q")
 export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"
@@ -45,6 +47,10 @@ export FORGELOOP_MAX_DIFF_CHARS="${FORGELOOP_MAX_DIFF_CHARS:-120000}"
 
 # Max chars for untrusted context injection (CI/verify outputs)
 export FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
+
+# Backpressure and human escalation
+export FORGELOOP_FAILURE_ESCALATE_AFTER="${FORGELOOP_FAILURE_ESCALATE_AFTER:-3}"
+export FORGELOOP_FAILURE_ESCALATION_ACTION="${FORGELOOP_FAILURE_ESCALATION_ACTION:-issue}"
 
 # Optional: CI gate command to run before pushing to protected branches (main/master).
 # Auto-detected during installation based on project type. Examples:

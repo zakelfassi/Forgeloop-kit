@@ -17,13 +17,12 @@ set -euo pipefail
 # =============================================================================
 
 # Resolve repo directory and load libraries
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 source "$FORGELOOP_DIR/config.sh" 2>/dev/null || true
-source "$FORGELOOP_DIR/lib/core.sh"
 source "$FORGELOOP_DIR/lib/llm.sh"
 
 # Setup runtime directories and paths
@@ -52,6 +51,8 @@ run_verify_cmd() {
     local verify_dir="$RUNTIME_DIR/verify"
     mkdir -p "$verify_dir"
     local verify_out="$verify_dir/verify-last.txt"
+    FORGELOOP_LAST_VERIFY_OUTPUT_FILE="$verify_out"
+    export FORGELOOP_LAST_VERIFY_OUTPUT_FILE
 
     log "Running verify command: $cmd"
     local exit_code=0
@@ -144,9 +145,14 @@ if [ "$MODE" = "plan-work" ]; then
 fi
 
 export MODE
+export FORGELOOP_RUNTIME_SURFACE="loop"
+export FORGELOOP_RUNTIME_MODE="$MODE"
+export FORGELOOP_RUNTIME_BRANCH="$CURRENT_BRANCH"
 
 cd "$REPO_DIR"
 forgeloop_llm__load_state "$STATE_FILE"
+forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "loop" "Initializing $MODE loop" \
+    "mode=$MODE" "branch=$CURRENT_BRANCH" "max_iterations=$MAX_ITERATIONS"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Mode:       $MODE"
@@ -179,9 +185,20 @@ fi
 
 while true; do
     if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then
+        forgeloop_core__write_runtime_state "$REPO_DIR" "complete" "loop" "Reached max iterations for $MODE loop" \
+            "mode=$MODE" "branch=$CURRENT_BRANCH" "iterations=$ITERATION"
         echo "Reached max iterations: $MAX_ITERATIONS"
         break
     fi
+
+    loop_status="building"
+    if [[ "$MODE" = "plan" || "$MODE" = "plan-work" ]]; then
+        loop_status="planning"
+    elif [[ "$MODE" = "review" ]]; then
+        loop_status="reviewing"
+    fi
+    forgeloop_core__write_runtime_state "$REPO_DIR" "$loop_status" "loop" "Running $MODE iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH" "iteration=$ITERATION"
 
     case "$MODE" in
         review)
@@ -203,20 +220,40 @@ while true; do
 
     if [[ "$MODE" = "build" ]] && [[ -n "${FORGELOOP_VERIFY_CMD:-}" ]]; then
         if ! run_verify_cmd "$FORGELOOP_VERIFY_CMD"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "verify" "Verify command failed: $FORGELOOP_VERIFY_CMD" "${FORGELOOP_LAST_VERIFY_OUTPUT_FILE:-}" "$LOG_FILE"; then
+                exit 1
+            fi
             continue
         fi
     fi
 
     if [[ "$MODE" = "build" ]]; then
         if ! forgeloop_core__ci_gate "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "ci" "CI gate failed on branch $CURRENT_BRANCH" "${FORGELOOP_LAST_CI_OUTPUT_FILE:-}" "$LOG_FILE"; then
+                exit 1
+            fi
             continue  # Agent should fix issues, loop continues
         fi
-        forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"
+        if ! forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+            if forgeloop_core__handle_repeated_failure "$REPO_DIR" "push" "Push failed for branch $CURRENT_BRANCH" "" "$LOG_FILE" "review"; then
+                exit 1
+            fi
+            continue
+        fi
     elif [[ "$MODE" = "plan" || "$MODE" = "plan-work" ]]; then
         if [[ "${FORGELOOP_PLAN_AUTOPUSH:-false}" == "true" ]]; then
-            forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"
+            if ! forgeloop_core__git_push_branch "$REPO_DIR" "$CURRENT_BRANCH" "$LOG_FILE"; then
+                if forgeloop_core__handle_repeated_failure "$REPO_DIR" "push" "Plan push failed for branch $CURRENT_BRANCH" "" "$LOG_FILE" "review"; then
+                    exit 1
+                fi
+                continue
+            fi
         fi
     fi
+
+    forgeloop_core__clear_failure_state "$REPO_DIR"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "healthy" "loop" "Completed $MODE iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH" "iteration=$((ITERATION + 1))"
 
     ITERATION=$((ITERATION + 1))
 
@@ -226,3 +263,8 @@ while true; do
 
     echo -e "\n\n======================== LOOP $ITERATION ($AI_MODEL) ========================\n"
 done
+
+if [[ "$ITERATION" -eq 0 ]]; then
+    forgeloop_core__write_runtime_state "$REPO_DIR" "idle" "loop" "Loop exited without running an iteration" \
+        "mode=$MODE" "branch=$CURRENT_BRANCH"
+fi

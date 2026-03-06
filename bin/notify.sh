@@ -4,13 +4,14 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORGELOOP_DIR="$REPO_DIR/forgeloop"
-if [[ ! -f "$FORGELOOP_DIR/lib/core.sh" ]]; then
-    FORGELOOP_DIR="$REPO_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$BOOTSTRAP_DIR/lib/core.sh"
+REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
+if [[ -f "$REPO_DIR/.env.local" ]]; then
+    source "$REPO_DIR/.env.local"
 fi
-source "$FORGELOOP_DIR/lib/core.sh"
-source "$REPO_DIR/.env.local" 2>/dev/null || true
 
 if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
     echo "Error: SLACK_WEBHOOK_URL not set"
