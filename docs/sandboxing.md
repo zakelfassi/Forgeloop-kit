@@ -1,6 +1,8 @@
 # Running Forgeloop in Full-Auto Mode (Sandboxing)
 
-Forgeloop-style loops are most effective when you run the agent with **auto-permissions** (no approvals) so it can search, edit, run tests, and iterate without a human gate.
+Forgeloop’s safe-autonomy promise only works if the runtime boundary is explicit.
+
+When you run the agent with **auto-permissions** (no approvals), it can search, edit, run tests, and iterate without a human gate.
 
 That also means the agent can run **arbitrary commands**.
 

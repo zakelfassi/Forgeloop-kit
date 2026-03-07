@@ -73,8 +73,13 @@ if [[ "$(json_get "$state_file" '.status')" != "paused" ]]; then
   exit 1
 fi
 
-if [[ "$(json_get "$state_file" '.actor')" != "daemon" ]]; then
-  echo "FAIL: daemon pause state should be attributed to daemon" >&2
+if [[ "$(json_get "$state_file" '.surface')" != "daemon" ]]; then
+  echo "FAIL: daemon pause state should be attributed to daemon surface" >&2
+  exit 1
+fi
+
+if [[ "$(json_get "$state_file" '.mode')" != "daemon" ]]; then
+  echo "FAIL: daemon pause state should record daemon mode" >&2
   exit 1
 fi
 

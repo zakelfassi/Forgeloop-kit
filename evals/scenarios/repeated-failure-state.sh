@@ -48,8 +48,13 @@ if forgeloop_core__handle_repeated_failure "$tmp_repo" "ci" "CI gate failed on m
   exit 1
 fi
 
-if [[ "$(json_get "$state_file" '.status')" != "retrying" ]]; then
-  echo "FAIL: first repeated failure should set runtime state to retrying" >&2
+if [[ "$(json_get "$state_file" '.status')" != "blocked" ]]; then
+  echo "FAIL: first repeated failure should set runtime state to blocked" >&2
+  exit 1
+fi
+
+if [[ "$(json_get "$state_file" '.transition')" != "blocked" ]]; then
+  echo "FAIL: first repeated failure should record blocked as the transition" >&2
   exit 1
 fi
 
@@ -63,7 +68,7 @@ if [[ "$(json_get "$state_file" '.status')" != "awaiting-human" ]]; then
   exit 1
 fi
 
-if [[ "$(json_get "$state_file" '.context.requested_action')" != "issue" ]]; then
+if [[ "$(json_get "$state_file" '.requested_action')" != "issue" ]]; then
   echo "FAIL: runtime state should record requested escalation action" >&2
   exit 1
 fi

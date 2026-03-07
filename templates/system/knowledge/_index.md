@@ -44,4 +44,4 @@ Session-to-session memory for Forgeloop. This index provides quick access to lea
 
 - **Session Start**: Load high-confidence entries from decisions.md, patterns.md, preferences.md
 - **Session End**: Update "Last Accessed" dates, capture new knowledge
-- **REQUESTS.md**: Add `[KNOWLEDGE_SYNC]` flag to trigger knowledge capture
+- **Manual capture**: Use `session-end.sh --capture ...` when you want to record a decision or insight explicitly
