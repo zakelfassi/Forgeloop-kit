@@ -623,6 +623,58 @@ forgeloop_core__run_cmd_capture() {
     return $exit_code
 }
 
+# Detect commands that look like deploy/restart operations rather than validation.
+# Usage: if forgeloop_core__looks_like_deploy_cmd "$cmd"; then ...
+forgeloop_core__looks_like_deploy_cmd() {
+    local cmd="${1:-}"
+    [[ -z "$cmd" ]] && return 1
+
+    local compact
+    compact=$(printf '%s' "$cmd" | tr '\n' ' ')
+
+    local patterns=(
+        '(^|[[:space:]])(sudo[[:space:]]+)?systemctl[[:space:]]'
+        '(^|[[:space:]])service[[:space:]]'
+        '(^|[[:space:]])launchctl[[:space:]]'
+        '(^|[[:space:]])pm2[[:space:]]+(restart|reload|start)'
+        '(^|[[:space:]])docker[[:space:]]+restart([[:space:]]|$)'
+        '(^|[[:space:]])docker[[:space:]]+compose[[:space:]]+(up|restart)([[:space:]]|$)'
+        '(^|[[:space:]])kubectl[[:space:]]+(apply|rollout|set[[:space:]]+image)([[:space:]]|$)'
+        '(^|[[:space:]])helm[[:space:]]+upgrade([[:space:]]|$)'
+    )
+
+    local pattern
+    for pattern in "${patterns[@]}"; do
+        if [[ "$compact" =~ $pattern ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Validate that a verify command remains validation-only.
+# Prints a human-readable reason on stdout when invalid.
+# Usage: if ! msg=$(forgeloop_core__validate_verify_cmd "$cmd"); then echo "$msg"; fi
+forgeloop_core__validate_verify_cmd() {
+    local cmd="${1:-}"
+    local block="${FORGELOOP_VERIFY_BLOCK_DEPLOY_LIKE_CMD:-true}"
+
+    if [[ "$block" == "true" ]] && forgeloop_core__looks_like_deploy_cmd "$cmd"; then
+        cat <<EOF
+Refusing deploy-like FORGELOOP_VERIFY_CMD.
+Keep FORGELOOP_VERIFY_CMD validation-only.
+Move build/migration preparation into FORGELOOP_DEPLOY_PRE_CMD,
+restarts or rollouts into FORGELOOP_DEPLOY_CMD,
+and post-deploy health checks into FORGELOOP_DEPLOY_SMOKE_CMD.
+Command: $cmd
+EOF
+        return 1
+    fi
+
+    return 0
+}
+
 # Wrap untrusted content for prompt injection safety.
 # Usage: forgeloop_core__wrap_untrusted_context "Title" "$in_file" "$out_file" "$max_chars"
 forgeloop_core__wrap_untrusted_context() {

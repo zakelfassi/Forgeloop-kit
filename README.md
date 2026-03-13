@@ -90,10 +90,30 @@ Add these anywhere in `REQUESTS.md`:
 
 - `[PAUSE]` — pause the daemon until removed
 - `[REPLAN]` — run a planning pass before continuing
-- `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`
+- `[DEPLOY]` — run the deploy lifecycle (`FORGELOOP_DEPLOY_PRE_CMD`, `FORGELOOP_DEPLOY_CMD`, `FORGELOOP_DEPLOY_SMOKE_CMD`)
 - `[INGEST_LOGS]` — analyze logs into a new request
 
 `[PAUSE]` may also be inserted automatically by Forgeloop when it escalates a repeated failure or blocker.
+
+## Deployment-safe pattern
+
+Keep validation and deployment separate.
+
+- `FORGELOOP_VERIFY_CMD` is for typecheck/lint/tests/build only.
+- `FORGELOOP_DEPLOY_PRE_CMD` is for deploy preparation such as artifact builds or database migrations.
+- `FORGELOOP_DEPLOY_CMD` is for the actual restart or rollout.
+- `FORGELOOP_DEPLOY_SMOKE_CMD` is for post-deploy smoke checks.
+
+Example:
+
+```bash
+export FORGELOOP_VERIFY_CMD="npm test && npm run build"
+export FORGELOOP_DEPLOY_PRE_CMD="npm run db:migrate"
+export FORGELOOP_DEPLOY_CMD="sudo systemctl restart my-app"
+export FORGELOOP_DEPLOY_SMOKE_CMD="curl -fsS https://example.com/api/health && curl -fsS https://example.com/"
+```
+
+By default, Forgeloop rejects deploy-like `FORGELOOP_VERIFY_CMD` values such as `systemctl restart`, `docker compose up`, or `kubectl rollout`.
 
 ## Why teams use it
 

@@ -39,6 +39,10 @@ export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"
 # Optional: verification command run before CI gate/push (loop.sh) or per-task (loop-tasks.sh)
 export FORGELOOP_VERIFY_CMD="${FORGELOOP_VERIFY_CMD:-}"
 
+# If true, Forgeloop rejects verify commands that look like deploy/restart operations.
+# Keep verify commands validation-only; use the deploy lifecycle hooks below instead.
+export FORGELOOP_VERIFY_BLOCK_DEPLOY_LIKE_CMD="${FORGELOOP_VERIFY_BLOCK_DEPLOY_LIKE_CMD:-true}"
+
 # If true, prd.json may provide per-task or global `verify_cmd` (tasks lane).
 export FORGELOOP_ALLOW_PRD_VERIFY_CMD="${FORGELOOP_ALLOW_PRD_VERIFY_CMD:-false}"
 
@@ -62,8 +66,14 @@ export FORGELOOP_FAILURE_ESCALATION_ACTION="${FORGELOOP_FAILURE_ESCALATION_ACTIO
 # Leave empty to skip CI gating.
 export FORGELOOP_CI_GATE_CMD="${FORGELOOP_CI_GATE_CMD:-}"
 
+# Optional: command to run before deploy (e.g. build artifacts, database migrations).
+export FORGELOOP_DEPLOY_PRE_CMD="${FORGELOOP_DEPLOY_PRE_CMD:-}"
+
 # Optional: deploy command the daemon runs when it sees [DEPLOY] in REQUESTS.md
 export FORGELOOP_DEPLOY_CMD="${FORGELOOP_DEPLOY_CMD:-}"
+
+# Optional: post-deploy smoke check command. Failures pause the loop for human review.
+export FORGELOOP_DEPLOY_SMOKE_CMD="${FORGELOOP_DEPLOY_SMOKE_CMD:-}"
 
 # Optional: when true, ingestion scripts append a [REPLAN] trigger after adding a request
 export FORGELOOP_INGEST_TRIGGER_REPLAN="${FORGELOOP_INGEST_TRIGGER_REPLAN:-false}"

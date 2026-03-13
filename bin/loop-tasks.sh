@@ -198,6 +198,17 @@ run_verify_cmd() {
     local out_file="$2"
     local task_id="$3"
 
+    local validation_msg=""
+    if ! validation_msg=$(forgeloop_core__validate_verify_cmd "$cmd"); then
+        printf "%s\n" "$validation_msg" > "$out_file"
+        local untrusted_file="${out_file%.txt}.untrusted.md"
+        local max_chars="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
+        forgeloop_core__wrap_untrusted_context "Verify Command Failure Output ($task_id)" "$out_file" "$untrusted_file" "$max_chars" || true
+        forgeloop_core__append_extra_context_file "$untrusted_file"
+        log "Verify command rejected as deploy-like for $task_id"
+        return 1
+    fi
+
     log "Running verify command for $task_id: $cmd"
     local exit_code=0
     forgeloop_core__run_cmd_capture "$REPO_DIR" "$cmd" "$out_file" || exit_code=$?

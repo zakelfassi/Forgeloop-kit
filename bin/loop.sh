@@ -54,6 +54,17 @@ run_verify_cmd() {
     FORGELOOP_LAST_VERIFY_OUTPUT_FILE="$verify_out"
     export FORGELOOP_LAST_VERIFY_OUTPUT_FILE
 
+    local validation_msg=""
+    if ! validation_msg=$(forgeloop_core__validate_verify_cmd "$cmd"); then
+        printf "%s\n" "$validation_msg" > "$verify_out"
+        local untrusted_file="$verify_dir/verify-last.untrusted.md"
+        local max_chars="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS:-20000}"
+        forgeloop_core__wrap_untrusted_context "Verify Command Failure Output" "$verify_out" "$untrusted_file" "$max_chars" || true
+        forgeloop_core__append_extra_context_file "$untrusted_file"
+        log "Verify command rejected as deploy-like"
+        return 1
+    fi
+
     log "Running verify command: $cmd"
     local exit_code=0
     forgeloop_core__run_cmd_capture "$REPO_DIR" "$cmd" "$verify_out" || exit_code=$?
