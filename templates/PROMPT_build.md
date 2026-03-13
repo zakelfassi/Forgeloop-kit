@@ -21,6 +21,7 @@
    - Required tests derived from acceptance criteria must exist and pass before committing
    - Run the repo's test command(s) and ensure they pass before committing
    - If this repo has a validate/typecheck/lint script, run it too
+   - Treat `FORGELOOP_VERIFY_CMD` as validation-only. Do not add restarts, deploys, or rollouts to it.
 
 3. **Keep coordination docs current:**
    - Update @IMPLEMENTATION_PLAN.md as you learn things

@@ -61,6 +61,35 @@ export FORGELOOP_RUNTIME_SURFACE="daemon"
 export FORGELOOP_RUNTIME_MODE="daemon"
 export FORGELOOP_RUNTIME_BRANCH="$(forgeloop_core__git_current_branch)"
 
+run_deploy_stage() {
+    local stage_id="$1"
+    local stage_label="$2"
+    local cmd="$3"
+
+    if [[ -z "$cmd" ]]; then
+        return 0
+    fi
+
+    local deploy_dir="$RUNTIME_DIR/deploy"
+    mkdir -p "$deploy_dir"
+    local out_file="$deploy_dir/${stage_id}-last.txt"
+
+    log "Running ${stage_label}: $cmd"
+    local exit_code=0
+    forgeloop_core__run_cmd_capture "$REPO_DIR" "$cmd" "$out_file" || exit_code=$?
+
+    if [[ "$exit_code" -ne 0 ]]; then
+        log "${stage_label} failed; see $out_file"
+        if forgeloop_core__handle_repeated_failure "$REPO_DIR" "deploy" "${stage_label} failed: $cmd" "$out_file" "$LOG_FILE" "review"; then
+            return 2
+        fi
+        return 1
+    fi
+
+    log "${stage_label} passed"
+    return 0
+}
+
 # =============================================================================
 # State Persistence
 # =============================================================================
@@ -233,7 +262,20 @@ run_deploy() {
 
     log "Running deploy: $FORGELOOP_DEPLOY_CMD"
     notify "🚀" "Forgeloop Deploy" "Running deploy"
-    (cd "$REPO_DIR" && bash -lc "$FORGELOOP_DEPLOY_CMD") || true
+    forgeloop_core__write_runtime_state "$REPO_DIR" "running" "daemon" "Running deploy pipeline" \
+        "mode=daemon" "requested_action=deploy"
+
+    local stage_rc=0
+    run_deploy_stage "pre" "Deploy pre-check command" "${FORGELOOP_DEPLOY_PRE_CMD:-}" || stage_rc=$?
+    if [[ "$stage_rc" -ne 0 ]]; then
+        return 1
+    fi
+
+    stage_rc=0
+    run_deploy_stage "deploy" "Deploy command" "$FORGELOOP_DEPLOY_CMD" || stage_rc=$?
+    if [[ "$stage_rc" -ne 0 ]]; then
+        return 1
+    fi
 
     if [[ "${FORGELOOP_POST_DEPLOY_INGEST_LOGS:-false}" == "true" ]]; then
         local wait_seconds="${FORGELOOP_POST_DEPLOY_OBSERVE_SECONDS:-0}"
@@ -241,8 +283,22 @@ run_deploy() {
             log "Post-deploy observe: waiting ${wait_seconds}s before ingesting logs..."
             sleep "$wait_seconds"
         fi
+    fi
+
+    stage_rc=0
+    run_deploy_stage "smoke" "Deploy smoke command" "${FORGELOOP_DEPLOY_SMOKE_CMD:-}" || stage_rc=$?
+    if [[ "$stage_rc" -ne 0 ]]; then
+        return 1
+    fi
+
+    if [[ "${FORGELOOP_POST_DEPLOY_INGEST_LOGS:-false}" == "true" ]]; then
         run_ingest_logs || true
     fi
+
+    forgeloop_core__clear_failure_state "$REPO_DIR"
+    forgeloop_core__write_runtime_state "$REPO_DIR" "recovered" "daemon" "Deploy pipeline completed successfully" \
+        "mode=daemon" "requested_action=deploy"
+    return 0
 }
 
 run_ingest_logs() {
@@ -319,7 +375,9 @@ main_loop() {
         fi
 
         if forgeloop_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "DEPLOY"; then
-            run_deploy
+            if ! run_deploy; then
+                continue
+            fi
         fi
 
         if forgeloop_core__consume_flag "$REPO_DIR" "$REQUESTS_FILE" "INGEST_LOGS"; then

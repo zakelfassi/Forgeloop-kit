@@ -22,7 +22,7 @@ Add these anywhere in this file to control the Forgeloop daemon:
 
 - `[PAUSE]` - Pause the daemon loop
 - `[REPLAN]` - Run planning once, then continue building
-- `[DEPLOY]` - Run the configured deploy command
+- `[DEPLOY]` - Run the configured deploy lifecycle (`FORGELOOP_DEPLOY_PRE_CMD`, `FORGELOOP_DEPLOY_CMD`, `FORGELOOP_DEPLOY_SMOKE_CMD`)
 - `[INGEST_LOGS]` - Analyze configured logs and append a new request (see `./forgeloop/bin/ingest-logs.sh`)
 
 Forgeloop may also insert `[PAUSE]` automatically when it escalates a repeated failure or blocker and needs human input.

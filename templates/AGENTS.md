@@ -42,6 +42,14 @@ Load relevant experts from `system/experts/` based on task keywords:
 # pnpm install && pnpm dev
 ```
 
+## Deploy Safety
+
+- Keep `FORGELOOP_VERIFY_CMD` validation-only: tests, typecheck, lint, build.
+- Put migrations or deploy preparation in `FORGELOOP_DEPLOY_PRE_CMD`.
+- Put restarts or rollouts in `FORGELOOP_DEPLOY_CMD`.
+- Put public health checks in `FORGELOOP_DEPLOY_SMOKE_CMD`.
+- Do not hide deployment side effects inside the verify command.
+
 ## Backpressure Commands
 ```bash
 # Typecheck (run before committing)
