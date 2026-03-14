@@ -81,6 +81,7 @@ forgeloop_core__ensure_runtime_dirs() {
     fi
 
     mkdir -p "$runtime_dir/logs"
+    chmod 700 "$runtime_dir" "$runtime_dir/logs" 2>/dev/null || true
     echo "$runtime_dir"
 }
 
@@ -183,6 +184,7 @@ with open(tmp_path, "w", encoding="utf-8") as fh:
     json.dump(payload, fh, indent=2, sort_keys=True)
     fh.write("\n")
 os.replace(tmp_path, path)
+os.chmod(path, 0o600)
 PY
         return 0
     fi
@@ -190,6 +192,7 @@ PY
     cat > "$state_file" <<EOF
 {"status":"$status","previous_status":"","transition":"$transition","surface":"$surface","mode":"$mode","reason":"$reason","requested_action":"$requested_action","branch":"$branch"}
 EOF
+    chmod 600 "$state_file" 2>/dev/null || true
 }
 
 # Backward-compatible wrapper for older callers that emit actor/status/context tuples.

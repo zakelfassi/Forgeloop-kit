@@ -61,6 +61,7 @@ This is the core fail-closed path for repeated failures and repeated unanswered 
 ## Runtime state model
 
 `.forgeloop/runtime-state.json` is the machine-readable source of truth.
+Forgeloop keeps the runtime directory private (`0700`) and rewrites the state file as owner-only (`0600`) on each update.
 
 It uses:
 
