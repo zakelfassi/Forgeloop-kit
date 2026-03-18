@@ -224,7 +224,10 @@ while true; do
     esac
 
     if [ "$MODE" = "build" ]; then
-        forgeloop_llm__run_codex_review "$REPO_DIR" "$REVIEW_SCHEMA" "$STATE_FILE" "$LOG_FILE"
+        if ! forgeloop_llm__run_codex_review "$REPO_DIR" "$REVIEW_SCHEMA" "$STATE_FILE" "$LOG_FILE"; then
+            log "Review oscillation escalated; exiting loop"
+            exit 1
+        fi
     fi
 
     forgeloop_llm__security_gate "$REPO_DIR" "$SECURITY_SCHEMA" "$STATE_FILE" "$LOG_FILE"

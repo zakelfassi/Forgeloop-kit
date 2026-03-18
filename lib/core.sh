@@ -850,7 +850,11 @@ forgeloop_core__hash_file() {
     fi
 }
 
-# Produce a stable-ish failure fingerprint from a category, summary, and optional evidence.
+# Produce a stable failure fingerprint from a category, summary, and optional evidence.
+# The fingerprint is intentionally coarse: it uses only kind + summary + the set of
+# unique "error-shaped" lines from the evidence (sorted, deduplicated, heavily
+# normalised). This prevents counter resets when non-deterministic output (timing,
+# test ordering, line numbers) changes between otherwise-identical failures.
 # Usage: signature=$(forgeloop_core__failure_signature "ci" "CI gate failed" "/tmp/output.txt")
 forgeloop_core__failure_signature() {
     local kind="$1"
@@ -860,15 +864,23 @@ forgeloop_core__failure_signature() {
     payload=$(printf "kind=%s\nsummary=%s\n" "$kind" "$summary")
 
     if [[ -n "$evidence_file" ]] && [[ -f "$evidence_file" ]]; then
+        # Extract only error/failure-shaped lines to build a stable fingerprint.
+        # Strip timestamps, hashes, numbers, whitespace, and sort+dedup so that
+        # non-deterministic ordering doesn't change the hash.
         local evidence
         evidence=$(
-            tail -n 40 "$evidence_file" 2>/dev/null \
+            grep -iE '(error|fail|exception|fatal|ELIFECYCLE|ERR!|panicked|assert)' "$evidence_file" 2>/dev/null \
+            | head -n 20 \
             | sed -E \
-                -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:.+-Z]*/<timestamp>/g' \
-                -e 's/[0-9a-f]{7,40}/<hash>/g' \
-                -e 's/[0-9]+/<num>/g'
+                -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:.+-Z]*//g' \
+                -e 's/[0-9a-f]{7,40}//g' \
+                -e 's/[0-9]+//g' \
+                -e 's/[[:space:]]+/ /g' \
+            | sort -u
         )
-        payload=$(printf "%s\nevidence=%s\n" "$payload" "$evidence")
+        if [[ -n "$evidence" ]]; then
+            payload=$(printf "%s\nevidence=%s\n" "$payload" "$evidence")
+        fi
     fi
 
     forgeloop_core__hash "$payload"

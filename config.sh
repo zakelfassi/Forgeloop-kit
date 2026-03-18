@@ -56,6 +56,16 @@ export FORGELOOP_UNTRUSTED_CONTEXT_MAX_CHARS="${FORGELOOP_UNTRUSTED_CONTEXT_MAX_
 export FORGELOOP_FAILURE_ESCALATE_AFTER="${FORGELOOP_FAILURE_ESCALATE_AFTER:-3}"
 export FORGELOOP_FAILURE_ESCALATION_ACTION="${FORGELOOP_FAILURE_ESCALATION_ACTION:-issue}"
 
+# Iteration caps (prevent runaway token burn).
+# Daily cap resets at midnight; session cap resets when daemon restarts.
+# Set to 0 to disable a cap.
+export FORGELOOP_MAX_DAILY_ITERATIONS="${FORGELOOP_MAX_DAILY_ITERATIONS:-200}"
+export FORGELOOP_MAX_SESSION_ITERATIONS="${FORGELOOP_MAX_SESSION_ITERATIONS:-100}"
+
+# Stall detection: pause if HEAD hasn't changed for this many consecutive
+# daemon build cycles. Prevents burning tokens when the agent makes no progress.
+export FORGELOOP_MAX_STALL_CYCLES="${FORGELOOP_MAX_STALL_CYCLES:-3}"
+
 # Optional: CI gate command to run before pushing to protected branches (main/master).
 # Auto-detected during installation based on project type. Examples:
 #   Node.js: "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
