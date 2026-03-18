@@ -48,6 +48,18 @@ BLOCKER_PAUSE_SECONDS="${FORGELOOP_BLOCKER_PAUSE_SECONDS:-1800}"  # 30 minutes
 BLOCKED_ITERATION_COUNT=0
 LAST_BLOCKER_HASH=""
 
+# Iteration caps (prevent runaway token burn)
+MAX_DAILY_ITERATIONS="${FORGELOOP_MAX_DAILY_ITERATIONS:-200}"
+MAX_SESSION_ITERATIONS="${FORGELOOP_MAX_SESSION_ITERATIONS:-100}"
+SESSION_ITERATION_COUNT=0
+DAILY_ITERATION_COUNT=0
+DAILY_ITERATION_DATE=""
+
+# Stall detection (no new commits across N daemon cycles)
+MAX_STALL_CYCLES="${FORGELOOP_MAX_STALL_CYCLES:-3}"
+STALL_CYCLE_COUNT=0
+LAST_HEAD_HASH=""
+
 # Loop timeouts (avoid a single stuck build holding the daemon lock forever)
 # - FORGELOOP_LOOP_TIMEOUT_SECONDS applies to build runs
 # - FORGELOOP_PLAN_TIMEOUT_SECONDS applies to planning runs
@@ -98,6 +110,10 @@ save_state() {
     cat > "$STATE_FILE" << EOF
 BLOCKED_ITERATION_COUNT=$BLOCKED_ITERATION_COUNT
 LAST_BLOCKER_HASH=$LAST_BLOCKER_HASH
+DAILY_ITERATION_COUNT=$DAILY_ITERATION_COUNT
+DAILY_ITERATION_DATE=$DAILY_ITERATION_DATE
+STALL_CYCLE_COUNT=$STALL_CYCLE_COUNT
+LAST_HEAD_HASH=$LAST_HEAD_HASH
 EOF
 }
 
@@ -105,7 +121,15 @@ load_state() {
     if [ -f "$STATE_FILE" ]; then
         # shellcheck disable=SC1090
         source "$STATE_FILE"
-        log "Loaded state: blocked_count=$BLOCKED_ITERATION_COUNT"
+        log "Loaded state: blocked_count=$BLOCKED_ITERATION_COUNT daily_iters=$DAILY_ITERATION_COUNT stall=$STALL_CYCLE_COUNT"
+    fi
+    # Reset daily counter on date rollover
+    local today
+    today=$(date '+%Y-%m-%d')
+    if [[ "$DAILY_ITERATION_DATE" != "$today" ]]; then
+        DAILY_ITERATION_COUNT=0
+        DAILY_ITERATION_DATE="$today"
+        save_state
     fi
 }
 
@@ -196,6 +220,64 @@ is_paused() {
 
 has_pending_tasks() {
     [ -f "$REPO_DIR/$PLAN_FILE" ] && grep -q '^- \[ \]' "$REPO_DIR/$PLAN_FILE" 2>/dev/null
+}
+
+# Check if daily or session iteration cap has been hit.
+# Returns 0 (should pause) or 1 (ok to continue).
+check_iteration_caps() {
+    if [[ "$MAX_SESSION_ITERATIONS" -gt 0 ]] && [[ "$SESSION_ITERATION_COUNT" -ge "$MAX_SESSION_ITERATIONS" ]]; then
+        log "Session iteration cap reached ($SESSION_ITERATION_COUNT/$MAX_SESSION_ITERATIONS). Pausing."
+        return 0
+    fi
+    if [[ "$MAX_DAILY_ITERATIONS" -gt 0 ]] && [[ "$DAILY_ITERATION_COUNT" -ge "$MAX_DAILY_ITERATIONS" ]]; then
+        log "Daily iteration cap reached ($DAILY_ITERATION_COUNT/$MAX_DAILY_ITERATIONS). Pausing."
+        return 0
+    fi
+    return 1
+}
+
+pause_for_iteration_cap() {
+    local reason="$1"
+    log "$reason. Escalating for human review..."
+    "$FORGELOOP_DIR/bin/escalate.sh" "iteration-cap" "$reason" "review" "" "0" >/dev/null 2>&1 || true
+    notify "⏸️" "Forgeloop Paused - Iteration Cap" "$reason"
+    save_state
+}
+
+# Increment iteration counters after a build cycle.
+increment_iteration_counters() {
+    SESSION_ITERATION_COUNT=$((SESSION_ITERATION_COUNT + 1))
+    DAILY_ITERATION_COUNT=$((DAILY_ITERATION_COUNT + 1))
+    save_state
+}
+
+# Detect stall: HEAD hasn't changed across N consecutive daemon build cycles.
+# Returns 0 (stalled, should pause) or 1 (ok).
+check_stall() {
+    local current_head
+    current_head=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+
+    if [[ "$current_head" == "$LAST_HEAD_HASH" ]]; then
+        STALL_CYCLE_COUNT=$((STALL_CYCLE_COUNT + 1))
+        log "No new commits detected (stall cycle $STALL_CYCLE_COUNT/$MAX_STALL_CYCLES)"
+        if [[ "$STALL_CYCLE_COUNT" -ge "$MAX_STALL_CYCLES" ]]; then
+            save_state
+            return 0  # Stalled
+        fi
+    else
+        STALL_CYCLE_COUNT=0
+        LAST_HEAD_HASH="$current_head"
+    fi
+    save_state
+    return 1
+}
+
+pause_for_stall() {
+    local summary="No new commits for $STALL_CYCLE_COUNT consecutive build cycles — likely stuck"
+    log "$summary. Escalating..."
+    "$FORGELOOP_DIR/bin/escalate.sh" "stall" "$summary" "review" "" "$STALL_CYCLE_COUNT" >/dev/null 2>&1 || true
+    notify "⏸️" "Forgeloop Paused - No Progress" "$summary"
+    save_state
 }
 
 run_with_timeout() {
@@ -335,6 +417,7 @@ main_loop() {
     load_state
     log "Forgeloop daemon starting (interval: ${INTERVAL}s)"
     log "Blocker detection: max $MAX_BLOCKED_ITERATIONS consecutive blocked iterations before ${BLOCKER_PAUSE_SECONDS}s pause"
+    log "Iteration caps: daily=$MAX_DAILY_ITERATIONS session=$MAX_SESSION_ITERATIONS stall=$MAX_STALL_CYCLES cycles"
     forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "daemon" "Daemon starting" \
         "mode=daemon" "interval_seconds=$INTERVAL"
 
@@ -360,6 +443,12 @@ main_loop() {
         if [[ "$(forgeloop_core__runtime_state_status "$REPO_DIR")" == "paused" ]] || [[ "$(forgeloop_core__runtime_state_status "$REPO_DIR")" == "awaiting-human" ]]; then
             forgeloop_core__write_runtime_state "$REPO_DIR" "resuming" "daemon" "Daemon resumed after pause was cleared" \
                 "mode=daemon" "interval_seconds=$INTERVAL"
+        fi
+
+        # Check iteration caps before running tasks
+        if check_iteration_caps; then
+            pause_for_iteration_cap "Iteration cap reached (session=$SESSION_ITERATION_COUNT/$MAX_SESSION_ITERATIONS, daily=$DAILY_ITERATION_COUNT/$MAX_DAILY_ITERATIONS)"
+            continue
         fi
 
         # Check for blocker loop before running tasks
@@ -392,6 +481,14 @@ main_loop() {
 
         if has_pending_tasks; then
             if ! run_build 10; then
+                increment_iteration_counters
+                continue
+            fi
+            increment_iteration_counters
+
+            # Stall detection: pause if HEAD hasn't moved across consecutive build cycles
+            if check_stall; then
+                pause_for_stall
                 continue
             fi
         else

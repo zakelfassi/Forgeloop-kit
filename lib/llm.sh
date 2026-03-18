@@ -804,6 +804,17 @@ forgeloop_llm__run_codex_review() {
             fixes=$(jq -r '.findings[] | select(.severity == "high" or .severity == "critical") | "- [\(.severity)] \(.title): \(.fix // .description)"' "$review_result" 2>/dev/null || echo "")
 
             if [[ -n "$fixes" ]]; then
+                # Track review findings as a failure kind for oscillation detection.
+                # If the same set of findings keeps appearing, escalate instead of
+                # looping in a fix→review→fix cycle.
+                local findings_summary
+                findings_summary=$(jq -r '[.findings[] | .title] | sort | join("; ")' "$review_result" 2>/dev/null || echo "review-findings")
+                if forgeloop_core__handle_repeated_failure "$repo_dir" "review" "Review oscillation: $findings_summary" "" "$log_file"; then
+                    forgeloop_core__log "Review oscillation detected — stopping repair loop" "$log_file"
+                    rm -f "$review_result"
+                    return 1
+                fi
+
                 forgeloop_core__log "Feeding Codex findings back for repair..." "$log_file"
                 printf "Fix these issues found in code review:\n\n%s" "$fixes" | forgeloop_llm__exec "$repo_dir" "stdin" "build" "$state_file" "$log_file"
 
