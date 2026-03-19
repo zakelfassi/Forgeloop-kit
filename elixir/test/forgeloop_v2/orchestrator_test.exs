@@ -74,4 +74,34 @@ defmodule ForgeloopV2.OrchestratorTest do
                blocker_result: {:tracking, %{count: 1}}
              })
   end
+
+  test "build_context routes plan and question reads through structured readers" do
+    repo =
+      create_repo_fixture!(
+        plan_content: """
+        ## Phase 1
+        - [ ] Build repo-local UI shell
+        - [x] Keep GH issue fallback documented
+        """,
+        questions: """
+        # Forgeloop Questions
+
+        ## How to Answer
+        Update the matching question below.
+
+        ## Q-2
+        - ✅ Answered
+
+        ## Q-1
+        - ⏳ Awaiting response
+        """
+      )
+
+    config = config_for!(repo.repo_root)
+    context = Orchestrator.build_context(config)
+
+    assert context.needs_build?
+    assert context.unanswered_question_ids == ["Q-1"]
+    assert match?({:tracking, %{count: 1, ids: ["Q-1"]}}, context.blocker_result)
+  end
 end
