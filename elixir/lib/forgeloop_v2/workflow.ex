@@ -1,12 +1,13 @@
 defmodule ForgeloopV2.Workflow do
   @moduledoc false
 
-  alias ForgeloopV2.WorkflowStore
+  alias ForgeloopV2.{Workflow.Spec, WorkflowStore}
 
   @workflow_file_name "WORKFLOW.md"
 
   @type loaded_workflow :: %{
           config: map(),
+          spec: Spec.t(),
           prompt: String.t(),
           prompt_template: String.t()
         }
@@ -57,8 +58,10 @@ defmodule ForgeloopV2.Workflow do
 
     case front_matter_yaml_to_map(front_matter_lines) do
       {:ok, front_matter} ->
-        prompt = Enum.join(prompt_lines, "\n") |> String.trim()
-        {:ok, %{config: front_matter, prompt: prompt, prompt_template: prompt}}
+        with {:ok, spec} <- Spec.normalize(front_matter) do
+          prompt = Enum.join(prompt_lines, "\n") |> String.trim()
+          {:ok, %{config: spec.raw, spec: spec, prompt: prompt, prompt_template: prompt}}
+        end
 
       {:error, :workflow_front_matter_not_a_map} ->
         {:error, :workflow_front_matter_not_a_map}

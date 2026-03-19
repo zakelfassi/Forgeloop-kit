@@ -1,0 +1,19 @@
+# Elixir Parity Matrix
+
+This matrix tracks the operator-visible contracts that bash already proves and the Elixir parity layer must preserve.
+
+| Contract | Bash proof surface | Elixir proof surface | Status |
+|---------|--------------------|----------------------|--------|
+| Pause via `[PAUSE]` writes `paused` runtime state | `evals/scenarios/daemon-paused-flag.sh` | `elixir/test/forgeloop_v2/daemon_test.exs` | In progress |
+| Repeated failure stops and escalates with repo-local artifacts | `tests/failure-escalation.test.sh`, `evals/scenarios/repeated-failure-state.sh` | `elixir/test/forgeloop_v2/failure_tracker_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | In progress |
+| Repeated unanswered blocker escalates instead of spinning | `tests/daemon-blocker-escalation.test.sh` | `elixir/test/forgeloop_v2/blocker_detector_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | In progress |
+| Runtime-state transitions stay legible and constrained | `tests/runtime-state-model.test.sh` | `elixir/test/forgeloop_v2/runtime_state_store_test.exs`, `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs` | In progress |
+| Recovery is explicit and safe | bash pause/resume behavior in daemon flows | `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/orchestrator_test.exs` | In progress |
+| Provider auth/rate-limit failover preserves forward progress | `tests/llm-auth-failover.test.sh` | `elixir/test/forgeloop_v2/llm_router_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | In progress |
+| Repo-root and vendored layouts both work | `tests/daemon-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/repo_paths_test.exs` | In progress |
+
+## Notes
+
+- Bash is still the public acceptance anchor.
+- Elixir parity is measured on operator-visible artifacts and transitions first, not on internal implementation shape.
+- A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.

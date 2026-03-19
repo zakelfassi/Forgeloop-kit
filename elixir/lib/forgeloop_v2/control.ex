@@ -105,16 +105,14 @@ end
 defmodule ForgeloopV2.Escalation do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, ControlFiles, RuntimeStateStore}
+  alias ForgeloopV2.{Config, ControlFiles, RuntimeLifecycle}
 
   @spec escalate(Config.t(), map()) :: {:ok, %{question_id: String.t(), escalation_id: String.t()}} | {:error, term()}
   def escalate(%Config{} = config, attrs) do
     with :ok <- ControlFiles.ensure(config),
          :ok <- ControlFiles.append_pause_flag(config),
          {:ok, _state} <-
-           RuntimeStateStore.write(config, %{
-             status: "awaiting-human",
-             transition: "escalated",
+           RuntimeLifecycle.transition(config, :human_escalated, :escalation, %{
              surface: string_attr(attrs, :surface, "loop"),
              mode: string_attr(attrs, :mode, "build"),
              reason: string_attr(attrs, :summary, "Forgeloop detected a repeated failure"),
@@ -295,7 +293,7 @@ end
 defmodule ForgeloopV2.FailureTracker do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, Escalation, RuntimeStateStore}
+  alias ForgeloopV2.{Config, Escalation, Events, RuntimeLifecycle}
 
   @spec clear(Config.t()) :: :ok
   def clear(%Config{} = config) do
@@ -337,10 +335,19 @@ defmodule ForgeloopV2.FailureTracker do
 
     with {:ok, count} <- record(config, kind, summary, blank_to_nil(evidence_file)) do
       if count < config.failure_escalate_after do
+        :ok =
+          Events.emit(config, :failure_recorded, %{
+            "kind" => kind,
+            "summary" => summary,
+            "repeat_count" => count,
+            "surface" => surface,
+            "mode" => mode,
+            "branch" => branch,
+            "evidence_file" => evidence_file
+          })
+
         {:ok, _state} =
-          RuntimeStateStore.write(config, %{
-            status: "blocked",
-            transition: "blocked",
+          RuntimeLifecycle.transition(config, :failure_blocked, writer_for(surface), %{
             surface: surface,
             mode: mode,
             reason: summary,
@@ -360,7 +367,20 @@ defmodule ForgeloopV2.FailureTracker do
                mode: mode,
                branch: branch
              }) do
-          {:ok, _} -> {:stop, count}
+          {:ok, _} ->
+            :ok =
+              Events.emit(config, :failure_escalated, %{
+                "kind" => kind,
+                "summary" => summary,
+                "repeat_count" => count,
+                "surface" => surface,
+                "mode" => mode,
+                "branch" => branch,
+                "evidence_file" => evidence_file
+              })
+
+            {:stop, count}
+
           {:error, reason} -> {:error, reason}
         end
       end
@@ -401,12 +421,15 @@ defmodule ForgeloopV2.FailureTracker do
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp writer_for("daemon"), do: :daemon
+  defp writer_for(_surface), do: :loop
 end
 
 defmodule ForgeloopV2.BlockerDetector do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, ControlFiles}
+  alias ForgeloopV2.{Config, ControlFiles, Events}
 
   @spec check(Config.t()) ::
           {:clear, %{count: 0}}
@@ -434,8 +457,22 @@ defmodule ForgeloopV2.BlockerDetector do
         save_state(config, %{"blocked_iteration_count" => count, "last_blocker_hash" => hash})
 
         if count >= config.max_blocked_iterations do
+          :ok =
+            Events.emit(config, :blocker_escalated, %{
+              "repeat_count" => count,
+              "blocker_hash" => hash,
+              "question_ids" => ids
+            })
+
           {:threshold_reached, %{count: count, hash: hash, ids: ids}}
         else
+          :ok =
+            Events.emit(config, :blocker_tracking, %{
+              "repeat_count" => count,
+              "blocker_hash" => hash,
+              "question_ids" => ids
+            })
+
           {:tracking, %{count: count, hash: hash, ids: ids}}
         end
     end

@@ -4,14 +4,20 @@ defmodule ForgeloopV2.TestSupport do
   using do
     quote do
       alias ForgeloopV2.{
+        ActiveRuntime,
         BlockerDetector,
         Config,
         ControlFiles,
         Daemon,
         Escalation,
+        Events,
         FailureTracker,
+        Orchestrator,
+        PathPolicy,
         RepoPaths,
-        RuntimeStateStore
+        RuntimeLifecycle,
+        RuntimeStateStore,
+        Workspace
       }
 
       import ForgeloopV2.TestSupport
@@ -77,6 +83,11 @@ defmodule ForgeloopV2.TestSupport do
         {key, value} -> System.put_env(key, value)
       end)
     end
+  end
+
+  def now! do
+    DateTime.utc_now()
+    |> DateTime.truncate(:second)
   end
 
   defp do_wait_until(fun, deadline) do

@@ -134,6 +134,13 @@ If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main`
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
 
+Current coexistence rule:
+
+- simultaneous bash + Elixir active control of one repo is unsupported
+- Elixir records and checks an active-runtime claim under `.forgeloop/v2/active-runtime.json`
+- conflicting ownership currently stops Elixir at claim time
+- this is an Elixir-side guard, not a full cross-runtime lock or split-brain-prevention guarantee
+
 Current scope:
 
 - runtime-state JSON compatibility
@@ -141,10 +148,13 @@ Current scope:
 - repeated-failure and blocker tracking
 - a small GenServer daemon baseline
 - initial provider failover tests
+- runtime transition validation, metadata-first workspace safety, and local event history
 
 When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
 
 See `elixir/README.md` for the current scope and how to run `mix test`.
+- `docs/v2-roadmap.md`
+- `docs/elixir-parity-matrix.md`
 - `evals/README.md`
 
 ### Runtime states

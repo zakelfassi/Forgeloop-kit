@@ -135,7 +135,7 @@ end
 defmodule ForgeloopV2.LLM.Router do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, LLM.ProviderResult, LLM.StateStore}
+  alias ForgeloopV2.{Config, Events, LLM.ProviderResult, LLM.StateStore}
 
   @spec exec(:plan | :review | :security | :build, iodata(), Config.t(), keyword()) ::
           {:ok, ProviderResult.t()} | {:error, term()}
@@ -143,7 +143,7 @@ defmodule ForgeloopV2.LLM.Router do
     state = StateStore.read(config)
     providers = provider_order(task_type, config)
 
-    with {:ok, result, new_state} <- try_providers(providers, input, config, state) do
+    with {:ok, result, new_state} <- try_providers(providers, input, config, state, task_type) do
       :ok = StateStore.write(config, new_state)
       {:ok, result}
     else
@@ -153,14 +153,20 @@ defmodule ForgeloopV2.LLM.Router do
     end
   end
 
-  defp try_providers([], _input, _config, state), do: {:error, :no_available_provider, state}
+  defp try_providers([], _input, _config, state, _task_type), do: {:error, :no_available_provider, state}
 
-  defp try_providers([provider | rest], input, config, state) do
+  defp try_providers([provider | rest], input, config, state, task_type) do
     cond do
       unavailable?(provider, config, state) ->
-        try_providers(rest, input, config, state)
+        try_providers(rest, input, config, state, task_type)
 
       true ->
+        :ok =
+          Events.emit(config, :provider_attempted, %{
+            "provider" => Atom.to_string(provider),
+            "task_type" => Atom.to_string(task_type)
+          })
+
         result = execute(provider, input, config)
         updated_state = update_state(state, result)
 
@@ -169,10 +175,22 @@ defmodule ForgeloopV2.LLM.Router do
             {:ok, result, clear_auth_flag(updated_state, provider)}
 
           result.auth_error? and config.enable_failover and rest != [] ->
-            try_providers(rest, input, config, updated_state)
+            :ok =
+              Events.emit(config, :provider_failed_over, %{
+                "from_provider" => Atom.to_string(provider),
+                "reason" => "auth_error"
+              })
+
+            try_providers(rest, input, config, updated_state, task_type)
 
           result.rate_limited_until && config.enable_failover and rest != [] ->
-            try_providers(rest, input, config, updated_state)
+            :ok =
+              Events.emit(config, :provider_failed_over, %{
+                "from_provider" => Atom.to_string(provider),
+                "reason" => "rate_limited"
+              })
+
+            try_providers(rest, input, config, updated_state, task_type)
 
           result.auth_error? ->
             {:error, {:auth_failed, provider}, updated_state}
