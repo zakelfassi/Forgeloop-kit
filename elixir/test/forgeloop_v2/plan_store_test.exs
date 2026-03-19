@@ -50,6 +50,21 @@ defmodule ForgeloopV2.PlanStoreTest do
     assert [%PlanStore.Item{text: "Build repo-local ui shell"}] = PlanStore.pending_items(config)
   end
 
+  test "treats blank unchecked checklist placeholders as pending top-level work" do
+    repo =
+      create_repo_fixture!(
+        plan_content: """
+        ## Phase 1
+        - [ ]
+        """
+      )
+
+    config = config_for!(repo.repo_root)
+
+    assert PlanStore.needs_build?(config)
+    assert [%PlanStore.Item{text: "", depth: 0, status: :pending}] = PlanStore.pending_items(config)
+  end
+
   test "does not need build when only nested unchecked items remain" do
     repo =
       create_repo_fixture!(

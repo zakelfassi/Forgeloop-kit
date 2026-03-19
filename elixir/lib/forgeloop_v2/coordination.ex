@@ -220,10 +220,10 @@ defmodule ForgeloopV2.Coordination do
         |> String.trim()
 
       if Regex.match?(~r/^[-*]\s+/, trimmed) do
-        case normalize_status_label(trimmed) do
-          "awaiting response" -> "Awaiting response"
-          "answered" -> "Answered"
-          "resolved" -> "Resolved"
+        case classify_status(trimmed) do
+          :awaiting_response -> "Awaiting response"
+          :answered -> "Answered"
+          :resolved -> "Resolved"
           _ -> nil
         end
       end
@@ -233,11 +233,13 @@ defmodule ForgeloopV2.Coordination do
   defp classify_status(nil), do: :unknown
 
   defp classify_status(label) do
-    case normalize_status_label(label) do
-      "awaiting response" -> :awaiting_response
-      "answered" -> :answered
-      "resolved" -> :resolved
-      _ -> :unknown
+    normalized = normalize_status_label(label)
+
+    cond do
+      String.starts_with?(normalized, "awaiting response") -> :awaiting_response
+      normalized == "answered" -> :answered
+      normalized == "resolved" -> :resolved
+      true -> :unknown
     end
   end
 

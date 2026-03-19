@@ -67,7 +67,7 @@ defmodule ForgeloopV2.PlanStore do
       match = Regex.run(~r/^##\s+(.+?)\s*$/, line, capture: :all_but_first) ->
         {:section, List.first(match)}
 
-      match = Regex.run(~r/^([ \t]*)-\s\[( |x|X)\]\s+(.*)$/, line, capture: :all_but_first) ->
+      match = Regex.run(~r/^([ \t]*)-\s\[( |x|X)\]\s*(.*)$/, line, capture: :all_but_first) ->
         [indent, marker, text] = match
 
         {:item,

@@ -100,6 +100,22 @@ defmodule ForgeloopV2.CoordinationTest do
     assert Coordination.unanswered_question_ids(config) == ["Q-1", "Q-3"]
   end
 
+  test "treats awaiting response prefixes as still awaiting" do
+    repo =
+      create_repo_fixture!(
+        questions: """
+        ## Q-12
+        **Status**: ⏳ Awaiting response from ops
+        """
+      )
+
+    config = config_for!(repo.repo_root)
+
+    assert {:ok, [question]} = Coordination.read_questions(config)
+    assert question.status_kind == :awaiting_response
+    assert Coordination.unanswered_question_ids(config) == ["Q-12"]
+  end
+
   test "does not infer answered or resolved state from non-status prose" do
     repo =
       create_repo_fixture!(
