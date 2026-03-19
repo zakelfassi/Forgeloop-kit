@@ -108,3 +108,9 @@ That suite is curated to demonstrate:
 - blocker escalation
 - auth failover
 - entrypoint portability
+
+## Experimental Elixir parity layer
+
+The repo now also contains an experimental `elixir/` foundation that preserves the same operator-facing artifacts and `.forgeloop/runtime-state.json` contract for the phase-1 safety nucleus.
+
+For now, deploy/log-ingest orchestration, tracker integration, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.

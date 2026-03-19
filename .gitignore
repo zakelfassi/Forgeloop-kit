@@ -4,6 +4,13 @@
 .env.local
 reports/
 
+# AI prompt exports (large, not source)
+prompt-exports/
+
+# Elixir/Mix build artifacts
+elixir/_build/
+elixir/deps/
+
 # Claude Code local config + repo-local skill mirrors
 .claude/settings.local.json
 .claude/skills/rp-*
