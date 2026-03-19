@@ -1,5 +1,7 @@
 # Forgeloop
 
+[![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 beta](https://img.shields.io/badge/next-v2%20(Elixir)-5b66ff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
+
 > **Forgeloop is the safe-autonomy layer for coding agents.**
 >
 > Install it in a repo, let Claude / Codex do real work, and when they start thrashing, Forgeloop pauses, preserves state, and drafts a clean human handoff instead of spinning forever.
@@ -118,6 +120,31 @@ The operator contract is documented in:
 
 - `docs/runtime-control.md`
 - `docs/sandboxing.md`
+
+## Versioning
+
+| Version | Status | Runtime | Pin to it |
+|---------|--------|---------|-----------|
+| [v1.0.0](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) | **Stable** | Bash | `git checkout v1.0.0` |
+| v2 (main) | In development | Elixir + Bash | `git checkout main` |
+
+If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main` branch carries v2 development — the Elixir foundation grows in parallel while the bash runtime remains fully functional.
+
+## Elixir v2 foundation
+
+An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
+
+Current scope:
+
+- runtime-state JSON compatibility
+- control-file + escalation artifact parity
+- repeated-failure and blocker tracking
+- a small GenServer daemon baseline
+- initial provider failover tests
+
+When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
+
+See `elixir/README.md` for the current scope and how to run `mix test`.
 - `evals/README.md`
 
 ### Runtime states
