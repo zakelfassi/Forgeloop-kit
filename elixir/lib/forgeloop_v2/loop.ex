@@ -92,7 +92,17 @@ end
 defmodule ForgeloopV2.Loop do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, ControlFiles, FailureTracker, RuntimeStateStore}
+  alias ForgeloopV2.{
+    ActiveRuntime,
+    Config,
+    ControlFiles,
+    FailureTracker,
+    RuntimeLifecycle,
+    RuntimeRecovery,
+    RuntimeState,
+    RuntimeStateStore,
+    Workspace
+  }
 
   @spec run(:plan | :build, Config.t(), keyword()) ::
           {:ok, map()} | {:retry, pos_integer()} | {:stopped, term()} | {:error, term()}
@@ -104,66 +114,66 @@ defmodule ForgeloopV2.Loop do
     requested_action = Keyword.get(opts, :requested_action, config.failure_escalation_action)
     branch = Keyword.get(opts, :branch, config.default_branch)
     prior_status = RuntimeStateStore.status(config)
+    unanswered_question_ids = ControlFiles.unanswered_question_ids(config)
+    writer = writer_for(surface)
 
-    {:ok, _state} =
-      RuntimeStateStore.write(config, %{
-        status: "running",
-        transition: if(mode == :plan, do: "planning", else: "building"),
-        surface: surface,
-        mode: runtime_mode,
-        reason: if(mode == :plan, do: "Planning run started", else: "Build run started"),
-        requested_action: requested_action,
-        branch: branch
-      })
+    with :ok <- ActiveRuntime.claim(config, "elixir"),
+         {:ok, workspace} <- Workspace.from_config(config, branch: branch, mode: runtime_mode, kind: Atom.to_string(mode)),
+         {:ok, _state} <-
+           maybe_write_recovered(
+             config,
+             prior_status,
+             unanswered_question_ids,
+             writer,
+             surface,
+             runtime_mode,
+             branch,
+             mode
+           ),
+         {:ok, _state} <-
+           RuntimeLifecycle.transition(config, :loop_started, writer, %{
+             surface: surface,
+             mode: runtime_mode,
+             reason: if(mode == :plan, do: "Planning run started", else: "Build run started"),
+             requested_action: requested_action,
+             branch: branch
+           }) do
+      case driver.run(mode, config, driver_opts) do
+        {:ok, payload} ->
+          :ok = FailureTracker.clear(config)
 
-    case driver.run(mode, config, driver_opts) do
-      {:ok, payload} ->
-        :ok = FailureTracker.clear(config)
-
-        if prior_status in ["blocked", "paused", "awaiting-human"] do
           {:ok, _state} =
-            RuntimeStateStore.write(config, %{
-              status: "recovered",
-              transition: "recovered",
+            RuntimeLifecycle.transition(config, :loop_completed, writer, %{
               surface: surface,
               mode: runtime_mode,
-              reason: "#{mode} recovered",
+              reason: "#{mode} completed",
               requested_action: "",
               branch: branch
             })
-        end
 
-        {:ok, _state} =
-          RuntimeStateStore.write(config, %{
-            status: "idle",
-            transition: "completed",
-            surface: surface,
-            mode: runtime_mode,
-            reason: "#{mode} completed",
-            requested_action: "",
-            branch: branch
-          })
+          {:ok, Map.merge(payload, Workspace.metadata(workspace))}
 
-        {:ok, payload}
-
-      {:error, %{kind: kind, summary: summary, evidence_file: evidence_file}} ->
-        if already_escalated?(config) do
-          {:stopped, :already_escalated}
-        else
-          case FailureTracker.handle(config, %{
-                 kind: kind,
-                 summary: summary,
-                 evidence_file: evidence_file,
-                 requested_action: requested_action,
-                 surface: surface,
-                 mode: runtime_mode,
-                 branch: branch
-               }) do
-            {:retry, count} -> {:retry, count}
-            {:stop, count} -> {:stopped, {:escalated, count}}
-            {:error, reason} -> {:error, reason}
+        {:error, %{kind: kind, summary: summary, evidence_file: evidence_file}} ->
+          if already_escalated?(config) do
+            {:stopped, :already_escalated}
+          else
+            case FailureTracker.handle(config, %{
+                   kind: kind,
+                   summary: summary,
+                   evidence_file: evidence_file,
+                   requested_action: requested_action,
+                   surface: surface,
+                   mode: runtime_mode,
+                   branch: branch
+                 }) do
+              {:retry, count} -> {:retry, count}
+              {:stop, count} -> {:stopped, {:escalated, count}}
+              {:error, reason} -> {:error, reason}
+            end
           end
-        end
+      end
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -178,6 +188,39 @@ defmodule ForgeloopV2.Loop do
   defp already_escalated?(config) do
     ControlFiles.has_flag?(config, "PAUSE") or RuntimeStateStore.status(config) == "awaiting-human"
   end
+
+  defp maybe_write_recovered(
+         config,
+         prior_status,
+         unanswered_question_ids,
+         writer,
+         surface,
+         runtime_mode,
+         branch,
+         mode
+       ) do
+    case RuntimeRecovery.evaluate(prior_status, unanswered_question_ids, allow_blocked?: true) do
+      {:recover, kind} ->
+        RuntimeLifecycle.transition(config, :recovered, writer, %{
+          surface: surface,
+          mode: runtime_mode,
+          reason: recovery_reason(kind, mode),
+          requested_action: "",
+          branch: branch
+        })
+
+      :no_recovery ->
+        {:ok, %RuntimeState{}}
+    end
+  end
+
+  defp recovery_reason(:blocked, mode), do: "Resuming #{mode} after clearing blocked state"
+  defp recovery_reason(:paused, mode), do: "Resuming #{mode} after clearing paused state"
+  defp recovery_reason(:awaiting_human_cleared, mode),
+    do: "Resuming #{mode} after clearing awaiting-human state"
+
+  defp writer_for("daemon"), do: :daemon
+  defp writer_for(_surface), do: :loop
 end
 
 defmodule ForgeloopV2.Daemon.State do
@@ -202,12 +245,15 @@ defmodule ForgeloopV2.Daemon do
   use GenServer
 
   alias ForgeloopV2.{
-    BlockerDetector,
+    ActiveRuntime,
     Config,
     ControlFiles,
     Daemon.State,
     Escalation,
+    Events,
     Loop,
+    Orchestrator,
+    RuntimeLifecycle,
     RuntimeStateStore
   }
 
@@ -295,107 +341,129 @@ defmodule ForgeloopV2.Daemon do
     :ok = ControlFiles.ensure(state.config)
     cancel_timer(state.timer_ref)
 
-    cond do
-      ControlFiles.has_flag?(state.config, "PAUSE") ->
-        maybe_write_paused(state.config)
-        maybe_schedule(%State{state | last_action: :paused}, state.interval_ms)
+    case ActiveRuntime.claim(state.config, "elixir") do
+      :ok ->
+        context = Orchestrator.build_context(state.config)
+        decision = Orchestrator.decide(context)
 
-      needs_recovery?(state.config) ->
-        {:ok, _} =
-          RuntimeStateStore.write(state.config, %{
-            status: "recovered",
-            transition: "resuming",
-            surface: "daemon",
-            mode: "daemon",
-            reason: "Pause cleared; resuming daemon",
-            requested_action: "",
-            branch: state.config.default_branch
+        :ok =
+          Events.emit(state.config, :daemon_tick, %{
+            "action" => Atom.to_string(decision.action),
+            "reason" => decision.reason,
+            "runtime_status" => context.runtime_status,
+            "pause_requested" => context.pause_requested?,
+            "replan_requested" => context.replan_requested?,
+            "needs_build" => context.needs_build?
           })
 
-        continue_after_recovery(state)
+        apply_decision(state, decision, context)
 
-      true ->
-        maybe_dispatch(state)
+      {:error, reason} ->
+        maybe_schedule(%State{state | last_action: :runtime_conflict, last_result: {:error, reason}}, state.interval_ms)
     end
   end
 
-  defp continue_after_recovery(%State{} = state), do: maybe_dispatch(%State{state | last_action: :recovered})
-
-  defp maybe_dispatch(%State{} = state) do
-    case BlockerDetector.check(state.config) do
-      {:threshold_reached, %{count: count}} ->
-        {:ok, _} =
-          Escalation.escalate(state.config, %{
-            kind: "blocker",
-            summary: "Daemon hit the same unanswered blocker for #{count} consecutive cycles",
-            requested_action: "review",
-            repeat_count: count,
-            surface: "daemon",
-            mode: "daemon",
-            branch: state.config.default_branch
-          })
-
-        maybe_schedule(%State{state | last_action: :blocker_escalated}, state.interval_ms)
-
-      _ ->
-        case next_work(state.config) do
-          :idle ->
-            {:ok, _} =
-              RuntimeStateStore.write(state.config, %{
-                status: "idle",
-                transition: "idle",
-                surface: "daemon",
-                mode: "daemon",
-                reason: "No pending work",
-                requested_action: "",
-                branch: state.config.default_branch
-              })
-
-            maybe_schedule(%State{state | last_action: :idle}, state.interval_ms)
-
-          mode ->
-            task =
-              Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-                Loop.run(mode, state.config,
-                  driver: state.driver,
-                  driver_opts: state.driver_opts,
-                  surface: "daemon",
-                  runtime_mode: Atom.to_string(mode),
-                  branch: state.config.default_branch
-                )
-              end)
-
-            %State{
-              state
-              | current_task_ref: task.ref,
-                current_task_kind: mode,
-                running?: true,
-                last_action: mode
-            }
-        end
-    end
+  defp apply_decision(%State{} = state, %Orchestrator.Decision{action: :pause}, _context) do
+    maybe_write_paused(state.config)
+    maybe_schedule(%State{state | last_action: :paused}, state.interval_ms)
   end
 
-  defp next_work(config) do
-    cond do
-      ControlFiles.has_flag?(config, "REPLAN") ->
-        :ok = ControlFiles.consume_flag(config, "REPLAN")
-        :plan
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: :recover, reason: reason},
+         _context
+       ) do
+    {:ok, _} =
+      RuntimeLifecycle.transition(state.config, :recovered, :daemon, %{
+        surface: "daemon",
+        mode: "daemon",
+        reason: reason,
+        requested_action: "",
+        branch: state.config.default_branch
+      })
 
-      needs_build?(config) ->
-        :build
-
-      true ->
-        :idle
-    end
+    maybe_schedule(%State{state | last_action: :recovered}, state.interval_ms)
   end
 
-  defp needs_build?(config) do
-    case File.read(config.plan_file) do
-      {:ok, body} -> Regex.match?(~r/^- \[ \]/m, body)
-      {:error, :enoent} -> true
-      _ -> true
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: :escalate_blocker},
+         %Orchestrator.Context{blocker_result: {:threshold_reached, %{count: count}}}
+       ) do
+    {:ok, _} =
+      Escalation.escalate(state.config, %{
+        kind: "blocker",
+        summary: "Daemon hit the same unanswered blocker for #{count} consecutive cycles",
+        requested_action: "review",
+        repeat_count: count,
+        surface: "daemon",
+        mode: "daemon",
+        branch: state.config.default_branch
+      })
+
+    maybe_schedule(%State{state | last_action: :blocker_escalated}, state.interval_ms)
+  end
+
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: :escalate_blocker},
+         %Orchestrator.Context{blocker_result: blocker_result}
+       ) do
+    maybe_schedule(
+      %State{
+        state
+        | last_action: :blocker_invariant_error,
+          last_result: {:error, {:unexpected_blocker_result, blocker_result}}
+      },
+      state.interval_ms
+    )
+  end
+
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: :idle, persist_idle?: persist_idle?, reason: reason},
+         _context
+       ) do
+    if persist_idle? do
+      {:ok, _} =
+        RuntimeLifecycle.transition(state.config, :daemon_idle, :daemon, %{
+          surface: "daemon",
+          mode: "daemon",
+          reason: reason,
+          requested_action: "",
+          branch: state.config.default_branch
+        })
     end
+
+    maybe_schedule(%State{state | last_action: :idle}, state.interval_ms)
+  end
+
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: mode, consume_replan?: consume_replan?},
+         _context
+       )
+       when mode in [:plan, :build] do
+    if consume_replan?, do: :ok = ControlFiles.consume_flag(state.config, "REPLAN")
+
+    task =
+      Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
+        Loop.run(mode, state.config,
+          driver: state.driver,
+          driver_opts: state.driver_opts,
+          surface: "daemon",
+          runtime_mode: Atom.to_string(mode),
+          branch: state.config.default_branch
+        )
+      end)
+
+    %State{
+      state
+      | current_task_ref: task.ref,
+        current_task_kind: mode,
+        running?: true,
+        last_action: mode
+    }
   end
 
   defp maybe_schedule(%State{schedule?: false} = state, _delay), do: %State{state | timer_ref: nil}
@@ -408,16 +476,10 @@ defmodule ForgeloopV2.Daemon do
   defp cancel_timer(nil), do: :ok
   defp cancel_timer(ref), do: Process.cancel_timer(ref, async: true, info: false)
 
-  defp needs_recovery?(config) do
-    not ControlFiles.has_flag?(config, "PAUSE") and RuntimeStateStore.status(config) in ["paused", "awaiting-human"]
-  end
-
   defp maybe_write_paused(config) do
     if RuntimeStateStore.status(config) != "awaiting-human" do
       {:ok, _} =
-        RuntimeStateStore.write(config, %{
-          status: "paused",
-          transition: "paused",
+        RuntimeLifecycle.transition(config, :paused_by_operator, :daemon, %{
           surface: "daemon",
           mode: "daemon",
           reason: "Daemon paused via REQUESTS.md",
