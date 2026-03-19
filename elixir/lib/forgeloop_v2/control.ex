@@ -1,7 +1,7 @@
 defmodule ForgeloopV2.ControlFiles do
   @moduledoc false
 
-  alias ForgeloopV2.Config
+  alias ForgeloopV2.{Config, Coordination}
 
   @spec ensure(Config.t()) :: :ok | {:error, term()}
   def ensure(%Config{} = config) do
@@ -63,30 +63,7 @@ defmodule ForgeloopV2.ControlFiles do
 
   @spec unanswered_question_ids(Config.t()) :: [String.t()]
   def unanswered_question_ids(%Config{} = config) do
-    case File.read(config.questions_file) do
-      {:ok, body} ->
-        body
-        |> String.split(~r/^## /m, trim: true)
-        |> Enum.reduce([], fn section, acc ->
-          heading = String.trim_leading(section)
-
-          case Regex.run(~r/^(Q-\S+)/, heading, capture: :all_but_first) do
-            [id] ->
-              if String.contains?(section, "Awaiting response") do
-                [id | acc]
-              else
-                acc
-              end
-
-            _ ->
-              acc
-          end
-        end)
-        |> Enum.sort()
-
-      _ ->
-        []
-    end
+    Coordination.unanswered_question_ids(config)
   end
 
   defp touch(path) do

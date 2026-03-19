@@ -25,6 +25,7 @@ defmodule ForgeloopV2.Orchestrator do
     Config,
     ControlFiles,
     Orchestrator.Context,
+    PlanStore,
     Orchestrator.Decision,
     RuntimeRecovery,
     RuntimeStateStore
@@ -86,11 +87,5 @@ defmodule ForgeloopV2.Orchestrator do
   defp idle_reason(%Context{runtime_status: "awaiting-human"}), do: "Awaiting human response"
   defp idle_reason(_context), do: "No pending work"
 
-  defp needs_build?(config) do
-    case File.read(config.plan_file) do
-      {:ok, body} -> Regex.match?(~r/^- \[ \]/m, body)
-      {:error, :enoent} -> true
-      _ -> true
-    end
-  end
+  defp needs_build?(config), do: PlanStore.needs_build?(config)
 end
