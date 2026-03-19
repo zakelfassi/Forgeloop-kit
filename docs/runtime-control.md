@@ -114,3 +114,12 @@ That suite is curated to demonstrate:
 The repo now also contains an experimental `elixir/` foundation that preserves the same operator-facing artifacts and `.forgeloop/runtime-state.json` contract for the phase-1 safety nucleus.
 
 For now, deploy/log-ingest orchestration, tracker integration, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.
+
+The current coexistence rule is intentionally narrow:
+
+- bash remains the default runtime
+- Elixir is opt-in and experimental
+- simultaneous bash and Elixir active control of one repo is unsupported for this phase
+- Elixir records its active-runtime claim under `.forgeloop/v2/active-runtime.json`
+- Elixir stops when that file already names a different owner at claim time
+- this is an Elixir-side coexistence guard, not a full cross-runtime lock or split-brain-prevention guarantee
