@@ -19,14 +19,18 @@ Current scope:
 - noop/shell work drivers
 - a small GenServer daemon
 - provider auth/rate-limit failover unit coverage
+- workflow package catalog discovery for the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
+
+The next planned slice is **not implemented yet**: disposable git worktrees for sandboxed self-hosting, a babysitter/supervisor mode above child runs, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
 
 Still intentionally deferred:
 
 - Phoenix UI
-- tracker adapters
-- persistent workspaces and worktrees
+- non-memory tracker adapters
+- persistent workspaces and long-lived worktree management
 - app-server orchestration
 - Postgres/event pipeline
+- OpenClaw as a supported provider/runtime option today
 
 See `../docs/v2-roadmap.md` and `../docs/elixir-parity-matrix.md` for the current coexistence and validation story.
 
@@ -44,3 +48,4 @@ mix test
 cd elixir
 mix forgeloop_v2.daemon --once --repo ..
 ```
+

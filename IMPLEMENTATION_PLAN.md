@@ -18,15 +18,22 @@ Format:
 
 ## Next Up
 
-- [ ] Add structured repo-local parsers for `IMPLEMENTATION_PLAN.md`, `QUESTIONS.md`, and `ESCALATIONS.md`, and route existing daemon logic through them
+- [ ] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
-    - `Orchestrator` no longer uses a raw regex to detect pending plan work.
-    - Unanswered question detection is derived from a shared parser that distinguishes awaiting, answered, and resolved states.
-    - Existing markdown file formats remain readable without migration.
+    - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
+    - Workflow runs write Forgeloop runtime state and evidence files, and repeated failures escalate through the existing artifact chain.
+    - Elixir exposes workflow package discovery through a separate catalog seam without widening `WORKFLOW.md` semantics.
+    - `README.md`, `docs/workflows.md`, `docs/runtime-control.md`, `docs/v2-roadmap.md`, and `index.html` all describe the workflow lane as native/manual in the same terms.
   - REQUIRED TESTS:
-    - `elixir/test/forgeloop_v2/plan_store_test.exs`
-    - `elixir/test/forgeloop_v2/coordination_test.exs`
-    - existing `orchestrator_test.exs`, `daemon_test.exs`, blocker/recovery tests stay green
+    - `tests/workflow-lane.test.sh`
+    - `elixir/test/forgeloop_v2/workflow_catalog_test.exs`
+    - `elixir/test/forgeloop_v2/workflow_test.exs`
+    - existing install output + shell/eval gates stay green
+  - Deferred after this slice:
+    - service/UI workflow surfaces
+    - worktree-aware babysitter/supervisor integration
+    - native graph execution
+    - OpenClaw/plugin seam work
 
 - [ ] Add repo-safe mutation helpers for questions and control flags, including file-level locking for parse-modify-write operations
   - Acceptance:
@@ -40,6 +47,29 @@ Format:
     - existing escalation tests stay green
 
 ## Backlog
+
+- [ ] Add sandboxed self-hosting via disposable git worktrees and a babysitter/supervisor operating mode
+  - Acceptance:
+    - Docs and code define disposable worktrees as repo-internal isolation for autonomous runs, not the primary security boundary.
+    - A babysitter/supervisor owns child-run lifecycle, heartbeat/watchdog behavior, and worktree cleanup without changing the current fail-closed artifact chain.
+    - Repo-root artifacts (`IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, `.forgeloop/runtime-state.json`) remain canonical even when autonomous work runs in a disposable worktree.
+    - `.forgeloop/v2/active-runtime.json` semantics are updated deliberately if worktree-aware ownership lands; until then the docs stay explicit about current limits.
+  - REQUIRED TESTS:
+    - disposable worktree lifecycle smoke test
+    - babysitter pause/resume/kill test
+    - self-hosted run still writes canonical runtime-state + escalation artifacts
+    - dirty-tree and crash-recovery cleanup tests
+
+- [ ] Define a plugin/integration seam for future OpenClaw support
+  - Acceptance:
+    - OpenClaw is documented as future integration work, not a current provider/runtime option.
+    - The implementation path is explicit about the formal integration seam we choose, and it preserves the same repo-local fail-closed contract.
+    - Existing workflow/config validation stays truthful: no unsupported `providers` or `runtime` keys are introduced in phase 1.
+    - Any future OpenClaw integration exposes Forgeloop actions through a bounded, reviewable surface instead of ad hoc shell glue.
+  - REQUIRED TESTS:
+    - integration seam contract validation test
+    - OpenClaw-triggered action still writes canonical control artifacts
+    - unsupported config stays rejected until the seam actually lands
 
 - [ ] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
@@ -105,6 +135,18 @@ Format:
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Decide whether bash should participate in `.forgeloop/v2/active-runtime.json` before making stronger split-brain-prevention claims
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
+
+## Checkpoint Cadence
+
+- [ ] Ship one scoped checkpoint commit whenever a slice lands with tests/docs green
+  - Rules:
+    - one feature slice per checkpoint commit
+    - do not mix workflow-lane behavior with unrelated cleanup
+    - update `README.md` and `index.html` in the same slice when public behavior changes
+  - Suggested naming:
+    - `workflow-slice-01: add workflow pack lane`
+    - `workflow-slice-02: expose workflow catalog`
+    - `workflow-slice-03: add workflow service/ui surfaces`
 
 ## Skill Opportunities
 

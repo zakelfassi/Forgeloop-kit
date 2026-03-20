@@ -20,6 +20,21 @@ It supports these flags in `REQUESTS.md`:
 - `[INGEST_LOGS]` — run log ingestion using `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`
 
 There is **no** daemon-side `[KNOWLEDGE_SYNC]` flag.
+There is also **no** daemon-side `[WORKFLOW]` flag in this slice; workflow runs are manual-only.
+
+## Manual workflow lane (experimental)
+
+Forgeloop now has an experimental manual workflow lane:
+
+```bash
+./forgeloop.sh workflow list
+./forgeloop.sh workflow preflight <name>
+./forgeloop.sh workflow run <name> [runner args...]
+```
+
+In this first slice it is manual-only, backed by a configured workflow runner, not daemon-scheduled, and still bound to the same runtime-state + escalation contract as the other lanes.
+
+See `docs/workflows.md` for the detailed workflow-lane contract and compatibility notes.
 
 ## Escalation artifact chain
 
@@ -91,6 +106,20 @@ That means a runtime state can legitimately look like:
 - A loop may retry transient failures, but it must not retry indefinitely without a state transition
 - Human escalation artifacts live in repo-local files so the operator can inspect them without external services
 - Full-auto mode should assume the VM/container is the security boundary
+
+## Planned isolation extension (not supported yet)
+
+Today, the fail-closed contract is enforced in the canonical repo checkout.
+
+The next planned self-hosting extension is to let a babysitter/supervisor launch bounded autonomous work inside a **disposable git worktree** while preserving the same repo-local artifact chain:
+
+- `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, and `ESCALATIONS.md` remain the canonical coordination surface
+- `.forgeloop/runtime-state.json` remains the machine-readable source of truth
+- repeated failures and repeated unanswered blockers still pause and escalate instead of spinning
+
+That planned worktree layer is meant to protect the canonical checkout from autonomous churn; it is **not** the primary security boundary. The VM/container remains that boundary.
+
+The current `.forgeloop/v2/active-runtime.json` claim is also not yet worktree-aware or cross-runtime. It is only the current Elixir-side coexistence guard.
 
 ## Proof suite
 

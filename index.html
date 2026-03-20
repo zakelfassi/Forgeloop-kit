@@ -1335,14 +1335,14 @@ flowchart LR
 
         <section id="lanes">
           <div class="sectionhead">
-            <h2>Two Workflow Lanes</h2>
+            <h2>Three Execution Lanes</h2>
             <p>
-              Forgeloop supports two approaches to task tracking. Pick based on your workflow: human-in-the-loop vs full automation.
+              Forgeloop now supports three ways to drive work: markdown checklists, structured tasks, and an experimental native workflow-pack lane. Pick the lane that matches the shape of the work.
             </p>
           </div>
 
           <div class="grid" style="margin-top: 14px">
-            <div class="card" style="grid-column: span 6">
+            <div class="card" style="grid-column: span 4">
               <h3>Checklist Lane (default)</h3>
               <p>
                 Uses <code>IMPLEMENTATION_PLAN.md</code> with markdown checkboxes. Best for human-in-the-loop workflows
@@ -1359,7 +1359,7 @@ flowchart LR
               </div>
             </div>
 
-            <div class="card" style="grid-column: span 6">
+            <div class="card" style="grid-column: span 4">
               <h3>Tasks Lane (optional)</h3>
               <p>
                 Uses <code>prd.json</code> with machine-readable <code>passes: true/false</code> flags. Best for full automation
@@ -1374,6 +1374,23 @@ flowchart LR
                 <span class="chip" role="listitem"><span class="tag"></span><span>progress.txt</span></span>
               </div>
             </div>
+
+            <div class="card" style="grid-column: span 4">
+              <h3>Workflow Lane (experimental)</h3>
+              <p>
+                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract.
+              </p>
+              <div class="code" style="margin-top: 12px">
+                <button class="copy" data-copy="#lane-workflow">Copy</button>
+                <pre id="lane-workflow">./forgeloop.sh workflow list
+./forgeloop.sh workflow preflight issue-to-pr
+./forgeloop.sh workflow run issue-to-pr</pre>
+              </div>
+              <div class="chiprow" role="list">
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>manual-only</span></span>
+                <span class="chip pink" role="listitem"><span class="tag"></span><span>configured runner</span></span>
+              </div>
+            </div>
           </div>
 
           <div class="panelbox" style="margin-top: 14px">
@@ -1384,6 +1401,7 @@ flowchart LR
                   <th></th>
                   <th>Checklist Lane</th>
                   <th>Tasks Lane</th>
+                  <th>Workflow Lane</th>
                 </tr>
               </thead>
               <tbody>
@@ -1391,26 +1409,31 @@ flowchart LR
                   <td>Task file</td>
                   <td>IMPLEMENTATION_PLAN.md</td>
                   <td>prd.json</td>
+                  <td><code>workflow.dot</code> + <code>workflow.toml</code></td>
                 </tr>
                 <tr>
                   <td>Progress</td>
                   <td>Markdown checkboxes</td>
                   <td>passes: true/false</td>
+                  <td>external runner state + Forgeloop evidence files</td>
                 </tr>
                 <tr>
                   <td>Run command</td>
                   <td>./forgeloop.sh build N</td>
                   <td>./forgeloop.sh tasks N</td>
+                  <td>./forgeloop.sh workflow run &lt;name&gt;</td>
                 </tr>
                 <tr>
                   <td>Best for</td>
                   <td>Human review/edits</td>
                   <td>Full automation</td>
+                  <td>graph-shaped workflows / native workflow packs</td>
                 </tr>
                 <tr>
                   <td>Tracking</td>
                   <td>STATUS.md</td>
                   <td>progress.txt</td>
+                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt</td>
                 </tr>
               </tbody>
             </table>
@@ -1442,6 +1465,7 @@ flowchart LR
 ├─ PROMPT_plan_work.md
 ├─ PROMPT_build.md
 ├─ PROMPT_tasks.md          # Tasks lane prompt
+├─ workflows/               # (optional) workflow packs
 ├─ IMPLEMENTATION_PLAN.md
 ├─ REQUESTS.md
 ├─ QUESTIONS.md
@@ -1477,11 +1501,13 @@ flowchart LR
 │  └─ ...
 ├─ docs/
 │  ├─ README.md
+│  ├─ workflows.md          # Workflow lane contract
 │  └─ ...
 └─ forgeloop/
    ├─ bin/
    │  ├─ loop.sh            # Main build loop
    │  ├─ loop-tasks.sh      # Tasks lane loop
+   │  ├─ workflow.sh        # Experimental workflow-pack lane
    │  ├─ forgeloop-daemon.sh    # Daemon mode
    │  ├─ ingest-report.sh   # Report ingestion
    │  ├─ ingest-logs.sh     # Log ingestion
@@ -1515,6 +1541,8 @@ flowchart LR
                 <li><code>FORGELOOP_AUTOPUSH=false</code> by default</li>
                 <li><code>FORGELOOP_PLAN_AUTOPUSH</code> push on plan/plan-work iterations (no CI gate)</li>
                 <li><code>FORGELOOP_ALLOW_PRD_VERIFY_CMD</code> allow <code>verify_cmd</code> from <code>prd.json</code> (tasks lane)</li>
+                <li><code>FORGELOOP_WORKFLOWS_DIR</code> override where workflow packages are discovered</li>
+                <li><code>FORGELOOP_WORKFLOW_RUNNER</code> choose the external runner used by the workflow lane</li>
                 <li><code>FORGELOOP_FAILURE_ESCALATE_AFTER</code> set the repeated-failure pause threshold</li>
                 <li><code>FORGELOOP_FAILURE_ESCALATION_ACTION</code> choose the drafted human handoff action</li>
                 <li><code>./forgeloop.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
@@ -1536,8 +1564,8 @@ flowchart LR
           <div class="sectionhead">
             <h2>How to use it</h2>
             <p>
-              Two common paths: start a new repo from scratch (kickoff + plan + build), or augment an existing repo
-              (specs + plan + build + occasional kit upgrades). Either way, the control loop is the same.
+              Two common paths: start a new repo from scratch (kickoff + plan + build), augment an existing repo
+              (specs + plan + build + occasional kit upgrades), or run native workflow packs through the new experimental workflow lane.
             </p>
           </div>
 

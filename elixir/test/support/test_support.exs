@@ -14,6 +14,7 @@ defmodule ForgeloopV2.TestSupport do
         Events,
         FailureTracker,
         Orchestrator,
+        WorkflowCatalog,
         PathPolicy,
         PlanStore,
         RepoPaths,
@@ -40,6 +41,30 @@ defmodule ForgeloopV2.TestSupport do
 
     on_exit(fn -> File.rm_rf(root) end)
     %{repo_root: root, runtime_dir: Path.join(root, ".forgeloop-test")}
+  end
+
+  def create_workflow_package!(repo_root, name, opts \\ []) do
+    workflow_root = Keyword.get(opts, :workflow_root, Path.join(repo_root, "workflows"))
+    package_root = Path.join(workflow_root, name)
+    File.mkdir_p!(package_root)
+
+    if Keyword.get(opts, :graph?, true) do
+      File.write!(Path.join(package_root, "workflow.dot"), Keyword.get(opts, :graph_content, "digraph Test {}\n"))
+    end
+
+    if Keyword.get(opts, :config?, true) do
+      File.write!(Path.join(package_root, "workflow.toml"), Keyword.get(opts, :config_content, "version = 1\n"))
+    end
+
+    if Keyword.get(opts, :prompts?, false) do
+      File.mkdir_p!(Path.join(package_root, "prompts"))
+    end
+
+    if Keyword.get(opts, :scripts?, false) do
+      File.mkdir_p!(Path.join(package_root, "scripts"))
+    end
+
+    package_root
   end
 
   def config_for!(repo_root, opts \\ []) do

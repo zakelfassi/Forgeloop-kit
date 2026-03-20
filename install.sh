@@ -427,6 +427,9 @@ Usage:
   ./forgeloop.sh plan-work "scope" [max_iters] [--watch|--infinite]
   ./forgeloop.sh build [max_iters] [--lite|--full] [--watch|--infinite]
   ./forgeloop.sh tasks [max_iters]
+  ./forgeloop.sh workflow list
+  ./forgeloop.sh workflow preflight <name>
+  ./forgeloop.sh workflow run <name> [runner args...]
   ./forgeloop.sh review
   ./forgeloop.sh evals
   ./forgeloop.sh upgrade --from <path-to-kit> [--force] [--skills] [--batch|--interactive]
@@ -495,6 +498,10 @@ case "$cmd" in
     ;;
   tasks)
     exec "$REPO_DIR/forgeloop/bin/loop-tasks.sh" "${2:-10}"
+    ;;
+  workflow)
+    shift
+    exec "$REPO_DIR/forgeloop/bin/workflow.sh" "$@"
     ;;
   evals)
     shift
@@ -624,10 +631,12 @@ main() {
         echo "  ./forgeloop.sh evals"
         echo "  ./forgeloop.sh plan 1"
         echo "  ./forgeloop.sh build 5"
+        echo "  ./forgeloop.sh workflow list"
     else
         echo "  bash ./forgeloop/evals/run.sh"
         echo "  ./forgeloop/bin/loop.sh plan 1"
         echo "  ./forgeloop/bin/loop.sh 5"
+        echo "  ./forgeloop/bin/workflow.sh list"
     fi
 }
 

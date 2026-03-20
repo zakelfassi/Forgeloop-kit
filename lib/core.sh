@@ -422,6 +422,148 @@ forgeloop_core__git_push_branch() {
     }
 }
 
+# Resolve the canonical workflow packages directory for the experimental workflow lane.
+# Detection order:
+#   1. FORGELOOP_WORKFLOWS_DIR when set
+#   2. repo_root/workflows
+# Usage: workflows_dir=$(forgeloop_core__resolve_workflows_dir "$REPO_DIR")
+forgeloop_core__resolve_workflows_dir() {
+    local repo_dir="$1"
+    local first_dir
+    first_dir="$(forgeloop_core__workflow_search_dirs "$repo_dir" | head -n 1)"
+    echo "$first_dir"
+}
+
+# Resolve all workflow package directories in precedence order.
+# Detection order:
+#   1. FORGELOOP_WORKFLOWS_DIR when set
+#   2. repo_root/workflows
+# Usage: forgeloop_core__workflow_search_dirs "$REPO_DIR"
+forgeloop_core__workflow_search_dirs() {
+    local repo_dir="$1"
+    local workflows_dir="${FORGELOOP_WORKFLOWS_DIR:-}"
+
+    if [[ -n "$workflows_dir" ]]; then
+        if [[ "$workflows_dir" != /* ]]; then
+            workflows_dir="$repo_dir/$workflows_dir"
+        fi
+        printf '%s\n' "$workflows_dir"
+        return 0
+    fi
+
+    printf '%s\n' "$repo_dir/workflows"
+}
+
+# Check whether a workflow package has the required files.
+# Usage: if forgeloop_core__workflow_package_has_required_files "$package_dir"; then ...
+forgeloop_core__workflow_package_has_required_files() {
+    local package_dir="$1"
+    [[ -d "$package_dir" ]] || return 1
+    [[ -f "$package_dir/workflow.dot" ]] || return 1
+    [[ -f "$package_dir/workflow.toml" ]] || return 1
+}
+
+# Resolve a workflow package directory across the configured search roots.
+# Usage: package_dir=$(forgeloop_core__resolve_workflow_package_dir "$REPO_DIR" "$name")
+forgeloop_core__resolve_workflow_package_dir() {
+    local repo_dir="$1"
+    local workflow_name="$2"
+    local search_dir candidate
+
+    while IFS= read -r search_dir; do
+        [[ -n "$search_dir" ]] || continue
+        candidate="$search_dir/$workflow_name"
+        if forgeloop_core__workflow_package_has_required_files "$candidate"; then
+            echo "$candidate"
+            return 0
+        fi
+    done < <(forgeloop_core__workflow_search_dirs "$repo_dir")
+
+    return 1
+}
+
+# List runnable workflow package names across the configured search roots.
+# Usage: forgeloop_core__list_workflow_names "$REPO_DIR"
+forgeloop_core__list_workflow_names() {
+    local repo_dir="$1"
+    local search_dir package_dir workflow_name
+    local names=()
+    local seen_names=""
+
+    while IFS= read -r search_dir; do
+        [[ -d "$search_dir" ]] || continue
+
+        for package_dir in "$search_dir"/*; do
+            [[ -d "$package_dir" ]] || continue
+            workflow_name="$(basename "$package_dir")"
+            if forgeloop_core__validate_workflow_name "$workflow_name" &&
+               forgeloop_core__workflow_package_has_required_files "$package_dir" &&
+               ! grep -Fqx "$workflow_name" <<<"$seen_names"; then
+                names+=("$workflow_name")
+                seen_names+="$workflow_name"$'\n'
+            fi
+        done
+    done < <(forgeloop_core__workflow_search_dirs "$repo_dir")
+
+    if [[ ${#names[@]} -gt 0 ]]; then
+        printf '%s\n' "${names[@]}" | LC_ALL=C sort
+    fi
+}
+
+# Resolve the workflow runner command.
+# Detection order:
+#   1. FORGELOOP_WORKFLOW_RUNNER when set
+#   2. forgeloop-workflow on PATH
+# Usage: runner=$(forgeloop_core__resolve_workflow_runner)
+forgeloop_core__resolve_workflow_runner() {
+    local configured_runner="${FORGELOOP_WORKFLOW_RUNNER:-}"
+
+    if [[ -n "$configured_runner" ]]; then
+        echo "$configured_runner"
+        return 0
+    fi
+
+    if forgeloop_core__has_cmd "forgeloop-workflow"; then
+        echo "forgeloop-workflow"
+        return 0
+    fi
+
+    return 1
+}
+
+# Resolve the state root used by workflow runners.
+# Canonical path:
+#   .forgeloop/workflows/state
+# Usage: state_root=$(forgeloop_core__resolve_workflow_state_root "$REPO_DIR")
+forgeloop_core__resolve_workflow_state_root() {
+    local repo_dir="$1"
+    local runtime_dir canonical_root
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    canonical_root="$runtime_dir/workflows/state"
+    echo "$canonical_root"
+}
+
+# Validate a workflow package name for the workflow lane.
+# Allows: letters, digits, dash, underscore. Rejects traversal/hidden names.
+# Usage: if forgeloop_core__validate_workflow_name "$name"; then ...
+forgeloop_core__validate_workflow_name() {
+    local name="${1:-}"
+    [[ -n "$name" ]] || return 1
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]
+}
+
+# Resolve the Forgeloop-owned log directory for a workflow package.
+# Usage: log_dir=$(forgeloop_core__workflow_log_dir "$REPO_DIR" "$name")
+forgeloop_core__workflow_log_dir() {
+    local repo_dir="$1"
+    local workflow_name="$2"
+    local runtime_dir
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    local log_dir="$runtime_dir/workflows/$workflow_name"
+    mkdir -p "$log_dir"
+    echo "$log_dir"
+}
+
 # =============================================================================
 # Flag Consumption (for daemon coordination)
 # =============================================================================

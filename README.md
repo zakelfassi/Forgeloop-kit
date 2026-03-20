@@ -76,6 +76,7 @@ In the target repo:
 ./forgeloop.sh evals
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
+./forgeloop.sh workflow list
 ```
 
 For continuous operation:
@@ -96,6 +97,18 @@ Add these anywhere in `REQUESTS.md`:
 - `[INGEST_LOGS]` — analyze logs into a new request
 
 `[PAUSE]` may also be inserted automatically by Forgeloop when it escalates a repeated failure or blocker.
+
+## Three execution lanes
+
+Forgeloop now has three execution lanes:
+
+1. **Checklist lane** — `IMPLEMENTATION_PLAN.md` with `./forgeloop.sh plan|build`
+2. **Tasks lane** — `prd.json` with `./forgeloop.sh tasks`
+3. **Workflow lane (experimental)** — native Forgeloop workflow packs with `./forgeloop.sh workflow ...`
+
+The workflow lane is intentionally narrow in this slice: manual-only, runner-backed, and still mapped onto the same runtime-state + escalation contract.
+
+See `docs/workflows.md` for the detailed workflow-pack contract and checkpoint cadence.
 
 ## Why teams use it
 
@@ -119,6 +132,7 @@ The runtime source of truth lives in:
 The operator contract is documented in:
 
 - `docs/runtime-control.md`
+- `docs/workflows.md`
 - `docs/sandboxing.md`
 
 ## Versioning
@@ -133,6 +147,8 @@ If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main`
 ## Elixir v2 foundation
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
+
+The next planned runtime-isolation slice is **not implemented yet**: disposable git worktrees for sandboxed self-hosting, a babysitter/supervisor mode that watches child runs, and a future OpenClaw integration seam rather than another ad hoc runtime switch.
 
 Current coexistence rule:
 
@@ -169,6 +185,8 @@ See `elixir/README.md` for the current scope and how to run `mix test`.
 ## Run safely
 
 If you use auto-permissions / full-auto mode, treat the **VM or container as the security boundary**.
+
+Disposable git worktrees are part of the planned self-hosting story, but they are a repo-internal hygiene boundary inside that VM/container, not a replacement for it.
 
 - Guide: `docs/sandboxing.md`
 - GCP runner helper: `ops/gcp/provision.sh`

@@ -37,9 +37,11 @@ assert_contains "$plain_output" "bash ./forgeloop/evals/run.sh"
 assert_not_contains_line "$plain_output" "  ./forgeloop/evals/run.sh"
 assert_contains "$plain_output" "./forgeloop/bin/loop.sh plan 1"
 assert_contains "$plain_output" "./forgeloop/bin/loop.sh 5"
+assert_contains "$plain_output" "./forgeloop/bin/workflow.sh list"
 
 assert_contains "$wrapper_output" "./forgeloop.sh evals"
 assert_contains "$wrapper_output" "./forgeloop.sh plan 1"
 assert_contains "$wrapper_output" "./forgeloop.sh build 5"
+assert_contains "$wrapper_output" "./forgeloop.sh workflow list"
 
 echo "ok: install output"

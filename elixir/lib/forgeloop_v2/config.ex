@@ -68,6 +68,8 @@ end
 defmodule ForgeloopV2.Config do
   @moduledoc false
 
+  @canonical_workflow_root "workflows"
+
   defstruct [
     :repo_root,
     :forgeloop_root,
@@ -78,6 +80,8 @@ defmodule ForgeloopV2.Config do
     :questions_file,
     :escalations_file,
     :plan_file,
+    :workflow_dir,
+    :workflow_search_dirs,
     :default_branch,
     :failure_escalate_after,
     :failure_escalation_action,
@@ -122,6 +126,7 @@ defmodule ForgeloopV2.Config do
       questions_path = repo_relative_path(repo_root, opts[:questions_file], "FORGELOOP_QUESTIONS_FILE", "QUESTIONS.md", shell_env)
       escalations_path = repo_relative_path(repo_root, opts[:escalations_file], "FORGELOOP_ESCALATIONS_FILE", "ESCALATIONS.md", shell_env)
       plan_path = repo_relative_path(repo_root, opts[:plan_file], "FORGELOOP_IMPLEMENTATION_PLAN_FILE", "IMPLEMENTATION_PLAN.md", shell_env)
+      {workflow_dir, workflow_search_dirs} = detect_workflow_dirs(repo_root, opts[:workflow_dir], shell_env)
       loop_script = opts[:loop_script] || env_value("FORGELOOP_LOOP_SCRIPT", shell_env) || Path.join(forgeloop_root, "bin/loop.sh")
 
       config = %__MODULE__{
@@ -134,6 +139,8 @@ defmodule ForgeloopV2.Config do
         questions_file: questions_path,
         escalations_file: escalations_path,
         plan_file: plan_path,
+        workflow_dir: workflow_dir,
+        workflow_search_dirs: workflow_search_dirs,
         default_branch: opts[:default_branch] || env_value("FORGELOOP_DEFAULT_BRANCH", shell_env) || git_current_branch(repo_root) || "main",
         failure_escalate_after: positive_int(opts[:failure_escalate_after], "FORGELOOP_FAILURE_ESCALATE_AFTER", 3, shell_env),
         failure_escalation_action: escalation_action(opts[:failure_escalation_action] || env_value("FORGELOOP_FAILURE_ESCALATION_ACTION", shell_env) || "issue"),
@@ -178,6 +185,22 @@ defmodule ForgeloopV2.Config do
     value = explicit || env_value(env_name, shell_env) || default
     Path.expand(value, repo_root)
   end
+
+  defp detect_workflow_dirs(repo_root, explicit, shell_env) do
+    value = explicit || env_value("FORGELOOP_WORKFLOWS_DIR", shell_env)
+
+    cond do
+      is_binary(value) and value != "" ->
+        expanded = Path.expand(value, repo_root)
+        {expanded, [expanded]}
+
+      true ->
+        canonical = workflow_root(repo_root, @canonical_workflow_root)
+        {canonical, [canonical]}
+    end
+  end
+
+  defp workflow_root(repo_root, relative_path), do: Path.join(repo_root, relative_path)
 
   defp positive_int(explicit, env_name, default, shell_env) do
     value = explicit || env_value(env_name, shell_env) || default

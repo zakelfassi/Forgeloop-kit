@@ -22,6 +22,22 @@ You can override these via environment variables (see `forgeloop/config.sh` afte
 - Disk: 80–200 GB
 - Tools: `git`, `curl`, `jq`, Node.js, `pnpm`, plus the `claude` and/or `codex` CLIs
 
+## Planned repo-internal isolation (not implemented yet)
+
+Inside the VM/container boundary, the next planned self-hosting layer is **repo-internal isolation via disposable git worktrees**.
+
+That future slice is meant to:
+
+- let Forgeloop work on Forgeloop without mutating the canonical checkout directly
+- give a babysitter/supervisor process a bounded place to launch, watch, pause, and clean up child runs
+- improve containment and cleanup for self-hosting runs without mutating the canonical checkout directly
+
+It is **not** a replacement for the VM/container boundary. Treat worktrees as hygiene and blast-radius reduction inside the real sandbox, not as a security primitive.
+
+Open questions for that future slice include naming, dirty-tree fallback, crash recovery, cleanup timing, and how ownership claims become worktree-aware.
+
+Workflow-pack runners may also declare runner-side worktree behavior such as `worktree_mode`, but that remains runner-internal hygiene inside the VM/container boundary. It does not replace Forgeloop’s own sandboxing requirements.
+
 ## Local Docker sandbox (fastest way to reduce blast radius)
 
 This is a good default if you want **auto-permissions** but don’t want an agent running on your host OS.

@@ -17,3 +17,12 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - Bash is still the public acceptance anchor.
 - Elixir parity is measured on operator-visible artifacts and transitions first, not on internal implementation shape.
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
+
+## Planned next parity targets
+
+These are not part of the current proof matrix yet:
+
+- self-hosted runs in disposable worktrees still preserve the same repo-local fail-closed artifact chain
+- a babysitter/supervisor can stop, recover, and clean up child runs without spin
+- future external integration seams such as OpenClaw preserve the same control surfaces instead of bypassing them
+

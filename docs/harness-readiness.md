@@ -28,3 +28,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - Add more entrypoint smoke tests beyond the daemon.
 - Add a small quality score review cadence so repo quality is measured, not guessed.
 - Keep open PRs short-lived and rewrite stacked draft history into focused successors.
+- Add disposable-worktree cleanliness and cleanup checks for future self-hosting runs.
+- Add babysitter child-run recovery and watchdog checks.
+- Add integration-surface smoke tests for future plugin seams such as OpenClaw.
+

@@ -33,6 +33,12 @@ export FORGELOOP_QUESTIONS_FILE="${FORGELOOP_QUESTIONS_FILE:-QUESTIONS.md}"
 export FORGELOOP_CHANGELOG_FILE="${FORGELOOP_CHANGELOG_FILE:-CHANGELOG.md}"
 export FORGELOOP_ESCALATIONS_FILE="${FORGELOOP_ESCALATIONS_FILE:-ESCALATIONS.md}"
 
+# Workflow lane (experimental native workflow-pack lane)
+# Leave FORGELOOP_WORKFLOWS_DIR empty to auto-detect the canonical workflows root, then a legacy fallback root.
+export FORGELOOP_WORKFLOWS_DIR="${FORGELOOP_WORKFLOWS_DIR:-}"
+# Leave FORGELOOP_WORKFLOW_RUNNER empty to auto-detect the preferred workflow runner, then a legacy fallback runner.
+export FORGELOOP_WORKFLOW_RUNNER="${FORGELOOP_WORKFLOW_RUNNER:-}"
+
 # Optional: command to run after Codex review auto-fixes (e.g. "pnpm test:ci", "npm test", "pytest -q")
 export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"
 
