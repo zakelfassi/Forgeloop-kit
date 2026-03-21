@@ -3,7 +3,7 @@ defmodule ForgeloopV2.Babysitter.State do
 
   defstruct [
     :config,
-    :mode,
+    :run_spec,
     :driver,
     :driver_opts,
     :branch,
@@ -35,6 +35,7 @@ defmodule ForgeloopV2.Babysitter do
     ControlLock,
     Events,
     Loop,
+    RunSpec,
     RuntimeLifecycle,
     Worktree,
     Workspace
@@ -50,9 +51,9 @@ defmodule ForgeloopV2.Babysitter do
     end
   end
 
-  @spec start_run(GenServer.server()) :: :ok | {:error, term()}
-  def start_run(server \\ __MODULE__) do
-    GenServer.call(server, :start_run, :infinity)
+  @spec start_run(GenServer.server(), keyword()) :: :ok | {:error, term()}
+  def start_run(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, {:start_run, opts}, :infinity)
   end
 
   @spec stop_child(GenServer.server(), :pause | :kill) :: :ok | {:error, term()}
@@ -71,10 +72,11 @@ defmodule ForgeloopV2.Babysitter do
       %Config{} = config ->
         Process.flag(:trap_exit, true)
 
-        state = %State{
-          config: config,
-          mode: Keyword.get(opts, :mode, :build),
-          driver: Keyword.get(opts, :driver, default_driver(config)),
+        with {:ok, run_spec} <- normalize_run_spec(Keyword.get(opts, :run_spec, Keyword.get(opts, :mode, :build))) do
+          state = %State{
+            config: config,
+            run_spec: run_spec,
+            driver: Keyword.get(opts, :driver, default_driver(config, run_spec)),
           driver_opts: Keyword.get(opts, :driver_opts, []),
           branch: Keyword.get(opts, :branch, config.default_branch),
           runtime_surface: Keyword.get(opts, :runtime_surface, "babysitter"),
@@ -88,10 +90,11 @@ defmodule ForgeloopV2.Babysitter do
           last_action: nil,
           last_heartbeat_at: nil,
           started_at: nil,
-          cleanup_stale?: Keyword.get(opts, :cleanup_stale?, true)
-        }
+            cleanup_stale?: Keyword.get(opts, :cleanup_stale?, true)
+          }
 
-        {:ok, state}
+          {:ok, state}
+        end
 
       _ ->
         case Config.load(opts) do
@@ -121,7 +124,11 @@ defmodule ForgeloopV2.Babysitter do
      %{
        running?: state.running?,
        stopping?: state.stopping?,
-       current_task_kind: if(state.running?, do: state.mode, else: nil),
+       lane: lane_string(state.run_spec),
+       action: action_string(state.run_spec),
+       mode: mode_string(state.run_spec),
+       workflow_name: workflow_name(state.run_spec),
+       current_task_kind: if(state.running?, do: mode_string(state.run_spec), else: nil),
        runtime_surface: state.runtime_surface,
        workspace_id: state.workspace && state.workspace.workspace_id,
        worktree_path: state.worktree && state.worktree.checkout_path,
@@ -131,12 +138,12 @@ defmodule ForgeloopV2.Babysitter do
      }, state}
   end
 
-  def handle_call(:start_run, _from, %State{running?: true} = state) do
+  def handle_call({:start_run, _opts}, _from, %State{running?: true} = state) do
     {:reply, {:error, :already_running}, state}
   end
 
-  def handle_call(:start_run, _from, %State{} = state) do
-    case do_start_run(state) do
+  def handle_call({:start_run, opts}, _from, %State{} = state) do
+    case do_start_run(state, opts) do
       {:ok, next_state} -> {:reply, :ok, next_state}
       {:error, reason} -> {:reply, {:error, reason}, %{state | last_result: {:error, reason}, last_action: :start_failed}}
     end
@@ -176,10 +183,10 @@ defmodule ForgeloopV2.Babysitter do
     {:noreply, state}
   end
 
-  defp do_start_run(%State{} = state) do
+  defp do_start_run(%State{} = state, run_opts) do
     with :ok <- ActiveRuntime.claim(state.config, "elixir"),
          {:ok, _cleaned} <- maybe_cleanup_stale(state),
-         {:ok, workspace} <- Workspace.from_config(state.config, branch: state.branch, mode: Atom.to_string(state.mode), kind: "babysitter"),
+         {:ok, workspace} <- Workspace.from_config(state.config, branch: state.branch, mode: mode_string(state.run_spec), kind: workspace_kind(state.run_spec)),
          {:ok, worktree} <- Worktree.prepare(state.config, workspace) do
       started_at = iso_now()
 
@@ -187,14 +194,15 @@ defmodule ForgeloopV2.Babysitter do
            :ok <- emit_started(state, workspace, worktree) do
         task =
           Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-            Loop.run(state.mode, state.config,
+            Loop.run(state.run_spec, state.config,
               driver: state.driver,
               driver_opts:
                 state.driver_opts
                 |> Keyword.put(:worktree, worktree)
-                |> Keyword.put(:runtime_branch, state.branch),
+                |> Keyword.put(:runtime_branch, state.branch)
+                |> maybe_put_runner_args(run_opts),
               surface: state.runtime_surface,
-              runtime_mode: Atom.to_string(state.mode),
+              runtime_mode: mode_string(state.run_spec),
               branch: state.branch
             )
           end)
@@ -228,7 +236,10 @@ defmodule ForgeloopV2.Babysitter do
   defp emit_started(%State{} = state, workspace, worktree) do
     Events.emit(state.config, :babysitter_started, %{
       "workspace_id" => workspace.workspace_id,
-      "mode" => Atom.to_string(state.mode),
+      "lane" => lane_string(state.run_spec),
+      "action" => action_string(state.run_spec),
+      "mode" => mode_string(state.run_spec),
+      "workflow_name" => workflow_name(state.run_spec),
       "branch" => state.branch,
       "worktree_path" => worktree.checkout_path,
       "surface" => "babysitter",
@@ -256,7 +267,10 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, :babysitter_heartbeat, %{
       "workspace_id" => state.workspace.workspace_id,
-      "mode" => Atom.to_string(state.mode),
+      "lane" => lane_string(state.run_spec),
+      "action" => action_string(state.run_spec),
+      "mode" => mode_string(state.run_spec),
+      "workflow_name" => workflow_name(state.run_spec),
       "branch" => state.branch,
       "last_heartbeat_at" => heartbeat_at
     })
@@ -276,7 +290,7 @@ defmodule ForgeloopV2.Babysitter do
     runtime_result =
       RuntimeLifecycle.transition(state.config, :paused_by_operator, :babysitter, %{
         surface: "babysitter",
-        mode: Atom.to_string(state.mode),
+        mode: mode_string(state.run_spec),
         reason: stop_reason(reason),
         branch: state.branch
       })
@@ -288,7 +302,10 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, :babysitter_stopped, %{
       "workspace_id" => state.workspace && state.workspace.workspace_id,
-      "mode" => Atom.to_string(state.mode),
+      "lane" => lane_string(state.run_spec),
+      "action" => action_string(state.run_spec),
+      "mode" => mode_string(state.run_spec),
+      "workflow_name" => workflow_name(state.run_spec),
       "branch" => state.branch,
       "runtime_surface" => state.runtime_surface,
       "reason" => Atom.to_string(reason),
@@ -328,7 +345,10 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, event_type, %{
       "workspace_id" => state.workspace && state.workspace.workspace_id,
-      "mode" => Atom.to_string(state.mode),
+      "lane" => lane_string(state.run_spec),
+      "action" => action_string(state.run_spec),
+      "mode" => mode_string(state.run_spec),
+      "workflow_name" => workflow_name(state.run_spec),
       "branch" => state.branch,
       "runtime_surface" => state.runtime_surface,
       "result" => inspect(result)
@@ -349,7 +369,10 @@ defmodule ForgeloopV2.Babysitter do
   defp active_run_payload(%State{} = state, workspace, worktree, status, started_at, heartbeat_at) do
     %{
       "workspace_id" => workspace.workspace_id,
-      "mode" => Atom.to_string(state.mode),
+      "lane" => lane_string(state.run_spec),
+      "action" => action_string(state.run_spec),
+      "mode" => mode_string(state.run_spec),
+      "workflow_name" => workflow_name(state.run_spec),
       "branch" => state.branch,
       "surface" => "babysitter",
       "runtime_surface" => state.runtime_surface,
@@ -411,7 +434,34 @@ defmodule ForgeloopV2.Babysitter do
   defp stop_reason(:kill), do: "Babysitter killed child run"
   defp stop_reason(_reason), do: "Babysitter paused child run"
 
-  defp default_driver(config) do
+  defp maybe_put_runner_args(driver_opts, run_opts) do
+    case Keyword.get(run_opts, :runner_args) do
+      runner_args when is_list(runner_args) -> Keyword.put(driver_opts, :runner_args, runner_args)
+      _ -> driver_opts
+    end
+  end
+
+  defp lane_string(nil), do: nil
+  defp lane_string(%RunSpec{} = spec), do: RunSpec.lane_string(spec)
+
+  defp action_string(nil), do: nil
+  defp action_string(%RunSpec{} = spec), do: RunSpec.action_string(spec)
+
+  defp mode_string(nil), do: nil
+  defp mode_string(%RunSpec{} = spec), do: RunSpec.runtime_mode(spec)
+
+  defp workflow_name(nil), do: nil
+  defp workflow_name(%RunSpec{workflow_name: workflow_name}), do: workflow_name
+
+  defp workspace_kind(nil), do: "babysitter"
+  defp workspace_kind(%RunSpec{} = spec), do: RunSpec.workspace_kind(spec)
+
+  defp normalize_run_spec(%RunSpec{} = spec), do: {:ok, spec}
+  defp normalize_run_spec(mode), do: RunSpec.checklist(mode)
+
+  defp default_driver(_config, %RunSpec{lane: :workflow}), do: ForgeloopV2.WorkDrivers.ShellLoop
+
+  defp default_driver(config, _run_spec) do
     if config.shell_driver_enabled, do: ForgeloopV2.WorkDrivers.ShellLoop, else: ForgeloopV2.WorkDrivers.Noop
   end
 

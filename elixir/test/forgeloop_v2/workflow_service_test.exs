@@ -52,7 +52,7 @@ defmodule ForgeloopV2.WorkflowServiceTest do
     assert detailed.run.output == "run ok\n"
   end
 
-  test "overview only exposes runtime state when the active surface is workflow" do
+  test "overview exposes workflow runtime state by workflow mode even when launched from another surface" do
     repo = create_repo_fixture!()
     create_workflow_package!(repo.repo_root, "alpha")
     config = config_for!(repo.repo_root)
@@ -61,7 +61,7 @@ defmodule ForgeloopV2.WorkflowServiceTest do
              RuntimeStateStore.write(config, %{
                status: "running",
                transition: "started",
-               surface: "workflow",
+               surface: "ui",
                mode: "workflow-run",
                reason: "alpha",
                requested_action: "",
@@ -69,7 +69,7 @@ defmodule ForgeloopV2.WorkflowServiceTest do
              })
 
     assert {:ok, overview} = WorkflowService.overview(config)
-    assert %ForgeloopV2.RuntimeState{surface: "workflow", mode: "workflow-run"} = overview.runtime_state
+    assert %ForgeloopV2.RuntimeState{surface: "ui", mode: "workflow-run"} = overview.runtime_state
 
     assert {:ok, _state} =
              RuntimeStateStore.write(config, %{
@@ -84,6 +84,36 @@ defmodule ForgeloopV2.WorkflowServiceTest do
 
     assert {:ok, overview} = WorkflowService.overview(config)
     assert overview.runtime_state == nil
+  end
+
+  test "overview overlays the currently managed workflow run" do
+    repo = create_repo_fixture!()
+    create_workflow_package!(repo.repo_root, "alpha")
+    create_workflow_package!(repo.repo_root, "zeta")
+    config = config_for!(repo.repo_root)
+
+    File.mkdir_p!(Path.dirname(Worktree.active_run_path(config)))
+
+    File.write!(
+      Worktree.active_run_path(config),
+      Jason.encode!(%{
+        "lane" => "workflow",
+        "action" => "run",
+        "mode" => "workflow-run",
+        "workflow_name" => "alpha",
+        "runtime_surface" => "openclaw",
+        "branch" => "main",
+        "started_at" => "2026-03-21T00:00:00Z",
+        "last_heartbeat_at" => "2026-03-21T00:00:01Z",
+        "status" => "running"
+      }) <> "\n"
+    )
+
+    assert {:ok, overview} = WorkflowService.overview(config)
+    [alpha, zeta] = overview.workflows
+    assert alpha.entry.name == "alpha"
+    assert %ForgeloopV2.WorkflowService.ActiveRun{workflow_name: "alpha", action: :run, runtime_surface: "openclaw"} = alpha.active_run
+    assert zeta.active_run == nil
   end
 
   test "fetch propagates invalid workflow names and missing workflows" do

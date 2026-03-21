@@ -19,6 +19,7 @@ const refs = {
   providerBody: document.getElementById("provider-body"),
   backlogBody: document.getElementById("backlog-body"),
   trackerBody: document.getElementById("tracker-body"),
+  workflowsBody: document.getElementById("workflows-body"),
   questionsBody: document.getElementById("questions-body"),
   escalationsBody: document.getElementById("escalations-body"),
   eventsBody: document.getElementById("events-body")
@@ -48,6 +49,7 @@ async function boot() {
 
 function bindEvents() {
   refs.controlsBody.addEventListener("click", handleControlClick);
+  refs.workflowsBody.addEventListener("click", handleControlClick);
   refs.questionsBody.addEventListener("input", handleQuestionInput);
   refs.questionsBody.addEventListener("click", handleQuestionClick);
 }
@@ -152,6 +154,7 @@ function applySnapshot(snapshot) {
   renderProviders(snapshot.provider_health);
   renderBacklog(snapshot.backlog);
   renderTracker(snapshot.tracker);
+  renderWorkflows(snapshot.workflows || {});
   renderQuestions(snapshot.questions || []);
   renderEscalations(snapshot.escalations || []);
   renderEvents(snapshot.events || []);
@@ -346,6 +349,60 @@ function renderTracker(tracker) {
   `).join("")}`;
 }
 
+function renderWorkflows(workflowOverview) {
+  const workflows = workflowOverview && workflowOverview.workflows ? workflowOverview.workflows : [];
+  const runtime = workflowOverview && workflowOverview.runtime_state ? workflowOverview.runtime_state : null;
+
+  if (!workflows.length) {
+    refs.workflowsBody.className = "stack empty";
+    refs.workflowsBody.textContent = "No workflow packs are available yet.";
+    return;
+  }
+
+  const babysitter = state.snapshot && state.snapshot.babysitter ? state.snapshot.babysitter : {};
+  const running = Boolean(babysitter["running?"]);
+
+  refs.workflowsBody.className = "stack";
+  refs.workflowsBody.innerHTML = `${runtime ? `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge(runtime.status || "running", badgeClass(runtime.status || "running"))}
+        ${badge(runtime.mode || "workflow", "info")}
+        ${badge(runtime.surface || "unknown", "purple")}
+      </div>
+      <h3>${escapeHtml(runtime.reason || "Workflow runtime is active")}</h3>
+      <p>Workflow runtime state is driven by the same canonical runtime JSON used by the rest of the control plane.</p>
+    </article>
+  ` : ""}${workflows.map((workflow) => {
+    const entry = workflow.entry || {};
+    const preflight = workflow.preflight || {};
+    const run = workflow.run || {};
+    const activeRun = workflow.active_run || null;
+    const workflowName = entry.name || "workflow";
+    const activeBadge = activeRun ? badge(`active ${activeRun.action || "run"}`, "warn") : "";
+    const latestLabel = workflow.latest_activity_kind ? `${workflow.latest_activity_kind} @ ${workflow.latest_activity_at || "unknown"}` : "no artifacts yet";
+
+    return `
+      <article class="list-card workflow-card">
+        <div class="list-meta">
+          ${badge(workflowName, "info")}
+          ${badge(preflight.status || "missing", badgeClass(preflight.status || "missing"))}
+          ${badge(run.status || "missing", badgeClass(run.status || "missing"))}
+          ${activeBadge}
+        </div>
+        <h3>${escapeHtml(workflowName)}</h3>
+        <p>Graph: <code>${escapeHtml(entry.graph_file || "workflow.dot")}</code></p>
+        <p>Latest activity: ${escapeHtml(latestLabel)}</p>
+        ${activeRun ? `<p>Active via <code>${escapeHtml(activeRun.runtime_surface || "unknown")}</code> on <code>${escapeHtml(activeRun.branch || "unknown")}</code>.</p>` : ""}
+        <div class="control-buttons">
+          ${controlButton("workflow-preflight", "Preflight", { disabled: running || isPending(`workflow:${workflowName}:preflight`), workflowName })}
+          ${controlButton("workflow-run", "Run", { disabled: running || isPending(`workflow:${workflowName}:run`), workflowName })}
+        </div>
+      </article>
+    `;
+  }).join("")}`;
+}
+
 function renderQuestions(questions) {
   if (!questions.length) {
     refs.questionsBody.className = "stack empty";
@@ -489,6 +546,20 @@ async function handleControlClick(event) {
     }, {
       conflictText: "A babysitter run is already active. Wait for it to finish before launching another one."
     });
+    return;
+  }
+
+  if (action === "workflow-preflight" || action === "workflow-run") {
+    const workflowName = button.dataset.workflowName;
+    const workflowAction = action === "workflow-preflight" ? "preflight" : "run";
+    const pendingKey = `workflow:${workflowName}:${workflowAction}`;
+
+    await runAction(pendingKey, async () => {
+      await postJson(`/api/workflows/${encodeURIComponent(workflowName)}/${workflowAction}`, { surface: "ui" });
+      await refreshOverview(`${workflowName} ${workflowAction} launched via UI surface.`);
+    }, {
+      conflictText: "A babysitter run is already active. Wait for it to finish before launching another workflow action."
+    });
   }
 }
 
@@ -571,6 +642,7 @@ async function runAction(key, fn, opts) {
     setPending(key, false);
     if (state.snapshot) {
       renderControls(state.snapshot);
+      renderWorkflows(state.snapshot.workflows || {});
     }
   }
 }
@@ -668,9 +740,10 @@ function controlButton(action, label, options) {
   if (action === "pause") classes.push("danger");
   if (action === "clear-pause") classes.push("secondary");
   if (action === "replan") classes.push("secondary");
-  if (action === "run-plan" || action === "run-build") classes.push("primary");
+  if (["run-plan", "run-build", "workflow-preflight", "workflow-run"].includes(action)) classes.push("primary");
 
-  return `<button class="${classes.join(" ")}" data-action="${escapeHtml(action)}" ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  const workflowNameAttr = opts.workflowName ? ` data-workflow-name="${escapeHtml(opts.workflowName)}"` : "";
+  return `<button class="${classes.join(" ")}" data-action="${escapeHtml(action)}"${workflowNameAttr} ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
 }
 
 function metric(label, value) {

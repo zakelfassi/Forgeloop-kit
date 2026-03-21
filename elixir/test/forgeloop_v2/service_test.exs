@@ -427,6 +427,103 @@ defmodule ForgeloopV2.ServiceTest do
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
   end
 
+  test "workflow endpoints launch managed workflow runs and expose live workflow status" do
+    repo =
+      create_git_repo_fixture!(
+        plan_content: "- [ ] build\n",
+        loop_script_body: "#!/usr/bin/env bash\nset -euo pipefail\necho noop\n"
+      )
+    create_workflow_package!(repo.repo_root, "alpha")
+    layout = create_ui_layout!(repo.repo_root)
+
+    runner =
+      write_executable!(
+        Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"),
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ \"${1:-}\" != \"run\" ]]; then
+          echo \"unexpected:$*\" >&2
+          exit 2
+        fi
+        shift
+        mode=run
+        if [[ \"${1:-}\" == \"--preflight\" ]]; then
+          mode=preflight
+          shift
+        fi
+        workflow=\"${1:-}\"
+        echo \"ok:${mode}:${workflow}\"
+        sleep 1
+        """
+      )
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: false,
+        workflow_runner: runner,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    start_payload = post_json!(base_url <> "/api/workflows/alpha/preflight", %{})
+    assert start_payload["ok"] == true
+    assert start_payload["data"]["lane"] == "workflow"
+    assert start_payload["data"]["action"] == "preflight"
+    assert start_payload["data"]["workflow"] == "alpha"
+    assert start_payload["data"]["surface"] == "ui"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] end)
+
+    babysitter_payload = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter_payload["lane"] == "workflow"
+    assert babysitter_payload["action"] == "preflight"
+    assert babysitter_payload["mode"] == "workflow-preflight"
+    assert babysitter_payload["workflow_name"] == "alpha"
+    assert babysitter_payload["runtime_surface"] == "ui"
+
+    workflow_payload = get_json!(base_url <> "/api/workflows/alpha")["data"]
+    assert workflow_payload["active_run"]["workflow_name"] == "alpha"
+    assert workflow_payload["active_run"]["action"] == "preflight"
+    assert workflow_payload["active_run"]["runtime_surface"] == "ui"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end, 4_000)
+    assert File.read!(Path.join([config.runtime_dir, "workflows", "alpha", "last-preflight.txt"])) =~ "ok:preflight:alpha"
+  end
+
+  test "workflow endpoints return stable workflow-specific error codes" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: false,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    invalid_runner_args = post_json_response!(base_url <> "/api/workflows/alpha/run", %{"runner_args" => [1]})
+    assert invalid_runner_args.status == 400
+    assert invalid_runner_args.body["error"]["reason"] == "invalid_runner_args"
+
+    missing = post_json_response!(base_url <> "/api/workflows/missing/run", %{})
+    assert missing.status == 404
+    assert missing.body["error"]["reason"] == "workflow_not_found"
+  end
+
   test "manual control runs accept the openclaw runtime surface" do
     repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
     layout = create_ui_layout!(repo.repo_root)

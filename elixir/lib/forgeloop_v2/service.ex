@@ -8,7 +8,7 @@ defmodule ForgeloopV2.ControlPlane.State do
     :started_at,
     :babysitter_pid,
     :babysitter_ref,
-    :babysitter_mode,
+    :babysitter_run_spec,
     :babysitter_branch,
     :babysitter_runtime_surface,
     :last_action,
@@ -28,9 +28,11 @@ defmodule ForgeloopV2.ControlPlane do
     Events,
     PlanStore,
     ProviderHealth,
+    RunSpec,
     RuntimeLifecycle,
     RuntimeStateStore,
     Tracker,
+    WorkflowCatalog,
     WorkflowService,
     Worktree
   }
@@ -106,6 +108,11 @@ defmodule ForgeloopV2.ControlPlane do
     GenServer.call(server, {:start_run, mode, opts}, :infinity)
   end
 
+  @spec start_workflow(GenServer.server(), String.t(), :preflight | :run | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def start_workflow(server \\ __MODULE__, workflow_name, action, opts \\ []) do
+    GenServer.call(server, {:start_workflow, workflow_name, action, opts}, :infinity)
+  end
+
   @spec stop_run(GenServer.server(), :pause | :kill | String.t()) :: {:ok, map()} | {:error, term()}
   def stop_run(server \\ __MODULE__, reason \\ :pause) do
     GenServer.call(server, {:stop_run, reason}, :infinity)
@@ -160,7 +167,7 @@ defmodule ForgeloopV2.ControlPlane do
        started_at: state.started_at,
          last_action: state.last_action,
          last_result: state.last_result,
-         babysitter_mode: state.babysitter_mode,
+         babysitter_mode: mode_from_run_spec(state.babysitter_run_spec),
          babysitter_branch: state.babysitter_branch,
          babysitter_runtime_surface: state.babysitter_runtime_surface
      }, state}
@@ -306,6 +313,13 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  def handle_call({:start_workflow, workflow_name, action, opts}, _from, %State{} = state) do
+    case do_start_workflow(state, workflow_name, action, opts) do
+      {:ok, payload, next_state} -> {:reply, {:ok, payload}, next_state}
+      {:error, reason, next_state} -> {:reply, {:error, reason}, next_state}
+    end
+  end
+
   def handle_call({:stop_run, reason}, _from, %State{} = state) do
     case do_stop_run(state, reason) do
       {:ok, payload, next_state} -> {:reply, {:ok, payload}, next_state}
@@ -366,29 +380,56 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp do_start_run(%State{} = state, mode, opts) do
     with {:ok, normalized_mode} <- normalize_mode(mode),
+         {:ok, run_spec} <- RunSpec.checklist(normalized_mode),
          {:ok, runtime_surface} <- normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
          {:ok, babysitter} <- babysitter_status(state, true),
          :ok <- ensure_start_allowed(babysitter),
-         {:ok, next_state, pid} <- ensure_babysitter_instance(state, normalized_mode, runtime_surface, opts),
-         :ok <- Babysitter.start_run(pid),
+         {:ok, payload, next_state} <- do_start_managed_run(state, run_spec, runtime_surface, opts) do
+      {:ok, payload, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
+    else
+      {:error, reason} ->
+        {:error, reason, %{state | last_action: :start_run_failed, last_result: {:error, reason}}}
+    end
+  end
+
+  defp do_start_workflow(%State{} = state, workflow_name, action, opts) do
+    with {:ok, run_spec} <- normalize_workflow_run_spec(action, workflow_name),
+         {:ok, runtime_surface} <- normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "workflow")),
+         {:ok, runner_args} <- normalize_runner_args(Keyword.get(opts, :runner_args, [])),
+         {:ok, babysitter} <- babysitter_status(state, true),
+         :ok <- ensure_start_allowed(babysitter),
+         :ok <- ensure_workflow_exists(state.config, workflow_name),
+         {:ok, payload, next_state} <- do_start_managed_run(state, run_spec, runtime_surface, Keyword.put(opts, :runner_args, runner_args)) do
+      {:ok, payload, %{next_state | last_action: {:start_workflow, action, workflow_name}, last_result: :ok}}
+    else
+      {:error, reason} ->
+        {:error, reason, %{state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
+    end
+  end
+
+  defp do_start_managed_run(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
+    with {:ok, next_state, pid} <- ensure_babysitter_instance(state, run_spec, runtime_surface, opts),
+         :ok <- Babysitter.start_run(pid, start_run_opts(opts)),
          {:ok, updated_babysitter} <- babysitter_status(next_state, true) do
       Events.emit(state.config, :operator_action, %{
         "surface" => "service",
-        "action" => "start_run",
-        "mode" => Atom.to_string(normalized_mode),
+        "action" => if(run_spec.lane == :workflow, do: "start_workflow", else: "start_run"),
+        "lane" => RunSpec.lane_string(run_spec),
+        "mode" => RunSpec.runtime_mode(run_spec),
+        "workflow_name" => run_spec.workflow_name,
         "runtime_surface" => runtime_surface,
         "recorded_at" => iso_now()
       })
 
       {:ok,
        %{
-         mode: Atom.to_string(normalized_mode),
+         lane: RunSpec.lane_string(run_spec),
+         action: RunSpec.action_string(run_spec),
+         mode: RunSpec.runtime_mode(run_spec),
+         workflow: run_spec.workflow_name,
          surface: runtime_surface,
          babysitter: updated_babysitter
-       }, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
-    else
-      {:error, reason} ->
-        {:error, reason, %{state | last_action: :start_run_failed, last_result: {:error, reason}}}
+       }, next_state}
     end
   end
 
@@ -497,9 +538,15 @@ defmodule ForgeloopV2.ControlPlane do
     {:ok,
      %{
        managed?: not is_nil(managed_snapshot),
-       mode: state.babysitter_mode,
-       branch: state.babysitter_branch,
-       runtime_surface: state.babysitter_runtime_surface,
+       lane: lane_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "lane"),
+       action: action_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "action"),
+       mode: mode_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "mode"),
+       workflow_name: workflow_name_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "workflow_name"),
+       branch: state.babysitter_branch || Map.get(active_run || %{}, "branch"),
+       runtime_surface:
+         state.babysitter_runtime_surface ||
+           (managed_snapshot && managed_snapshot.runtime_surface) ||
+           Map.get(active_run || %{}, "runtime_surface"),
        snapshot: managed_snapshot,
        active_run: active_run,
        running?: babysitter_running?(managed_snapshot, active_run)
@@ -543,11 +590,11 @@ defmodule ForgeloopV2.ControlPlane do
   defp ensure_start_allowed(%{running?: true, active_run: active_run}), do: {:error, {:babysitter_unmanaged_active, active_run}}
   defp ensure_start_allowed(_), do: :ok
 
-  defp ensure_babysitter_instance(%State{} = state, mode, runtime_surface, opts) do
+  defp ensure_babysitter_instance(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
     branch = opts[:branch] || state.config.default_branch
 
     cond do
-      reusable_babysitter?(state, mode, branch, runtime_surface) ->
+      reusable_babysitter?(state, run_spec, branch, runtime_surface) ->
         {:ok, state, state.babysitter_pid}
 
       is_pid(state.babysitter_pid) ->
@@ -555,20 +602,20 @@ defmodule ForgeloopV2.ControlPlane do
           Process.exit(state.babysitter_pid, :shutdown)
         end
 
-        start_babysitter(state, mode, branch, runtime_surface)
+        start_babysitter(state, run_spec, branch, runtime_surface)
 
       true ->
-        start_babysitter(state, mode, branch, runtime_surface)
+        start_babysitter(state, run_spec, branch, runtime_surface)
     end
   end
 
-  defp start_babysitter(%State{} = state, mode, branch, runtime_surface) do
+  defp start_babysitter(%State{} = state, %RunSpec{} = run_spec, branch, runtime_surface) do
     case Babysitter.start_link(
            config: state.config,
-           mode: mode,
+           run_spec: run_spec,
            branch: branch,
            runtime_surface: runtime_surface,
-           driver: state.driver,
+           driver: driver_for_run_spec(state.driver, run_spec),
            driver_opts: state.driver_opts,
            name: nil
          ) do
@@ -580,7 +627,7 @@ defmodule ForgeloopV2.ControlPlane do
          %{state |
            babysitter_pid: pid,
            babysitter_ref: ref,
-           babysitter_mode: mode,
+           babysitter_run_spec: run_spec,
            babysitter_branch: branch,
            babysitter_runtime_surface: runtime_surface}, pid}
 
@@ -592,19 +639,22 @@ defmodule ForgeloopV2.ControlPlane do
   defp reusable_babysitter?(
          %State{
            babysitter_pid: pid,
-           babysitter_mode: mode,
+           babysitter_run_spec: run_spec,
            babysitter_branch: branch,
            babysitter_runtime_surface: runtime_surface
          },
-         mode,
+         %RunSpec{} = requested_spec,
          branch,
          runtime_surface
        )
        when is_pid(pid) do
-    Process.alive?(pid)
+    Process.alive?(pid) and RunSpec.same_instance?(run_spec, requested_spec)
   end
 
   defp reusable_babysitter?(_, _, _, _), do: false
+
+  defp driver_for_run_spec(ForgeloopV2.WorkDrivers.Noop, %RunSpec{lane: :workflow}), do: ForgeloopV2.WorkDrivers.ShellLoop
+  defp driver_for_run_spec(driver, _run_spec), do: driver
 
   defp managed_babysitter_pid(%State{babysitter_pid: pid}) when is_pid(pid) do
     if Process.alive?(pid), do: {:ok, pid}, else: {:error, :babysitter_not_managed}
@@ -617,7 +667,7 @@ defmodule ForgeloopV2.ControlPlane do
       state
       | babysitter_pid: nil,
         babysitter_ref: nil,
-        babysitter_mode: nil,
+        babysitter_run_spec: nil,
         babysitter_branch: nil,
         babysitter_runtime_surface: nil
     }
@@ -629,9 +679,35 @@ defmodule ForgeloopV2.ControlPlane do
   defp normalize_mode("build"), do: {:ok, :build}
   defp normalize_mode(other), do: {:error, {:invalid_mode, other}}
 
+  defp normalize_workflow_run_spec(action, workflow_name) do
+    with {:ok, normalized_action} <- normalize_workflow_action(action) do
+      RunSpec.workflow(normalized_action, workflow_name)
+    end
+  end
+
+  defp normalize_workflow_action(:preflight), do: {:ok, :preflight}
+  defp normalize_workflow_action(:run), do: {:ok, :run}
+  defp normalize_workflow_action("preflight"), do: {:ok, :preflight}
+  defp normalize_workflow_action("run"), do: {:ok, :run}
+  defp normalize_workflow_action(other), do: {:error, {:invalid_workflow_action, other}}
+
+  defp normalize_runner_args(nil), do: {:ok, []}
+  defp normalize_runner_args([]), do: {:ok, []}
+
+  defp normalize_runner_args(args) when is_list(args) do
+    if Enum.all?(args, &is_binary/1) do
+      {:ok, args}
+    else
+      {:error, {:invalid_runner_args, args}}
+    end
+  end
+
+  defp normalize_runner_args(other), do: {:error, {:invalid_runner_args, other}}
+
   defp normalize_runtime_surface("ui"), do: {:ok, "ui"}
   defp normalize_runtime_surface("openclaw"), do: {:ok, "openclaw"}
   defp normalize_runtime_surface("babysitter"), do: {:ok, "babysitter"}
+  defp normalize_runtime_surface("workflow"), do: {:ok, "workflow"}
   defp normalize_runtime_surface(other), do: {:error, {:invalid_runtime_surface, other}}
 
   defp normalize_stop_reason(:pause), do: {:ok, :pause}
@@ -639,6 +715,33 @@ defmodule ForgeloopV2.ControlPlane do
   defp normalize_stop_reason("pause"), do: {:ok, :pause}
   defp normalize_stop_reason("kill"), do: {:ok, :kill}
   defp normalize_stop_reason(other), do: {:error, {:invalid_stop_reason, other}}
+
+  defp start_run_opts(opts) do
+    case Keyword.get(opts, :runner_args) do
+      runner_args when is_list(runner_args) -> [runner_args: runner_args]
+      _ -> []
+    end
+  end
+
+  defp ensure_workflow_exists(config, workflow_name) do
+    case WorkflowCatalog.fetch(config, workflow_name) do
+      {:ok, _entry} -> :ok
+      :missing -> {:error, {:workflow_not_found, workflow_name}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp lane_from_run_spec(nil), do: nil
+  defp lane_from_run_spec(%RunSpec{} = run_spec), do: RunSpec.lane_string(run_spec)
+
+  defp action_from_run_spec(nil), do: nil
+  defp action_from_run_spec(%RunSpec{} = run_spec), do: RunSpec.action_string(run_spec)
+
+  defp mode_from_run_spec(nil), do: nil
+  defp mode_from_run_spec(%RunSpec{} = run_spec), do: RunSpec.runtime_mode(run_spec)
+
+  defp workflow_name_from_run_spec(nil), do: nil
+  defp workflow_name_from_run_spec(%RunSpec{} = run_spec), do: run_spec.workflow_name
 
   defp default_driver(config) do
     if config.shell_driver_enabled do
@@ -665,7 +768,7 @@ defmodule ForgeloopV2.ServiceJSON do
   alias ForgeloopV2.Tracker.Issue
   alias ForgeloopV2.Tracker.RepoLocal.Overview, as: TrackerOverview
   alias ForgeloopV2.WorkflowCatalog.Entry
-  alias ForgeloopV2.WorkflowService.{ActionSnapshot, Overview, WorkflowSummary}
+  alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun, Overview, WorkflowSummary}
 
   @spec overview(map()) :: map()
   def overview(payload) do
@@ -776,6 +879,7 @@ defmodule ForgeloopV2.ServiceJSON do
       entry: workflow_entry(summary.entry),
       preflight: action_snapshot(summary.preflight),
       run: action_snapshot(summary.run),
+      active_run: workflow_active_run(summary.active_run),
       latest_activity_kind: summary.latest_activity_kind,
       latest_activity_at: summary.latest_activity_at
     }
@@ -783,10 +887,13 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def provider_health(payload) when is_map(payload), do: sanitize(payload)
 
-  def babysitter(%{managed?: managed?, mode: mode, branch: branch, runtime_surface: runtime_surface, snapshot: snapshot, active_run: active_run, running?: running?}) do
+  def babysitter(%{managed?: managed?, lane: lane, action: action, mode: mode, workflow_name: workflow_name, branch: branch, runtime_surface: runtime_surface, snapshot: snapshot, active_run: active_run, running?: running?}) do
     %{
       managed?: managed?,
+      lane: lane,
+      action: action,
       mode: mode,
+      workflow_name: workflow_name,
       branch: branch,
       runtime_surface: runtime_surface,
       running?: running?,
@@ -822,6 +929,21 @@ defmodule ForgeloopV2.ServiceJSON do
       size_bytes: snapshot.size_bytes,
       output: snapshot.output,
       error: serialize_error(snapshot.error)
+    }
+  end
+
+  defp workflow_active_run(nil), do: nil
+
+  defp workflow_active_run(%ActiveRun{} = active_run) do
+    %{
+      workflow_name: active_run.workflow_name,
+      action: active_run.action,
+      mode: active_run.mode,
+      status: active_run.status,
+      runtime_surface: active_run.runtime_surface,
+      branch: active_run.branch,
+      started_at: active_run.started_at,
+      last_heartbeat_at: active_run.last_heartbeat_at
     }
   end
 
@@ -1251,6 +1373,31 @@ defmodule ForgeloopV2.Service do
 
   defp route(%{method: "POST", path: path, json: body}, _config, control_plane_pid) do
     case String.split(path, "/", trim: true) do
+      ["api", "workflows", workflow_name, "preflight"] ->
+        case ControlPlane.start_workflow(
+               control_plane_pid,
+               URI.decode(workflow_name),
+               "preflight",
+               branch: Map.get(body, "branch"),
+               runtime_surface: Map.get(body, "surface", "ui")
+             ) do
+          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+          {:error, reason} -> error_response(status_for_error(reason), reason)
+        end
+
+      ["api", "workflows", workflow_name, "run"] ->
+        case ControlPlane.start_workflow(
+               control_plane_pid,
+               URI.decode(workflow_name),
+               "run",
+               branch: Map.get(body, "branch"),
+               runtime_surface: Map.get(body, "surface", "ui"),
+               runner_args: Map.get(body, "runner_args", [])
+             ) do
+          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+          {:error, reason} -> error_response(status_for_error(reason), reason)
+        end
+
       ["api", "questions", question_id, "answer"] ->
         case ControlPlane.answer_question(
                control_plane_pid,
@@ -1406,6 +1553,10 @@ defmodule ForgeloopV2.Service do
   defp error_code({:blank_answer, _}), do: "blank_answer"
   defp error_code({:question_not_found, _}), do: "question_not_found"
   defp error_code({:invalid_mode, _}), do: "invalid_mode"
+  defp error_code({:invalid_workflow_action, _}), do: "invalid_workflow_action"
+  defp error_code({:invalid_workflow_name, _}), do: "invalid_workflow_name"
+  defp error_code({:invalid_runner_args, _}), do: "invalid_runner_args"
+  defp error_code({:workflow_not_found, _}), do: "workflow_not_found"
   defp error_code({:invalid_runtime_surface, _}), do: "invalid_runtime_surface"
   defp error_code({:invalid_stop_reason, _}), do: "invalid_stop_reason"
   defp error_code({:babysitter_unmanaged_active, _}), do: "babysitter_unmanaged_active"
@@ -1421,12 +1572,16 @@ defmodule ForgeloopV2.Service do
   defp status_for_error({:missing_expected_revision, _}), do: 400
   defp status_for_error({:blank_answer, _}), do: 400
   defp status_for_error({:invalid_mode, _}), do: 400
+  defp status_for_error({:invalid_workflow_action, _}), do: 400
+  defp status_for_error({:invalid_workflow_name, _}), do: 400
+  defp status_for_error({:invalid_runner_args, _}), do: 400
   defp status_for_error({:invalid_runtime_surface, _}), do: 400
   defp status_for_error({:invalid_stop_reason, _}), do: 400
   defp status_for_error(:invalid_json_body), do: 400
   defp status_for_error(:unsupported_content_type), do: 415
   defp status_for_error(:invalid_http_request), do: 400
   defp status_for_error({:question_not_found, _}), do: 404
+  defp status_for_error({:workflow_not_found, _}), do: 404
   defp status_for_error(:not_found), do: 404
   defp status_for_error({:question_conflict, _, _}), do: 409
   defp status_for_error({:babysitter_unmanaged_active, _}), do: 409

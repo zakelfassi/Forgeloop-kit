@@ -1434,13 +1434,14 @@ flowchart LR
                   <td>Tracking</td>
                   <td>STATUS.md</td>
                   <td>progress.txt</td>
-                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt (and Elixir read-side visibility)</td>
+                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt (and managed Elixir control/status visibility)</td>
                 </tr>
               </tbody>
             </table>
             <p class="subtle" style="margin-top: 12px">
               Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. The HUD/OpenClaw plane now also
-              projects a read-only repo-local tracker view from backlog items + workflow packs, while tracker/<code>prd.json</code>
+              projects a read-only repo-local tracker view from backlog items + workflow packs and can trigger managed workflow
+              <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, while tracker/<code>prd.json</code>
               unification remains a later slice and workflow metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
             </p>
           </div>

@@ -29,10 +29,13 @@ fi
 workflow="${1:-}"
 shift || true
 
-printf 'mode=%s workflow=%s state_root=%s extra=%s\n' \
+printf 'mode=%s workflow=%s state_root=%s surface=%s runtime_mode=%s pwd=%s extra=%s\n' \
   "$mode" \
   "$workflow" \
   "${FORGELOOP_WORKFLOW_STATE_ROOT:-}" \
+  "${FORGELOOP_RUNTIME_SURFACE:-}" \
+  "${FORGELOOP_RUNTIME_MODE:-}" \
+  "$(pwd)" \
   "$*" >> "${TEST_RECORD_FILE:?}"
 
 if [[ "$workflow" == "failing" ]]; then
@@ -54,6 +57,15 @@ printf 'version = 1\n' > "$tmp_repo/workflows/zeta/workflow.toml"
 printf 'digraph Failing {}\n' > "$tmp_repo/workflows/failing/workflow.dot"
 printf 'version = 1\n' > "$tmp_repo/workflows/failing/workflow.toml"
 printf 'digraph Incomplete {}\n' > "$tmp_repo/workflows/incomplete/workflow.dot"
+printf '.forgeloop-test/\n.workflow-runner.log\n' > "$tmp_repo/.gitignore"
+(
+  cd "$tmp_repo"
+  git init -b main >/dev/null
+  git config user.name 'Forgeloop Test' >/dev/null
+  git config user.email 'forgeloop@example.com' >/dev/null
+  git add . >/dev/null
+  git commit -m 'workflow fixture' >/dev/null
+)
 
 assert_contains() {
   local haystack="$1"
@@ -94,6 +106,9 @@ preflight_output="$(cd "$tmp_repo" && ./forgeloop.sh workflow preflight alpha)"
 assert_contains "$preflight_output" "ok:preflight:alpha"
 assert_file_contains "$record_file" "mode=preflight workflow=alpha"
 assert_file_contains "$record_file" "state_root=$tmp_repo/.forgeloop-test/workflows/state"
+assert_file_contains "$record_file" "surface=workflow"
+assert_file_contains "$record_file" "runtime_mode=workflow-preflight"
+assert_file_contains "$record_file" "/.forgeloop-test/v2/workspaces/"
 assert_file_contains "$tmp_repo/.forgeloop-test/workflows/alpha/last-preflight.txt" "ok:preflight:alpha"
 
 python3 - <<'PY' "$tmp_repo/.forgeloop-test/runtime-state.json"
@@ -110,6 +125,8 @@ run_output="$(cd "$tmp_repo" && ./forgeloop.sh workflow run zeta --no-retro)"
 assert_contains "$run_output" "ok:run:zeta"
 assert_file_contains "$tmp_repo/.forgeloop-test/workflows/zeta/last-run.txt" "ok:run:zeta"
 assert_file_contains "$record_file" "mode=run workflow=zeta"
+assert_file_contains "$record_file" "surface=workflow"
+assert_file_contains "$record_file" "runtime_mode=workflow-run"
 assert_file_contains "$record_file" "extra=--no-retro"
 
 set +e

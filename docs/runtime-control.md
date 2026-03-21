@@ -151,7 +151,7 @@ That service reuses the same file-first control plane rather than introducing a 
 - the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`)
 - questions and escalations
 - recent JSONL events
-- workflow visibility snapshots
+- workflow status snapshots plus managed workflow actions
 - provider health derived from the existing provider-state file + provider events
 - babysitter status plus manual babysitter `plan` / `build` start/stop
 - a live SSE snapshot stream for browser updates
@@ -167,12 +167,13 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
 - in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
 - the same service/HUD/OpenClaw plane now also exposes a read-only repo-local tracker projection for canonical backlog items + workflow packs without mutating external trackers yet
+- manual workflow `preflight` / `run` actions now flow through the same babysitter/worktree/runtime-state path as other managed runs instead of bypassing it
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
 
 - daemon-integrated babysitter scheduling
-- workflow-lane babysitting
+- workflow-aware daemon scheduling / richer workflow history beyond the current active-run + artifact view
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 
 ## Proof suite
@@ -196,7 +197,7 @@ That suite is curated to demonstrate:
 
 The repo now also contains an experimental `elixir/` foundation that preserves the same operator-facing artifacts and `.forgeloop/runtime-state.json` contract for the phase-1 safety nucleus.
 
-For now, deploy/log-ingest orchestration, external tracker mutation/integration, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.
+For now, deploy/log-ingest orchestration, external tracker mutation/integration, native graph execution, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.
 
 The current coexistence rule is intentionally narrow:
 

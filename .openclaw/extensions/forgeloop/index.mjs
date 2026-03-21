@@ -36,6 +36,7 @@ function buildOverviewTool(api) {
       const trackerIssues = Array.isArray(tracker.issues) ? tracker.issues : [];
       const events = Array.isArray(data.events) ? data.events : [];
       const workflows = data.workflows?.workflows || [];
+      const activeWorkflowCount = workflows.filter((workflow) => workflow.active_run).length;
       const babysitter = data.babysitter || {};
       const flags = data.control_flags || {};
 
@@ -50,7 +51,7 @@ function buildOverviewTool(api) {
         `Escalations: ${escalations.length}`,
         `Tracker: ${trackerIssues.length} projected repo-local issues`,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
-        `Workflows: ${workflows.length} discovered`,
+        `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active)`,
         `Recent events: ${events.length}`,
         "",
         JSON.stringify(data, null, 2),
@@ -72,8 +73,9 @@ function buildControlTool(api) {
       properties: {
         action: {
           type: "string",
-          enum: ["pause", "clear_pause", "replan", "plan", "build", "stop"]
+          enum: ["pause", "clear_pause", "replan", "plan", "build", "workflow_preflight", "workflow_run", "stop"]
         },
+        workflowName: { type: "string" },
         branch: { type: "string" },
         stopReason: { type: "string", enum: ["pause", "kill"], default: "pause" }
       }
@@ -105,6 +107,22 @@ function buildControlTool(api) {
             })
           });
           break;
+        case "workflow_preflight":
+        case "workflow_run": {
+          if (!params.workflowName) {
+            throw new Error("workflowName is required for workflow actions");
+          }
+
+          const workflowAction = action === "workflow_preflight" ? "preflight" : "run";
+          payload = await requestJson(api, `/api/workflows/${encodeURIComponent(params.workflowName)}/${workflowAction}`, {
+            method: "POST",
+            body: compact({
+              branch: params.branch,
+              surface: "openclaw"
+            })
+          });
+          break;
+        }
         case "stop":
           payload = await requestJson(api, "/api/babysitter/stop", {
             method: "POST",

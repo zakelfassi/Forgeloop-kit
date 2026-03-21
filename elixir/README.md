@@ -20,13 +20,13 @@ Current scope:
 - a small GenServer daemon
 - provider auth/rate-limit failover unit coverage
 - locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` so pause/replan flags and question answers can be updated safely without faking runtime recovery
-- workflow package catalog discovery plus a read-only visibility service for latest workflow preflight/run artifacts in the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
+- workflow package catalog discovery plus managed workflow `preflight` / `run` actions, active-run status, and latest workflow preflight/run artifacts in the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
 - a manual single-child babysitter/supervisor that launches `Loop.run/3` inside a disposable git worktree while keeping repo-root control artifacts canonical
 - a loopback-only control-plane service that exposes runtime, the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), a read-only repo-local tracker projection, questions, escalations, events, workflows, provider health, and babysitter start/stop/status over the existing file-first control plane
-- a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and interactive controls for pause/clear-pause/replan/question answer-resolve/manual plan-build runs, all still backed by the same canonical files and babysitter path
-- a repo-local OpenClaw workspace plugin seam at `../.openclaw/extensions/forgeloop/` that talks to the same loopback service and uses `surface: "openclaw"` for manual runs
+- a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and interactive controls for pause/clear-pause/replan/question answer-resolve/manual plan-build runs plus workflow `preflight` / `run`, all still backed by the same canonical files and babysitter path
+- a repo-local OpenClaw workspace plugin seam at `../.openclaw/extensions/forgeloop/` that talks to the same loopback service, uses `surface: "openclaw"` for manual runs, and can trigger managed workflow actions over that same control plane
 
-The next integration slice is still ahead of us: daemon scheduling through the babysitter, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, and workflow-lane babysitting on top of the current OpenClaw/UI/service seams.
+The next integration slice is still ahead of us: daemon scheduling through the babysitter, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, richer workflow outcome/history projection, and workflow-aware daemon scheduling on top of the current OpenClaw/UI/service seams.
 
 Still intentionally deferred:
 

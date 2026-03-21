@@ -8,7 +8,7 @@ Forgeloop now has **three execution lanes**:
 
 For phase-1 self-hosting, the checklist lane is the canonical backlog surfaced by the Elixir service/UI/OpenClaw seam. The tasks lane remains supported, but tracker/`prd.json` unification is intentionally deferred until after the UI core is stable.
 
-This workflow lane is a **native Forgeloop capability**, but it is still manual-only and still delegates execution to a configured workflow runner in this slice. Treat this document as the detailed contract; other README/docs/site surfaces should summarize and point here.
+This workflow lane is a **native Forgeloop capability**, but it is still manual-only and still delegates execution to a configured workflow runner in this slice. `preflight` / `run` now route through the managed babysitter + disposable-worktree control-plane path rather than bypassing it. Treat this document as the detailed contract; other README/docs/site surfaces should summarize and point here.
 
 ## What it is
 
@@ -56,17 +56,18 @@ Runner state is exposed through:
 
 That means repeated workflow failures still pause and escalate instead of spinning.
 
-Elixir now exposes a **read-only visibility seam** over this lane: it can read the workflow catalog plus the latest `last-preflight.txt` / `last-run.txt` artifacts, the loopback JSON service publishes that same read model, and the repo-local tracker projection can map workflow packs into `Tracker.Issue`-shaped entries without widening the workflow execution contract yet.
+Elixir now exposes a managed control + visibility seam over this lane: workflow `preflight` / `run` actions flow through the babysitter/worktree/runtime-state path, the loopback JSON service and HUD/OpenClaw seam publish the same active-run/read-side view, and the repo-local tracker projection can map workflow packs into `Tracker.Issue`-shaped entries without widening the workflow execution contract yet.
 
 ## Current limitations
 
 This lane is intentionally narrow in the first slice:
 
 - it is **manual-only**
-- the daemon does **not** trigger it
+- the daemon does **not** trigger it yet
 - there is **no** `[WORKFLOW]` control flag
 - it wraps a **configured workflow runner** rather than interpreting `workflow.dot` natively
 - concurrent use with build/tasks/daemon is unsupported in this slice
+- workflow status is currently limited to active-run metadata plus canonical `last-preflight.txt` / `last-run.txt` artifacts; richer outcome/history remains future work
 - `WORKFLOW.md` remains a separate prompt/config surface in Elixir and is **not** widened to absorb graph workflow manifests
 - future tracker/task/backlog projection must stay outside `WORKFLOW.md` service-owned keys
 
@@ -94,7 +95,7 @@ Do not mix these in one checkpoint commit:
 
 - `workflow-slice-01: add workflow pack lane`
 - `workflow-slice-02: add read-only workflow visibility service`
-- `workflow-slice-03: add workflow service/ui surfaces`
+- `workflow-slice-03: route workflow packs through managed control plane`
 
 ## Future direction
 
@@ -102,7 +103,7 @@ The workflow lane is an execution seam, not the endpoint.
 
 Planned future work includes:
 
-- wiring the manual disposable-worktree babysitter into workflow runs without widening the current workflow-lane contract
-- adding a static repo-local UI/SSE layer on top of the existing workflow JSON endpoints
-- OpenClaw monitoring/piloting of the loop and the babysitter
+- workflow-aware daemon scheduling without widening the current workflow-lane contract
+- richer workflow outcome/history and checkpoint semantics on top of the current active-run + artifact view
+- OpenClaw monitoring/piloting of the loop and the babysitter beyond the current manual control surface
 - deciding whether native graph execution belongs inside Forgeloop or remains delegated to a workflow runner

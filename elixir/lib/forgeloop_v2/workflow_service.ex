@@ -22,16 +22,43 @@ defmodule ForgeloopV2.WorkflowService.ActionSnapshot do
         }
 end
 
+defmodule ForgeloopV2.WorkflowService.ActiveRun do
+  @moduledoc false
+
+  defstruct [
+    :workflow_name,
+    :action,
+    :mode,
+    :status,
+    :runtime_surface,
+    :branch,
+    :started_at,
+    :last_heartbeat_at
+  ]
+
+  @type t :: %__MODULE__{
+          workflow_name: String.t(),
+          action: :preflight | :run,
+          mode: String.t(),
+          status: String.t() | nil,
+          runtime_surface: String.t() | nil,
+          branch: String.t() | nil,
+          started_at: String.t() | nil,
+          last_heartbeat_at: String.t() | nil
+        }
+end
+
 defmodule ForgeloopV2.WorkflowService.WorkflowSummary do
   @moduledoc false
 
   alias ForgeloopV2.WorkflowCatalog.Entry
-  alias ForgeloopV2.WorkflowService.ActionSnapshot
+  alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun}
 
   defstruct [
     :entry,
     :preflight,
     :run,
+    :active_run,
     :latest_activity_kind,
     :latest_activity_at
   ]
@@ -40,6 +67,7 @@ defmodule ForgeloopV2.WorkflowService.WorkflowSummary do
           entry: Entry.t(),
           preflight: ActionSnapshot.t(),
           run: ActionSnapshot.t(),
+          active_run: ActiveRun.t() | nil,
           latest_activity_kind: :preflight | :run | nil,
           latest_activity_at: String.t() | nil
         }
@@ -62,22 +90,24 @@ end
 defmodule ForgeloopV2.WorkflowService do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, PathPolicy, RuntimeState, RuntimeStateStore, WorkflowCatalog}
+  alias ForgeloopV2.{Config, PathPolicy, RuntimeState, RuntimeStateStore, WorkflowCatalog, Worktree}
   alias ForgeloopV2.WorkflowCatalog.Entry
-  alias ForgeloopV2.WorkflowService.{ActionSnapshot, Overview, WorkflowSummary}
+  alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun, Overview, WorkflowSummary}
 
-  @workflow_runtime_surface "workflow"
   @workflow_runtime_modes ["workflow-preflight", "workflow-run"]
 
   @spec list(Config.t(), keyword()) :: {:ok, [WorkflowSummary.t()]}
   def list(%Config{} = config, opts \\ []) do
-    {:ok, Enum.map(WorkflowCatalog.list(config), &workflow_summary(config, &1, opts))}
+    active_run = current_workflow_active_run(config)
+    {:ok, Enum.map(WorkflowCatalog.list(config), &workflow_summary(config, &1, active_run, opts))}
   end
 
   @spec fetch(Config.t(), String.t(), keyword()) :: {:ok, WorkflowSummary.t()} | :missing | {:error, term()}
   def fetch(%Config{} = config, name, opts \\ []) when is_binary(name) do
+    active_run = current_workflow_active_run(config)
+
     case WorkflowCatalog.fetch(config, name) do
-      {:ok, entry} -> {:ok, workflow_summary(config, entry, opts)}
+      {:ok, entry} -> {:ok, workflow_summary(config, entry, active_run, opts)}
       :missing -> :missing
       {:error, reason} -> {:error, reason}
     end
@@ -85,14 +115,16 @@ defmodule ForgeloopV2.WorkflowService do
 
   @spec overview(Config.t(), keyword()) :: {:ok, Overview.t()}
   def overview(%Config{} = config, opts \\ []) do
+    active_run = current_workflow_active_run(config)
+
     {:ok,
      %Overview{
        runtime_state: workflow_runtime_state(config),
-       workflows: WorkflowCatalog.list(config) |> Enum.map(&workflow_summary(config, &1, opts))
+       workflows: WorkflowCatalog.list(config) |> Enum.map(&workflow_summary(config, &1, active_run, opts))
      }}
   end
 
-  defp workflow_summary(%Config{} = config, %Entry{} = entry, opts) do
+  defp workflow_summary(%Config{} = config, %Entry{} = entry, active_run, opts) do
     preflight = action_snapshot(config, entry, :preflight, opts)
     run = action_snapshot(config, entry, :run, opts)
     {latest_activity_kind, latest_activity_at} = latest_activity(preflight, run)
@@ -101,6 +133,7 @@ defmodule ForgeloopV2.WorkflowService do
       entry: entry,
       preflight: preflight,
       run: run,
+      active_run: matching_active_run(active_run, entry.name),
       latest_activity_kind: latest_activity_kind,
       latest_activity_at: latest_activity_at
     }
@@ -175,11 +208,51 @@ defmodule ForgeloopV2.WorkflowService do
     end
   end
 
+  defp current_workflow_active_run(%Config{} = config) do
+    case Worktree.read_active_run(config) do
+      {:ok, payload} -> active_run_from_payload(payload)
+      _ -> nil
+    end
+  end
+
+  defp active_run_from_payload(payload) when is_map(payload) do
+    mode = Map.get(payload, "mode")
+    workflow_name = Map.get(payload, "workflow_name")
+    lane = Map.get(payload, "lane")
+
+    with true <- is_binary(workflow_name),
+         true <- is_binary(mode) and mode in @workflow_runtime_modes,
+         true <- lane in [nil, "workflow"],
+         {:ok, action} <- action_from_payload(Map.get(payload, "action"), mode) do
+      %ActiveRun{
+        workflow_name: workflow_name,
+        action: action,
+        mode: mode,
+        status: Map.get(payload, "status"),
+        runtime_surface: Map.get(payload, "runtime_surface"),
+        branch: Map.get(payload, "branch"),
+        started_at: Map.get(payload, "started_at"),
+        last_heartbeat_at: Map.get(payload, "last_heartbeat_at")
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  defp active_run_from_payload(_payload), do: nil
+
+  defp action_from_payload("preflight", _mode), do: {:ok, :preflight}
+  defp action_from_payload("run", _mode), do: {:ok, :run}
+  defp action_from_payload(nil, "workflow-preflight"), do: {:ok, :preflight}
+  defp action_from_payload(nil, "workflow-run"), do: {:ok, :run}
+  defp action_from_payload(_action, _mode), do: :error
+
+  defp matching_active_run(%ActiveRun{workflow_name: workflow_name} = active_run, workflow_name), do: active_run
+  defp matching_active_run(_active_run, _workflow_name), do: nil
+
   defp workflow_runtime_state(%Config{} = config) do
     case RuntimeStateStore.read(config) do
-      {:ok, %RuntimeState{surface: @workflow_runtime_surface, mode: mode} = state}
-      when mode in @workflow_runtime_modes -> state
-
+      {:ok, %RuntimeState{mode: mode} = state} when mode in @workflow_runtime_modes -> state
       _ -> nil
     end
   end

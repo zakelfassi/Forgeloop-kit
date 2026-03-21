@@ -1,10 +1,10 @@
 defmodule ForgeloopV2.WorkDriver do
   @moduledoc false
 
-  alias ForgeloopV2.Config
+  alias ForgeloopV2.{Config, RunSpec}
 
-  @callback run(:plan | :build, Config.t(), keyword()) ::
-              {:ok, %{mode: :plan | :build, evidence_file: Path.t() | nil}}
+  @callback run(RunSpec.t() | :plan | :build, Config.t(), keyword()) ::
+              {:ok, %{mode: atom() | String.t(), evidence_file: Path.t() | nil}}
               | {:error, %{kind: String.t(), summary: String.t(), evidence_file: Path.t() | nil}}
 end
 
@@ -12,29 +12,54 @@ defmodule ForgeloopV2.WorkDrivers.Noop do
   @moduledoc false
   @behaviour ForgeloopV2.WorkDriver
 
+  alias ForgeloopV2.RunSpec
+
   @impl true
-  def run(mode, _config, opts) do
-    scenario = Keyword.get(opts, mode) || Keyword.get(opts, :result, {:ok, %{}})
+  def run(mode_or_spec, _config, opts) do
+    spec = normalize_spec!(mode_or_spec)
+    scenario = scenario_for(opts, spec)
 
     result =
       cond do
-        is_function(scenario, 1) -> scenario.(mode)
+        is_function(scenario, 1) -> scenario.(spec)
         true -> scenario
       end
 
     case result do
       {:ok, payload} when is_map(payload) ->
-        {:ok, Map.put_new(payload, :mode, mode) |> Map.put_new(:evidence_file, nil)}
+        {:ok, Map.put_new(payload, :mode, payload_mode(spec)) |> Map.put_new(:evidence_file, nil)}
 
       {:error, payload} when is_map(payload) ->
         {:error,
          payload
-         |> Map.put_new(:kind, Atom.to_string(mode))
-         |> Map.put_new(:summary, "#{mode} failed")
+         |> Map.put_new(:kind, RunSpec.runtime_mode(spec))
+         |> Map.put_new(:summary, "#{RunSpec.runtime_mode(spec)} failed")
          |> Map.put_new(:evidence_file, nil)}
 
       _ ->
-        {:ok, %{mode: mode, evidence_file: nil}}
+        {:ok, %{mode: payload_mode(spec), evidence_file: nil}}
+    end
+  end
+
+  defp scenario_for(opts, %RunSpec{lane: :workflow, action: action}) do
+    Keyword.get(opts, String.to_atom("workflow_#{action}")) ||
+      Keyword.get(opts, action) ||
+      Keyword.get(opts, :result, {:ok, %{}})
+  end
+
+  defp scenario_for(opts, %RunSpec{action: action}) do
+    Keyword.get(opts, action) || Keyword.get(opts, :result, {:ok, %{}})
+  end
+
+  defp payload_mode(%RunSpec{lane: :workflow} = spec), do: RunSpec.runtime_mode(spec)
+  defp payload_mode(%RunSpec{action: action}), do: action
+
+  defp normalize_spec!(%RunSpec{} = spec), do: spec
+
+  defp normalize_spec!(mode) do
+    case RunSpec.checklist(mode) do
+      {:ok, spec} -> spec
+      {:error, reason} -> raise ArgumentError, "invalid noop run mode: #{inspect(reason)}"
     end
   end
 end
@@ -43,10 +68,20 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
   @moduledoc false
   @behaviour ForgeloopV2.WorkDriver
 
-  alias ForgeloopV2.{Config, Worktree}
+  alias ForgeloopV2.{Config, RunSpec, WorkflowCatalog, Worktree}
+  alias ForgeloopV2.WorkflowCatalog.Entry
 
   @impl true
-  def run(mode, %Config{} = config, opts) do
+  def run(mode_or_spec, %Config{} = config, opts) do
+    spec = normalize_spec!(mode_or_spec)
+
+    case spec.lane do
+      :checklist -> run_checklist(spec, config, opts)
+      :workflow -> run_workflow(spec, config, opts)
+    end
+  end
+
+  defp run_checklist(%RunSpec{action: mode}, %Config{} = config, opts) do
     File.mkdir_p!(Path.join(config.v2_state_dir, "driver"))
     evidence_file = Path.join([config.v2_state_dir, "driver", "#{mode}-last.txt"])
     args = loop_args(mode, Keyword.get(opts, :iterations, 10))
@@ -67,6 +102,124 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
         File.write!(evidence_file, output)
         {:error, %{kind: Atom.to_string(mode), summary: "#{mode} command failed", evidence_file: evidence_file}}
     end
+  end
+
+  defp run_workflow(%RunSpec{} = spec, %Config{} = config, opts) do
+    artifact_path = workflow_artifact_path(config, spec.workflow_name, spec.action)
+    File.mkdir_p!(Path.dirname(artifact_path))
+
+    with {:ok, %Entry{} = entry} <- fetch_workflow_entry(config, spec.workflow_name),
+         {:ok, package_dir} <- workflow_package_dir(config, entry, Keyword.get(opts, :worktree)),
+         {:ok, runner_path} <- resolve_workflow_runner(config) do
+      cmd_opts = [cd: package_dir, env: workflow_env(config, opts, spec)]
+      args = workflow_args(spec, Keyword.get(opts, :runner_args, []))
+
+      case run_command(runner_path, args, cmd_opts, :infinity) do
+        {:timeout, output} ->
+          File.write!(artifact_path, output <> "#{RunSpec.runtime_mode(spec)} command timed out\n")
+          {:error,
+           %{kind: "timeout", summary: "#{RunSpec.runtime_mode(spec)} command timed out", evidence_file: artifact_path}}
+
+        {output, 0} ->
+          File.write!(artifact_path, output)
+          {:ok, %{mode: RunSpec.runtime_mode(spec), evidence_file: artifact_path}}
+
+        {output, _status} ->
+          File.write!(artifact_path, output)
+
+          {:error,
+           %{
+             kind: RunSpec.runtime_mode(spec),
+             summary: "#{RunSpec.runtime_mode(spec)} command failed",
+             evidence_file: artifact_path
+           }}
+      end
+    else
+      {:error, :workflow_runner_not_found} ->
+        message = "workflow runner not found\nSet FORGELOOP_WORKFLOW_RUNNER or install forgeloop-workflow.\n"
+        File.write!(artifact_path, message)
+
+        {:error,
+         %{
+           kind: RunSpec.runtime_mode(spec),
+           summary: "workflow runner not found",
+           evidence_file: artifact_path
+         }}
+
+      {:error, {:invalid_workflow_name, _} = reason} ->
+        File.write!(artifact_path, "#{inspect(reason)}\n")
+        {:error, %{kind: RunSpec.runtime_mode(spec), summary: inspect(reason), evidence_file: artifact_path}}
+
+      :missing ->
+        File.write!(artifact_path, "workflow not found: #{spec.workflow_name}\n")
+        {:error, %{kind: RunSpec.runtime_mode(spec), summary: "workflow not found", evidence_file: artifact_path}}
+
+      {:error, reason} ->
+        File.write!(artifact_path, "#{inspect(reason)}\n")
+        {:error, %{kind: RunSpec.runtime_mode(spec), summary: inspect(reason), evidence_file: artifact_path}}
+    end
+  end
+
+  defp fetch_workflow_entry(%Config{} = config, workflow_name) do
+    WorkflowCatalog.fetch(config, workflow_name)
+  end
+
+  defp workflow_package_dir(_config, %Entry{root: root}, nil), do: {:ok, root}
+
+  defp workflow_package_dir(%Config{} = config, %Entry{root: root}, %Worktree.Handle{} = worktree) do
+    relative = Path.relative_to(Path.expand(root), config.repo_root)
+
+    cond do
+      relative == Path.expand(root) -> {:error, {:workflow_root_outside_repo, root, config.repo_root}}
+      String.starts_with?(relative, "../") -> {:error, {:workflow_root_outside_repo, root, config.repo_root}}
+      true -> {:ok, Path.join(worktree.checkout_path, relative)}
+    end
+  end
+
+  defp resolve_workflow_runner(%Config{} = config) do
+    configured = config.workflow_runner
+
+    cond do
+      is_binary(configured) and configured != "" and String.contains?(configured, "/") ->
+        expanded = Path.expand(configured, config.repo_root)
+        if File.exists?(expanded), do: {:ok, expanded}, else: {:error, :workflow_runner_not_found}
+
+      is_binary(configured) and configured != "" ->
+        case System.find_executable(configured) do
+          nil -> {:error, :workflow_runner_not_found}
+          path -> {:ok, path}
+        end
+
+      true ->
+        case System.find_executable("forgeloop-workflow") do
+          nil -> {:error, :workflow_runner_not_found}
+          path -> {:ok, path}
+        end
+    end
+  end
+
+  defp workflow_args(%RunSpec{action: :preflight, workflow_name: workflow_name}, runner_args) do
+    ["run", "--preflight", workflow_name | Enum.map(runner_args, &to_string/1)]
+  end
+
+  defp workflow_args(%RunSpec{action: :run, workflow_name: workflow_name}, runner_args) do
+    ["run", workflow_name | Enum.map(runner_args, &to_string/1)]
+  end
+
+  defp workflow_env(%Config{} = config, opts, %RunSpec{workflow_name: workflow_name}) do
+    canonical_env(config, opts) ++
+      [
+        {"FORGELOOP_WORKFLOW_STATE_ROOT", Path.join([config.runtime_dir, "workflows", "state"])},
+        {"FORGELOOP_WORKFLOW_NAME", workflow_name}
+      ]
+  end
+
+  defp workflow_artifact_path(%Config{} = config, workflow_name, :preflight) do
+    Path.join([config.runtime_dir, "workflows", workflow_name, "last-preflight.txt"])
+  end
+
+  defp workflow_artifact_path(%Config{} = config, workflow_name, :run) do
+    Path.join([config.runtime_dir, "workflows", workflow_name, "last-run.txt"])
   end
 
   defp loop_args(:plan, _iterations), do: ["plan", "1"]
@@ -94,7 +247,9 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
       {"FORGELOOP_QUESTIONS_FILE", config.questions_file},
       {"FORGELOOP_ESCALATIONS_FILE", config.escalations_file},
       {"FORGELOOP_IMPLEMENTATION_PLAN_FILE", config.plan_file},
-      {"FORGELOOP_RUNTIME_BRANCH", to_string(Keyword.get(opts, :runtime_branch, config.default_branch))}
+      {"FORGELOOP_RUNTIME_BRANCH", to_string(Keyword.get(opts, :runtime_branch, config.default_branch))},
+      {"FORGELOOP_RUNTIME_SURFACE", to_string(Keyword.get(opts, :runtime_surface, "loop"))},
+      {"FORGELOOP_RUNTIME_MODE", to_string(Keyword.get(opts, :runtime_mode, "build"))}
     ]
   end
 
@@ -123,6 +278,16 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
       end
   end
 
+  defp collect_port_output(port, output, :infinity) do
+    receive do
+      {^port, {:data, chunk}} ->
+        collect_port_output(port, output <> chunk, :infinity)
+
+      {^port, {:exit_status, status}} ->
+        {output, status}
+    end
+  end
+
   defp collect_port_output(port, output, timeout_ms) do
     receive do
       {^port, {:data, chunk}} ->
@@ -142,6 +307,15 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
   rescue
     ArgumentError -> :ok
   end
+
+  defp normalize_spec!(%RunSpec{} = spec), do: spec
+
+  defp normalize_spec!(mode) do
+    case RunSpec.checklist(mode) do
+      {:ok, spec} -> spec
+      {:error, reason} -> raise ArgumentError, "invalid shell run mode: #{inspect(reason)}"
+    end
+  end
 end
 
 defmodule ForgeloopV2.Loop do
@@ -152,6 +326,7 @@ defmodule ForgeloopV2.Loop do
     Config,
     ControlFiles,
     FailureTracker,
+    RunSpec,
     RuntimeLifecycle,
     RuntimeRecovery,
     RuntimeState,
@@ -159,80 +334,116 @@ defmodule ForgeloopV2.Loop do
     Workspace
   }
 
-  @spec run(:plan | :build, Config.t(), keyword()) ::
+  @spec run(RunSpec.t() | :plan | :build, Config.t(), keyword()) ::
           {:ok, map()} | {:retry, pos_integer()} | {:stopped, term()} | {:error, term()}
-  def run(mode, %Config{} = config, opts \\ []) do
-    driver = Keyword.get(opts, :driver, default_driver(config))
-    driver_opts = Keyword.get(opts, :driver_opts, [])
-    surface = Keyword.get(opts, :surface, "loop")
-    runtime_mode = Keyword.get(opts, :runtime_mode, Atom.to_string(mode))
-    requested_action = Keyword.get(opts, :requested_action, config.failure_escalation_action)
-    branch = Keyword.get(opts, :branch, config.default_branch)
-    prior_status = RuntimeStateStore.status(config)
-    unanswered_question_ids = ControlFiles.unanswered_question_ids(config)
-    writer = writer_for(surface)
+  def run(mode_or_spec, %Config{} = config, opts \\ []) do
+    with {:ok, run_spec} <- normalize_run_spec(mode_or_spec) do
+      surface = Keyword.get(opts, :surface, default_surface(run_spec, opts))
+      runtime_mode = Keyword.get(opts, :runtime_mode, RunSpec.runtime_mode(run_spec))
+      driver = Keyword.get(opts, :driver, default_driver(config, run_spec))
+      driver_opts =
+        opts
+        |> Keyword.get(:driver_opts, [])
+        |> Keyword.put_new(:runtime_branch, Keyword.get(opts, :branch, config.default_branch))
+        |> Keyword.put_new(:runtime_surface, surface)
+        |> Keyword.put_new(:runtime_mode, runtime_mode)
+      
+      requested_action = Keyword.get(opts, :requested_action, default_requested_action(run_spec, config))
+      branch = Keyword.get(opts, :branch, config.default_branch)
+      prior_status = RuntimeStateStore.status(config)
+      unanswered_question_ids = ControlFiles.unanswered_question_ids(config)
+      writer = writer_for(surface)
 
-    with :ok <- ActiveRuntime.claim(config, "elixir"),
-         {:ok, workspace} <- Workspace.from_config(config, branch: branch, mode: runtime_mode, kind: Atom.to_string(mode)),
-         {:ok, _state} <-
-           maybe_write_recovered(
-             config,
-             prior_status,
-             unanswered_question_ids,
-             writer,
-             surface,
-             runtime_mode,
-             branch,
-             mode
-           ),
-         {:ok, _state} <-
-           RuntimeLifecycle.transition(config, :loop_started, writer, %{
-             surface: surface,
-             mode: runtime_mode,
-             reason: if(mode == :plan, do: "Planning run started", else: "Build run started"),
-             requested_action: requested_action,
-             branch: branch
-           }) do
-      case driver.run(mode, config, driver_opts) do
-        {:ok, payload} ->
-          :ok = FailureTracker.clear(config)
+      with :ok <- ActiveRuntime.claim(config, "elixir"),
+           {:ok, workspace} <-
+             Workspace.from_config(
+               config,
+               branch: branch,
+               mode: runtime_mode,
+               kind: RunSpec.workspace_kind(run_spec)
+             ),
+           {:ok, _state} <-
+             maybe_write_recovered(
+               config,
+               prior_status,
+               unanswered_question_ids,
+               writer,
+               surface,
+               runtime_mode,
+               branch,
+               run_spec
+             ),
+           {:ok, _state} <-
+             RuntimeLifecycle.transition(config, :loop_started, writer, %{
+               surface: surface,
+               mode: runtime_mode,
+               reason: started_reason(run_spec),
+               requested_action: requested_action,
+               branch: branch
+             }) do
+        case driver.run(run_spec, config, driver_opts) do
+          {:ok, payload} ->
+            :ok = FailureTracker.clear(config)
 
-          {:ok, _state} =
-            RuntimeLifecycle.transition(config, :loop_completed, writer, %{
-              surface: surface,
-              mode: runtime_mode,
-              reason: "#{mode} completed",
-              requested_action: "",
-              branch: branch
-            })
+            {:ok, _state} =
+              RuntimeLifecycle.transition(config, :loop_completed, writer, %{
+                surface: surface,
+                mode: runtime_mode,
+                reason: completed_reason(run_spec),
+                requested_action: "",
+                branch: branch
+              })
 
-          {:ok, Map.merge(payload, Workspace.metadata(workspace))}
+            {:ok, Map.merge(payload, Workspace.metadata(workspace))}
 
-        {:error, %{kind: kind, summary: summary, evidence_file: evidence_file}} ->
-          if already_escalated?(config) do
-            {:stopped, :already_escalated}
-          else
-            case FailureTracker.handle(config, %{
-                   kind: kind,
-                   summary: summary,
-                   evidence_file: evidence_file,
-                   requested_action: requested_action,
-                   surface: surface,
-                   mode: runtime_mode,
-                   branch: branch
-                 }) do
-              {:retry, count} -> {:retry, count}
-              {:stop, count} -> {:stopped, {:escalated, count}}
-              {:error, reason} -> {:error, reason}
+          {:error, %{kind: kind, summary: summary, evidence_file: evidence_file}} ->
+            if already_escalated?(config) do
+              {:stopped, :already_escalated}
+            else
+              case FailureTracker.handle(config, %{
+                     kind: kind,
+                     summary: summary,
+                     evidence_file: evidence_file,
+                     requested_action: requested_action,
+                     surface: surface,
+                     mode: runtime_mode,
+                     branch: branch
+                   }) do
+                {:retry, count} -> {:retry, count}
+                {:stop, count} -> {:stopped, {:escalated, count}}
+                {:error, reason} -> {:error, reason}
+              end
             end
-          end
+        end
+      else
+        {:error, reason} -> {:error, reason}
       end
-    else
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp default_driver(config) do
+  defp normalize_run_spec(%RunSpec{} = spec), do: {:ok, spec}
+  defp normalize_run_spec(mode), do: RunSpec.checklist(mode)
+
+  defp default_surface(%RunSpec{lane: :workflow}, opts), do: Keyword.get(opts, :surface, "workflow")
+  defp default_surface(_spec, opts), do: Keyword.get(opts, :surface, "loop")
+
+  defp default_requested_action(%RunSpec{lane: :workflow}, _config), do: "review"
+  defp default_requested_action(_spec, config), do: config.failure_escalation_action
+
+  defp started_reason(%RunSpec{lane: :checklist, action: :plan}), do: "Planning run started"
+  defp started_reason(%RunSpec{lane: :checklist, action: :build}), do: "Build run started"
+  defp started_reason(%RunSpec{lane: :workflow, action: :preflight, workflow_name: name}), do: "Workflow preflight started: #{name}"
+  defp started_reason(%RunSpec{lane: :workflow, action: :run, workflow_name: name}), do: "Workflow run started: #{name}"
+
+  defp completed_reason(%RunSpec{lane: :workflow, action: action, workflow_name: name}) do
+    "workflow #{action} completed for #{name}"
+  end
+
+  defp completed_reason(%RunSpec{action: action}), do: "#{action} completed"
+
+  defp default_driver(_config, %RunSpec{lane: :workflow}), do: ForgeloopV2.WorkDrivers.ShellLoop
+
+  defp default_driver(config, _run_spec) do
     if config.shell_driver_enabled do
       ForgeloopV2.WorkDrivers.ShellLoop
     else
@@ -252,14 +463,14 @@ defmodule ForgeloopV2.Loop do
          surface,
          runtime_mode,
          branch,
-         mode
+         run_spec
        ) do
     case RuntimeRecovery.evaluate(prior_status, unanswered_question_ids, allow_blocked?: true) do
       {:recover, kind} ->
         RuntimeLifecycle.transition(config, :recovered, writer, %{
           surface: surface,
           mode: runtime_mode,
-          reason: recovery_reason(kind, mode),
+          reason: recovery_reason(kind, RunSpec.runtime_mode(run_spec)),
           requested_action: "",
           branch: branch
         })

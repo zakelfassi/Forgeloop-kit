@@ -69,7 +69,7 @@ globalThis.fetch = async (url, options = {}) => {
         questions: [{ id: "Q-1", status_kind: "awaiting_response" }],
         escalations: [{ id: "E-1" }],
         events: [{ event_type: "daemon_tick" }],
-        workflows: { workflows: [{ entry: { name: "alpha" } }] },
+        workflows: { workflows: [{ entry: { name: "alpha" }, active_run: { workflow_name: "alpha", action: "run" } }] },
         babysitter: { "running?": false }
       }
     });
@@ -77,6 +77,10 @@ globalThis.fetch = async (url, options = {}) => {
 
   if (String(url).endsWith("/api/control/run")) {
     return okJson({ data: { mode: "build", surface: "openclaw" } });
+  }
+
+  if (String(url).endsWith("/api/workflows/alpha/preflight")) {
+    return okJson({ data: { lane: "workflow", action: "preflight", workflow: "alpha", surface: "openclaw" } });
   }
 
   if (String(url).endsWith("/api/questions")) {
@@ -98,6 +102,7 @@ const overviewResult = await overviewTool.execute("1", { limit: 9 });
 assert.match(overviewResult.content[0].text, /Runtime: running \/ build via ui on main/);
 assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPLEMENTATION_PLAN\.md/);
 assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
+assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active\)/);
 
 const controlResult = await controlTool.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);
@@ -105,6 +110,13 @@ assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/control/run")).
 assert.deepEqual(
   JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/control/run")).options.body),
   { mode: "build", surface: "openclaw" }
+);
+
+const workflowControlResult = await controlTool.execute("2b", { action: "workflow_preflight", workflowName: "alpha" });
+assert.match(workflowControlResult.content[0].text, /workflow\": \"alpha\"/);
+assert.deepEqual(
+  JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/workflows/alpha/preflight")).options.body),
+  { surface: "openclaw" }
 );
 
 const questionResult = await questionTool.execute("3", { action: "answer", questionId: "Q-1", answer: "Proceed." });

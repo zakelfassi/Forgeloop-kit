@@ -40,7 +40,7 @@ Architecturally, that lane is intentionally narrow:
 - it leaves native graph execution deferred until the workflow-pack lane is proven
 - it keeps the workflow lane focused on native Forgeloop workflow packs rather than alternate product identities
 
-Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; the loopback service now exposes that read model to both JSON clients and the static UI, and the repo now includes a first OpenClaw plugin seam for the same control plane. Workflow babysitting and richer plugin orchestration remain future work.
+Elixir now routes manual workflow `preflight` / `run` actions through the same babysitter + disposable-worktree path used by other managed runs, while still delegating execution to the configured workflow runner. The loopback service, static UI, and OpenClaw seam all expose that same workflow control/status surface, and the workflow read model still includes catalog visibility plus latest canonical artifacts. Workflow-aware daemon scheduling, richer outcome/history projection, and native graph execution remain future work.
 
 See `docs/workflows.md` for the detailed operator contract.
 
@@ -83,6 +83,7 @@ These are still out of scope for the current phase:
 - Postgres-backed event storage
 - daemon-integrated babysitter scheduling and long-lived worktree orchestration
 - daemon-integrated UI/OpenClaw orchestration
+- richer workflow history / checkpoint-resume semantics beyond the current active-run + artifact view
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers

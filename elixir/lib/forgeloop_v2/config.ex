@@ -82,6 +82,7 @@ defmodule ForgeloopV2.Config do
     :plan_file,
     :workflow_dir,
     :workflow_search_dirs,
+    :workflow_runner,
     :default_branch,
     :control_lock_timeout_ms,
     :babysitter_heartbeat_interval_ms,
@@ -146,6 +147,7 @@ defmodule ForgeloopV2.Config do
         plan_file: plan_path,
         workflow_dir: workflow_dir,
         workflow_search_dirs: workflow_search_dirs,
+        workflow_runner: blank_to_nil(opts[:workflow_runner]) || env_value("FORGELOOP_WORKFLOW_RUNNER", shell_env),
         default_branch: opts[:default_branch] || env_value("FORGELOOP_DEFAULT_BRANCH", shell_env) || git_current_branch(repo_root) || "main",
         control_lock_timeout_ms: positive_int(opts[:control_lock_timeout_ms], "FORGELOOP_CONTROL_LOCK_TIMEOUT_MS", 2000, shell_env),
         babysitter_heartbeat_interval_ms:
