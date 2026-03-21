@@ -39,22 +39,31 @@ branch="${FORGELOOP_RUNTIME_BRANCH:-$(git -C "$REPO_DIR" branch --show-current 2
 
 case "$requested_action" in
     pr)
-        action_label="push a PR with the fix"
+        action_label="inspect the local HUD, then push a PR with the fix"
         suggested_command='gh pr create --fill'
+        follow_up_note="Use GitHub only after the local HUD and repo-local artifacts make the next move clear."
         ;;
     review)
-        action_label="review the draft and decide the next move"
+        action_label="inspect the local HUD, then review the draft and decide the next move"
         suggested_command='gh pr comment <pr-number> --body-file .forgeloop/escalation-note.md'
+        follow_up_note="Treat GitHub review as a follow-up after the local HUD / QUESTIONS.md / ESCALATIONS.md review."
         ;;
     rerun)
-        action_label="inspect the failure, fix it, and rerun the loop"
+        action_label="inspect the local HUD, fix the failure, and rerun the loop"
         suggested_command='./forgeloop/bin/loop.sh 1'
+        follow_up_note="Use the HUD to inspect evidence and clear [PAUSE] only when the repo-local state is ready."
         ;;
     issue|*)
-        action_label="file an issue or start a focused fix branch"
+        action_label="inspect the local HUD, then file an issue or start a focused fix branch"
         suggested_command='gh issue create --title "Forgeloop spin: <summary>" --body-file .forgeloop/escalation-note.md'
+        follow_up_note="GitHub follow-up is optional and secondary to the local HUD + repo-local artifact chain."
         ;;
 esac
+
+serve_command='./forgeloop.sh serve'
+if [[ -d "$REPO_DIR/forgeloop" ]] && [[ -f "$REPO_DIR/forgeloop/forgeloop.sh" ]]; then
+    serve_command='./forgeloop/forgeloop.sh serve'
+fi
 
 evidence_note="No evidence file captured."
 if [[ -n "$evidence_file" ]]; then
@@ -75,9 +84,11 @@ forgeloop_core__set_runtime_state "$REPO_DIR" "awaiting-human" "$surface" "$mode
     echo "**Status**: ⏳ Awaiting response"
     echo ""
     echo "**Suggested action**: Please $action_label."
-    echo "**Suggested command**: \`$suggested_command\`"
+    echo "**Suggested command**: \`$serve_command\`"
+    echo "**Optional follow-up**: \`$suggested_command\`"
     echo "**Escalation log**: \`$ESCALATIONS_FILE_REL\`"
     echo "**Evidence**: \`$evidence_note\`"
+    echo "**Operator note**: $follow_up_note"
     echo ""
     echo "**Answer**:"
     echo ""
@@ -97,12 +108,16 @@ forgeloop_core__set_runtime_state "$REPO_DIR" "awaiting-human" "$surface" "$mode
     echo "### Draft"
     echo "Forgeloop hit the same \`$kind\` failure $repeat_count times and paused itself."
     echo ""
+    echo "Start the local operator HUD first:"
+    echo "\`$serve_command\`"
+    echo ""
     echo "Suggested next move: $action_label."
     echo ""
-    echo "Suggested command:"
+    echo "Optional follow-up command:"
     echo "\`$suggested_command\`"
     echo ""
     echo "Notes:"
+    echo "- $follow_up_note"
     echo "- Inspect the evidence before resuming."
     echo "- Remove \`[PAUSE]\` from \`$REQUESTS_FILE_REL\` when ready to continue."
     echo "- Mark the matching question in \`$QUESTIONS_FILE_REL\` as answered when the operator has decided."

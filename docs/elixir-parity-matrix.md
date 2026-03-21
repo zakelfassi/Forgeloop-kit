@@ -17,7 +17,7 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - Bash is still the public acceptance anchor.
 - Elixir parity is measured on operator-visible artifacts and transitions first, not on internal implementation shape.
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
-- Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a loopback control-plane service + interactive operator UI, and a workflow visibility seam over workflow artifacts; that groundwork helps future UI/plugin work but is not yet a full bash-parity contract on its own.
+- Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a loopback control-plane service + interactive operator UI, a repo-local OpenClaw plugin seam for that same service, and a workflow visibility seam over workflow artifacts; that groundwork helps future UI/plugin work but is not yet a full bash-parity contract on its own.
 
 ## Current experimental v2-only extensions
 
@@ -26,5 +26,5 @@ These are now present in Elixir v2, but they are still experimental extensions r
 - self-hosted runs in disposable worktrees preserve the same repo-local fail-closed artifact chain
 - a single-child babysitter/supervisor can stop, recover, and clean up child runs without bypassing runtime-state transitions
 - a loopback-only control-plane service + interactive static UI can expose the same repo-local state without introducing a second source of truth
-- future external integration seams such as OpenClaw still need to preserve the same control surfaces instead of bypassing them
+- the current OpenClaw seam is loopback-only and preserves the same control surfaces instead of bypassing them
 

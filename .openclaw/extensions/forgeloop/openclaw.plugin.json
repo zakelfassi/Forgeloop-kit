@@ -1,0 +1,40 @@
+{
+  "id": "forgeloop",
+  "name": "Forgeloop",
+  "description": "Monitor and pilot a local Forgeloop loopback control plane from OpenClaw.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "Base URL for the local Forgeloop control-plane service.",
+        "default": "http://127.0.0.1:4010"
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 120000,
+        "default": 10000
+      },
+      "allowMutations": {
+        "type": "boolean",
+        "default": true,
+        "description": "When false, pause/replan/question/run tools refuse to mutate the control plane."
+      }
+    }
+  },
+  "uiHints": {
+    "baseUrl": {
+      "label": "Forgeloop service URL",
+      "placeholder": "http://127.0.0.1:4010"
+    },
+    "requestTimeoutMs": {
+      "label": "Request timeout (ms)"
+    },
+    "allowMutations": {
+      "label": "Allow control mutations"
+    }
+  }
+}

@@ -615,6 +615,7 @@ defmodule ForgeloopV2.ControlPlane do
   defp normalize_mode(other), do: {:error, {:invalid_mode, other}}
 
   defp normalize_runtime_surface("ui"), do: {:ok, "ui"}
+  defp normalize_runtime_surface("openclaw"), do: {:ok, "openclaw"}
   defp normalize_runtime_surface("babysitter"), do: {:ok, "babysitter"}
   defp normalize_runtime_surface(other), do: {:error, {:invalid_runtime_surface, other}}
 
@@ -1154,7 +1155,7 @@ defmodule ForgeloopV2.Service do
            control_plane_pid,
            Map.get(body, "mode"),
            branch: Map.get(body, "branch"),
-           runtime_surface: "ui"
+           runtime_surface: Map.get(body, "surface", "ui")
          ) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)

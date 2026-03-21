@@ -53,10 +53,10 @@ Answering or resolving a question in `QUESTIONS.md` does not itself write `recov
 
 ## Escalation modes
 
-- `issue` — draft an issue-oriented handoff with a suggested `gh issue create ...` command
-- `pr` — draft a PR-oriented handoff with a suggested `gh pr create ...` command
-- `review` — draft a human-review handoff for an existing branch or PR
-- `rerun` — draft a local rerun/resume command
+- `issue` — draft a HUD-first handoff that optionally suggests `gh issue create ...` as follow-up
+- `pr` — draft a HUD-first handoff that optionally suggests `gh pr create ...` as follow-up
+- `review` — draft a HUD-first human-review handoff for an existing branch or PR
+- `rerun` — draft a HUD-first local rerun/resume handoff
 
 ## Runtime state model
 
@@ -163,13 +163,15 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - clear-pause requests remove `[PAUSE]` without writing `recovered`; the next daemon/loop cycle still owns recovery
 - replan requests append `[REPLAN]`
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
-- manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, but now record `surface: "ui"`
+- manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, and record `surface: "ui"`
+- the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
 
 - daemon-integrated babysitter scheduling
 - workflow-lane babysitting
+- remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 
 ## Proof suite
 

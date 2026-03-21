@@ -342,6 +342,38 @@ defmodule ForgeloopV2.ServiceTest do
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
   end
 
+  test "manual control runs accept the openclaw runtime surface" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: true,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    start_payload = post_json!(base_url <> "/api/control/run", %{"mode" => "build", "surface" => "openclaw"})
+    assert start_payload["ok"] == true
+    assert start_payload["data"]["surface"] == "openclaw"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] end)
+
+    babysitter_payload = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter_payload["runtime_surface"] == "openclaw"
+    assert babysitter_payload["active_run"]["runtime_surface"] == "openclaw"
+    assert babysitter_payload["active_run"]["surface"] == "babysitter"
+
+    assert post_json!(base_url <> "/api/babysitter/stop", %{"reason" => "kill"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+  end
+
   test "ui-triggered failing builds still escalate through canonical artifacts" do
     repo =
       create_git_repo_fixture!(

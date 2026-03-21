@@ -41,8 +41,18 @@ if ! grep -q 'Forgeloop stopped after repeated `ci` failure' "$tmp_repo/QUESTION
   exit 1
 fi
 
-if ! grep -q 'Suggested command' "$tmp_repo/ESCALATIONS.md"; then
-  echo "FAIL: escalation should draft an operator command" >&2
+if ! grep -q './forgeloop.sh serve' "$tmp_repo/QUESTIONS.md"; then
+  echo "FAIL: escalation question should point operators to the local HUD first" >&2
+  exit 1
+fi
+
+if ! grep -q 'Start the local operator HUD first' "$tmp_repo/ESCALATIONS.md"; then
+  echo "FAIL: escalation should draft the local HUD as the primary operator surface" >&2
+  exit 1
+fi
+
+if ! grep -q 'Optional follow-up command' "$tmp_repo/ESCALATIONS.md"; then
+  echo "FAIL: escalation should keep GitHub follow-up as secondary guidance" >&2
   exit 1
 fi
 

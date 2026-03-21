@@ -27,7 +27,10 @@ defmodule ForgeloopV2.EscalationTest do
     assert escalation_id == "E-12345"
     assert File.read!(config.requests_file) =~ "[PAUSE]"
     assert File.read!(config.questions_file) =~ "Forgeloop stopped after repeated `ci` failure (3 x): CI gate failed on main"
-    assert File.read!(config.escalations_file) =~ "Suggested command"
+    assert File.read!(config.questions_file) =~ "./forgeloop.sh serve"
+    assert File.read!(config.escalations_file) =~ "Start the local operator HUD first"
+    assert File.read!(config.escalations_file) =~ "./forgeloop.sh serve"
+    assert File.read!(config.escalations_file) =~ "Optional follow-up command"
 
     assert {:ok, state} = RuntimeStateStore.read(config)
     assert state.status == "awaiting-human"

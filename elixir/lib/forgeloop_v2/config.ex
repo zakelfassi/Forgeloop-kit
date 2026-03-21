@@ -277,7 +277,8 @@ defmodule ForgeloopV2.Config do
   defp blank_to_nil(value), do: value
 
   defp env_value(name, shell_env) do
-    System.get_env(name) || Map.get(shell_env, name)
+    (System.get_env(name) || Map.get(shell_env, name))
+    |> blank_to_nil()
   end
 
   defp exported_shell_env(forgeloop_root, repo_root) do

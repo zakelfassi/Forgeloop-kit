@@ -75,16 +75,19 @@ Format:
     - workflow-lane babysitting
     - OpenClaw/plugin seam work
 
-- [ ] Define a plugin/integration seam for future OpenClaw support
+- [x] Define a bounded OpenClaw plugin seam on top of the loopback control plane
   - Acceptance:
-    - OpenClaw is documented as future integration work, not a current provider/runtime option.
-    - The implementation path is explicit about the formal integration seam we choose, and it preserves the same repo-local fail-closed contract.
+    - OpenClaw is documented as a same-host/VM plugin seam for the existing loopback service, not as a new provider/runtime.
+    - The implementation path is explicit about the chosen seam, and it preserves the same repo-local fail-closed contract.
     - Existing workflow/config validation stays truthful: no unsupported `providers` or `runtime` keys are introduced in phase 1.
-    - Any future OpenClaw integration exposes Forgeloop actions through a bounded, reviewable surface instead of ad hoc shell glue.
+    - OpenClaw actions flow through a bounded, reviewable surface instead of ad hoc shell glue.
   - REQUIRED TESTS:
     - integration seam contract validation test
     - OpenClaw-triggered action still writes canonical control artifacts
-    - unsupported config stays rejected until the seam actually lands
+  - Shipped behavior:
+    - The repo now includes `.openclaw/extensions/forgeloop/` with `forgeloop_overview`, `forgeloop_control`, and `forgeloop_question` tools.
+    - The plugin targets `./forgeloop.sh serve` / the loopback JSON API instead of bypassing repo-local state.
+    - Manual runs launched through the plugin use `surface: "openclaw"` while keeping the same babysitter/worktree/runtime-state path.
 
 - [ ] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
@@ -142,7 +145,7 @@ Format:
     - The static HUD now drives pause / clear-pause / replan / question answer-resolve / manual run flows directly against the loopback control plane.
     - Question drafts stay browser-local while canonical question state continues to stream from `/api/overview` and `/api/stream`.
 
-- [ ] Make the UI the primary human coordination surface in docs and escalation copy while keeping repo-local files canonical
+- [x] Make the UI the primary human coordination surface in docs and escalation copy while keeping repo-local files canonical
   - Acceptance:
     - `README.md`, `docs/runtime-control.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, and `elixir/README.md` consistently describe the UI as additive and repo-local.
     - Escalation artifacts point operators to the local UI/serve command first; GitHub-oriented commands become optional secondary follow-up.
@@ -150,6 +153,10 @@ Format:
   - REQUIRED TESTS:
     - escalation artifact copy tests
     - bash/eval anchors remain green after wording/template changes
+  - Shipped behavior:
+    - Escalation drafts now point operators to `./forgeloop.sh serve` first and relegate GitHub commands to optional follow-up.
+    - `README.md`, `docs/runtime-control.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, and `elixir/README.md` now describe the HUD + loopback service as the primary human coordination surface while keeping repo-local files canonical.
+    - The homepage and README now mention the repo-local OpenClaw plugin seam beside the HUD instead of describing it as purely future work.
 
 - [ ] Make `IMPLEMENTATION_PLAN.md` the explicit phase-1 canonical backlog for self-hosting, and defer `prd.json` / tracker unification until after the UI core is stable
   - Acceptance:

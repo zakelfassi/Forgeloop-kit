@@ -19,6 +19,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - local JSONL event history
 - a loopback-only control-plane service for runtime/backlog/questions/escalations/events/workflows/provider health plus babysitter control
 - a static repo-local operator UI with SSE-backed live updates, interactive control mutations, and no Node asset pipeline
+- a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it
 
 ## Coexistence Rule
 
@@ -39,7 +40,7 @@ Architecturally, that lane is intentionally narrow:
 - it leaves native graph execution deferred until the workflow-pack lane is proven
 - it keeps the workflow lane focused on native Forgeloop workflow packs rather than alternate product identities
 
-Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; the loopback service now exposes that read model to both JSON clients and the static UI, while workflow babysitting and plugin integrations remain future work.
+Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; the loopback service now exposes that read model to both JSON clients and the static UI, and the repo now includes a first OpenClaw plugin seam for the same control plane. Workflow babysitting and richer plugin orchestration remain future work.
 
 See `docs/workflows.md` for the detailed operator contract.
 
@@ -81,7 +82,7 @@ These are still out of scope for the current phase:
 - Broadway or any hot-path queue/pipeline
 - Postgres-backed event storage
 - daemon-integrated babysitter scheduling and long-lived worktree orchestration
-- daemon-integrated UI orchestration
+- daemon-integrated UI/OpenClaw orchestration
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers

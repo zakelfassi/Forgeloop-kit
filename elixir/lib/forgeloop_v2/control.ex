@@ -251,7 +251,7 @@ defmodule ForgeloopV2.Escalation do
     summary = string_attr(attrs, :summary, "Forgeloop detected a repeated failure")
     repeat_count = string_attr(attrs, :repeat_count, "1")
     requested_action = string_attr(attrs, :requested_action, "issue")
-    {action_label, suggested_command} = action_details(requested_action)
+    {action_label, suggested_command, follow_up_command} = action_details(requested_action)
     evidence_note = evidence_note(attrs)
 
     body = [
@@ -262,9 +262,11 @@ defmodule ForgeloopV2.Escalation do
       "**Status**: ⏳ Awaiting response",
       "",
       "**Suggested action**: Please #{action_label}.",
-      "**Suggested command**: `#{suggested_command}`",
+      "**Suggested command**: `#{serve_command(config)}`",
+      "**Optional follow-up**: `#{suggested_command}`",
       "**Escalation log**: `#{Path.basename(config.escalations_file)}`",
       "**Evidence**: `#{evidence_note}`",
+      "**Operator note**: #{follow_up_command}",
       "",
       "**Answer**:",
       "",
@@ -284,7 +286,7 @@ defmodule ForgeloopV2.Escalation do
     summary = string_attr(attrs, :summary, "Forgeloop detected a repeated failure")
     repeat_count = string_attr(attrs, :repeat_count, "1")
     requested_action = string_attr(attrs, :requested_action, "issue")
-    {action_label, suggested_command} = action_details(requested_action)
+    {action_label, suggested_command, follow_up_command} = action_details(requested_action)
     evidence_note = evidence_note(attrs)
 
     body = [
@@ -300,12 +302,16 @@ defmodule ForgeloopV2.Escalation do
       "### Draft",
       "Forgeloop hit the same `#{kind}` failure #{repeat_count} times and paused itself.",
       "",
+      "Start the local operator HUD first:",
+      "`#{serve_command(config)}`",
+      "",
       "Suggested next move: #{action_label}.",
       "",
-      "Suggested command:",
+      "Optional follow-up command:",
       "`#{suggested_command}`",
       "",
       "Notes:",
+      "- #{follow_up_command}",
       "- Inspect the evidence before resuming.",
       "- Remove `[PAUSE]` from `#{Path.basename(config.requests_file)}` when ready to continue.",
       "- Mark the matching question in `#{Path.basename(config.questions_file)}` as answered when the operator has decided.",
@@ -327,13 +333,35 @@ defmodule ForgeloopV2.Escalation do
     end
   end
 
-  defp action_details("pr"), do: {"push a PR with the fix", "gh pr create --fill"}
+  defp action_details("pr"),
+    do:
+      {"inspect the local HUD, then push a PR with the fix", "gh pr create --fill",
+       "Use GitHub only after the local HUD and repo-local artifacts make the next move clear."}
 
   defp action_details("review"),
-    do: {"review the draft and decide the next move", "gh pr comment <pr-number> --body-file .forgeloop/escalation-note.md"}
+    do:
+      {"inspect the local HUD, then review the draft and decide the next move",
+       "gh pr comment <pr-number> --body-file .forgeloop/escalation-note.md",
+       "Treat GitHub review as a follow-up after the local HUD / QUESTIONS.md / ESCALATIONS.md review."}
 
-  defp action_details("rerun"), do: {"inspect the failure, fix it, and rerun the loop", "./forgeloop/bin/loop.sh 1"}
-  defp action_details(_), do: {"file an issue or start a focused fix branch", "gh issue create --title \"Forgeloop spin: <summary>\" --body-file .forgeloop/escalation-note.md"}
+  defp action_details("rerun"),
+    do:
+      {"inspect the local HUD, fix the failure, and rerun the loop", "./forgeloop/bin/loop.sh 1",
+       "Use the HUD to inspect evidence and clear `[PAUSE]` only when the repo-local state is ready."}
+
+  defp action_details(_),
+    do:
+      {"inspect the local HUD, then file an issue or start a focused fix branch",
+       "gh issue create --title \"Forgeloop spin: <summary>\" --body-file .forgeloop/escalation-note.md",
+       "GitHub follow-up is optional and secondary to the local HUD + repo-local artifact chain."}
+
+  defp serve_command(%Config{} = config) do
+    if config.forgeloop_root == config.repo_root do
+      "./forgeloop.sh serve"
+    else
+      "./forgeloop/forgeloop.sh serve"
+    end
+  end
 
   defp human_now do
     NaiveDateTime.utc_now()
