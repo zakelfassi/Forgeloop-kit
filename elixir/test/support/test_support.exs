@@ -88,6 +88,8 @@ defmodule ForgeloopV2.TestSupport do
     run_git!(repo.repo_root, ["init", "-b", Keyword.get(opts, :branch, "main")])
     run_git!(repo.repo_root, ["config", "user.name", "Forgeloop Test"])
     run_git!(repo.repo_root, ["config", "user.email", "forgeloop@example.com"])
+    run_git!(repo.repo_root, ["config", "commit.gpgsign", "false"])
+    run_git!(repo.repo_root, ["config", "tag.gpgsign", "false"])
     run_git!(repo.repo_root, ["add", "."])
     run_git!(repo.repo_root, ["commit", "-m", Keyword.get(opts, :commit_message, "initial fixture")])
     repo

@@ -266,15 +266,35 @@ function renderProviders(providerHealth) {
 
 function renderBacklog(backlog) {
   const items = backlog && backlog.items ? backlog.items : [];
+  const source = backlog && backlog.source ? backlog.source : {};
+  const label = source.label || "IMPLEMENTATION_PLAN.md";
+  const phase = source.phase || "phase1";
+  const sourcePath = source.path || label;
+  const introCard = `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge("canonical", source["canonical?"] === false ? "warn" : "good")}
+        ${badge(phase, "info")}
+      </div>
+      <h3>${escapeHtml(label)}</h3>
+      <p>Resolved as the phase-1 self-hosting backlog from <code>${escapeHtml(sourcePath)}</code>.</p>
+    </article>
+  `;
+
+  if (backlog && backlog["exists?"] === false) {
+    refs.backlogBody.className = "stack empty";
+    refs.backlogBody.innerHTML = `${introCard}<p>Canonical backlog file is missing, so the control plane fails closed and still reports pending work.</p>`;
+    return;
+  }
 
   if (!items.length) {
     refs.backlogBody.className = "stack empty";
-    refs.backlogBody.textContent = backlog && backlog["needs_build?"] ? "Plan file exists but no pending items were parsed." : "No pending plan items.";
+    refs.backlogBody.innerHTML = `${introCard}<p>${backlog && backlog["needs_build?"] ? "Canonical backlog exists but no pending items were parsed." : "No pending items remain in the phase-1 canonical backlog."}</p>`;
     return;
   }
 
   refs.backlogBody.className = "stack";
-  refs.backlogBody.innerHTML = items.map((item) => `
+  refs.backlogBody.innerHTML = `${introCard}${items.map((item) => `
     <article class="list-card">
       <div class="list-meta">
         ${badge(item.status || "pending", "good")}
@@ -283,7 +303,7 @@ function renderBacklog(backlog) {
       </div>
       <h3>${escapeHtml(item.text || item.raw_line || "Untitled item")}</h3>
     </article>
-  `).join("");
+  `).join("")}`;
 }
 
 function renderQuestions(questions) {

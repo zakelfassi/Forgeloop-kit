@@ -52,7 +52,18 @@ globalThis.fetch = async (url, options = {}) => {
     return okJson({
       data: {
         runtime_state: { status: "running", mode: "build", surface: "ui", branch: "main" },
-        backlog: { "needs_build?": true, items: [{ id: "task-1" }] },
+        backlog: {
+          "needs_build?": true,
+          "exists?": true,
+          source: {
+            kind: "implementation_plan",
+            label: "IMPLEMENTATION_PLAN.md",
+            path: "/tmp/repo/IMPLEMENTATION_PLAN.md",
+            "canonical?": true,
+            phase: "phase1"
+          },
+          items: [{ id: "task-1" }]
+        },
         control_flags: { "pause_requested?": false, "replan_requested?": true },
         questions: [{ id: "Q-1", status_kind: "awaiting_response" }],
         escalations: [{ id: "E-1" }],
@@ -84,7 +95,7 @@ const questionTool = registrations.find(({ tool }) => tool.name === "forgeloop_q
 
 const overviewResult = await overviewTool.execute("1", { limit: 9 });
 assert.match(overviewResult.content[0].text, /Runtime: running \/ build via ui on main/);
-assert.match(overviewResult.content[0].text, /Backlog: 1 pending items/);
+assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPLEMENTATION_PLAN\.md/);
 
 const controlResult = await controlTool.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);

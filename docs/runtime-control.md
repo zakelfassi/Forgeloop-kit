@@ -148,7 +148,7 @@ mix forgeloop_v2.serve --repo ..
 That service reuses the same file-first control plane rather than introducing a second state store. It now also serves a static operator UI at the service root, and today exposes:
 
 - runtime state
-- backlog / pending plan items
+- the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`)
 - questions and escalations
 - recent JSONL events
 - workflow visibility snapshots
@@ -165,6 +165,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
 - manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, and record `surface: "ui"`
 - the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
+- in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:

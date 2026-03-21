@@ -6,6 +6,8 @@ Forgeloop now has **three execution lanes**:
 2. **Tasks lane** — `prd.json` + `./forgeloop.sh tasks`
 3. **Workflow lane (experimental)** — native workflow packs + `./forgeloop.sh workflow ...`
 
+For phase-1 self-hosting, the checklist lane is the canonical backlog surfaced by the Elixir service/UI/OpenClaw seam. The tasks lane remains supported, but tracker/`prd.json` unification is intentionally deferred until after the UI core is stable.
+
 This workflow lane is a **native Forgeloop capability**, but it is still manual-only and still delegates execution to a configured workflow runner in this slice. Treat this document as the detailed contract; other README/docs/site surfaces should summarize and point here.
 
 ## What it is
@@ -66,6 +68,7 @@ This lane is intentionally narrow in the first slice:
 - it wraps a **configured workflow runner** rather than interpreting `workflow.dot` natively
 - concurrent use with build/tasks/daemon is unsupported in this slice
 - `WORKFLOW.md` remains a separate prompt/config surface in Elixir and is **not** widened to absorb graph workflow manifests
+- future tracker/task/backlog projection must stay outside `WORKFLOW.md` service-owned keys
 
 ## Checkpoint cadence
 

@@ -118,12 +118,12 @@ defmodule ForgeloopV2.Config do
       shell_env = exported_shell_env(forgeloop_root, repo_root)
 
       runtime_dir =
-        opts[:runtime_dir] ||
+        blank_to_nil(opts[:runtime_dir]) ||
           env_value("FORGELOOP_RUNTIME_DIR", shell_env) ||
           Path.join(repo_root, ".forgeloop")
 
       runtime_state_file =
-        opts[:runtime_state_file] ||
+        blank_to_nil(opts[:runtime_state_file]) ||
           env_value("FORGELOOP_RUNTIME_STATE_FILE", shell_env) ||
           Path.join(runtime_dir, "runtime-state.json")
 
@@ -196,12 +196,12 @@ defmodule ForgeloopV2.Config do
   end
 
   defp repo_relative_path(repo_root, explicit, env_name, default, shell_env) do
-    value = explicit || env_value(env_name, shell_env) || default
+    value = blank_to_nil(explicit) || env_value(env_name, shell_env) || default
     Path.expand(value, repo_root)
   end
 
   defp detect_workflow_dirs(repo_root, explicit, shell_env) do
-    value = explicit || env_value("FORGELOOP_WORKFLOWS_DIR", shell_env)
+    value = blank_to_nil(explicit) || env_value("FORGELOOP_WORKFLOWS_DIR", shell_env)
 
     cond do
       is_binary(value) and value != "" ->

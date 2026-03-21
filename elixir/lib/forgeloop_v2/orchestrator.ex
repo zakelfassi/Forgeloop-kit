@@ -87,5 +87,8 @@ defmodule ForgeloopV2.Orchestrator do
   defp idle_reason(%Context{runtime_status: "awaiting-human"}), do: "Awaiting human response"
   defp idle_reason(_context), do: "No pending work"
 
-  defp needs_build?(config), do: PlanStore.needs_build?(config)
+  defp needs_build?(config) do
+    {:ok, backlog} = PlanStore.summary(config)
+    backlog.needs_build?
+  end
 end

@@ -65,6 +65,12 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["ok"] == true
     assert payload["data"]["runtime_state"]["status"] == "running"
     assert payload["data"]["backlog"]["needs_build?"] == true
+    assert payload["data"]["backlog"]["exists?"] == true
+    assert payload["data"]["backlog"]["source"]["kind"] == "implementation_plan"
+    assert payload["data"]["backlog"]["source"]["label"] == "IMPLEMENTATION_PLAN.md"
+    assert payload["data"]["backlog"]["source"]["path"] == config.plan_file
+    assert payload["data"]["backlog"]["source"]["canonical?"] == true
+    assert payload["data"]["backlog"]["source"]["phase"] == "phase1"
     assert payload["data"]["control_flags"]["pause_requested?"] == false
     assert payload["data"]["control_flags"]["replan_requested?"] == false
     assert Enum.at(payload["data"]["questions"], 0)["id"] == "Q-1"
@@ -90,6 +96,50 @@ defmodule ForgeloopV2.ServiceTest do
     html = get_response!(base_url <> "/")
     assert html.status == 200
     assert html.body =~ "hud"
+  end
+
+  test "service backlog endpoint matches orchestrator pending-work answer for the same plan file" do
+    repo =
+      create_repo_fixture!(
+        plan_content: """
+        ## Phase 1
+        - [ ] Ship repo-local HUD
+          - [ ] Keep nested follow-ups out of build detection
+        """
+      )
+
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    orchestrator_context = Orchestrator.build_context(config)
+    backlog_payload = get_json!(base_url <> "/api/backlog")
+
+    assert backlog_payload["ok"] == true
+    assert backlog_payload["data"]["needs_build?"] == orchestrator_context.needs_build?
+    assert backlog_payload["data"]["exists?"] == true
+    assert backlog_payload["data"]["source"]["kind"] == "implementation_plan"
+    assert backlog_payload["data"]["source"]["label"] == "IMPLEMENTATION_PLAN.md"
+    assert backlog_payload["data"]["source"]["canonical?"] == true
+    assert backlog_payload["data"]["source"]["phase"] == "phase1"
+    assert length(backlog_payload["data"]["items"]) == 2
+  end
+
+  test "service backlog stays fail-closed when the configured plan path is unreadable" do
+    repo = create_repo_fixture!()
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0, plan_file: ".")
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    backlog_payload = get_json!(base_url <> "/api/backlog")
+
+    assert backlog_payload["ok"] == true
+    assert backlog_payload["data"]["needs_build?"] == true
+    assert backlog_payload["data"]["exists?"] == true
+    assert backlog_payload["data"]["items"] == []
+    assert backlog_payload["data"]["source"]["path"] == repo.repo_root
   end
 
   test "pause, replan, question answer, and resolve endpoints mutate canonical files safely" do

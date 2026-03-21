@@ -1344,10 +1344,10 @@ flowchart LR
 
           <div class="grid" style="margin-top: 14px">
             <div class="card" style="grid-column: span 4">
-              <h3>Checklist Lane (default)</h3>
+              <h3>Checklist Lane (phase-1 canonical)</h3>
               <p>
-                Uses <code>IMPLEMENTATION_PLAN.md</code> with markdown checkboxes. Best for human-in-the-loop workflows
-                where you want to review and modify the plan.
+                Uses <code>IMPLEMENTATION_PLAN.md</code> with markdown checkboxes. This is the backlog surfaced by the
+                loopback service, HUD, OpenClaw seam, and self-hosting orchestrator in phase 1.
               </p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#lane-checklist">Copy</button>
@@ -1363,8 +1363,8 @@ flowchart LR
             <div class="card" style="grid-column: span 4">
               <h3>Tasks Lane (optional)</h3>
               <p>
-                Uses <code>prd.json</code> with machine-readable <code>passes: true/false</code> flags. Best for full automation
-                with structured task definitions.
+                Uses <code>prd.json</code> with machine-readable <code>passes: true/false</code> flags. It remains supported,
+                but backlog unification with the HUD/control plane is intentionally deferred until after the UI core is stable.
               </p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#lane-tasks">Copy</button>
@@ -1408,8 +1408,8 @@ flowchart LR
               <tbody>
                 <tr>
                   <td>Task file</td>
-                  <td>IMPLEMENTATION_PLAN.md</td>
-                  <td>prd.json</td>
+                  <td>IMPLEMENTATION_PLAN.md <span class="subtle">(phase-1 canonical)</span></td>
+                  <td>prd.json <span class="subtle">(optional, not UI-canonical yet)</span></td>
                   <td><code>workflow.dot</code> + <code>workflow.toml</code></td>
                 </tr>
                 <tr>
@@ -1438,6 +1438,10 @@ flowchart LR
                 </tr>
               </tbody>
             </table>
+            <p class="subtle" style="margin-top: 12px">
+              Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. Tracker/<code>prd.json</code>
+              unification is a later slice, and workflow metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
+            </p>
           </div>
         </section>
 

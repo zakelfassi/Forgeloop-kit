@@ -17,7 +17,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - tracker boundary plus memory adapter
   - metadata-first workspace and path-safety helpers
   - local JSONL event history
-- a loopback-only control-plane service for runtime/backlog/questions/escalations/events/workflows/provider health plus babysitter control
+- a loopback-only control-plane service for runtime plus the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), alongside questions/escalations/events/workflows/provider health and babysitter control
 - a static repo-local operator UI with SSE-backed live updates, interactive control mutations, and no Node asset pipeline
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it
 
@@ -53,7 +53,7 @@ With parser/read-path groundwork and repo-safe mutation helpers now in place, El
 3. canonical repo-root artifacts preserved while shell execution happens inside the disposable checkout
 4. a loopback-only JSON control-plane service layered on top of the same file-first state
 
-That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree and expose the current state over a local service without introducing a second source of truth.
+That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree and expose the current state over a local service without introducing a second source of truth. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
 
 ## Next Acceptance Bar
 
@@ -86,6 +86,7 @@ These are still out of scope for the current phase:
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers
+- tracker/`prd.json` backlog unification beyond the phase-1 implementation-plan surface
 - raw tracker mutation tooling
 - OpenClaw as a supported runtime/provider option today
 

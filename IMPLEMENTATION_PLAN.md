@@ -1,6 +1,6 @@
 # Implementation Plan
 
-This file is the prioritized backlog Forgeloop works from.
+This file is the phase-1 self-hosting backlog surfaced by the control plane by default.
 
 Goal: make Forgeloop progressively able to build itself from repo-local specs/plans/tasks, with a repo-local UI becoming the primary human coordination surface instead of GitHub-issue-centric workflows.
 
@@ -158,7 +158,7 @@ Format:
     - `README.md`, `docs/runtime-control.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, and `elixir/README.md` now describe the HUD + loopback service as the primary human coordination surface while keeping repo-local files canonical.
     - The homepage and README now mention the repo-local OpenClaw plugin seam beside the HUD instead of describing it as purely future work.
 
-- [ ] Make `IMPLEMENTATION_PLAN.md` the explicit phase-1 canonical backlog for self-hosting, and defer `prd.json` / tracker unification until after the UI core is stable
+- [x] Make `IMPLEMENTATION_PLAN.md` the explicit phase-1 canonical backlog for self-hosting, and defer `prd.json` / tracker unification until after the UI core is stable
   - Acceptance:
     - `IMPLEMENTATION_PLAN.md` is documented and exposed as the canonical backlog in phase 1.
     - Future repo-local tracker/task-lane integration has a defined seam and does not require changing `WORKFLOW.md` service-owned-key rules.
@@ -166,6 +166,11 @@ Format:
   - REQUIRED TESTS:
     - `Orchestrator` and service backlog endpoints report the same pending-work answer for the same plan file
     - workflow forbidden-key protections stay green
+  - Shipped behavior:
+    - `ForgeloopV2.PlanStore` now exposes one canonical phase-1 backlog summary from the configured implementation plan file and reuses it for `pending_items/1` and `needs_build?/1`.
+    - `ForgeloopV2.Orchestrator` and the loopback service backlog endpoints now derive pending-work answers from that same summary instead of separate plan reads.
+    - `/api/backlog`, `/api/overview`, the static HUD, and the OpenClaw seam now expose `IMPLEMENTATION_PLAN.md` as the phase-1 canonical backlog source while keeping payload compatibility for existing consumers.
+    - README/docs/site copy now state that tracker/`prd.json` unification stays deferred until after the UI core, and `WORKFLOW.md` forbidden/service-owned-key boundaries remain unchanged.
 
 ## Later / Strategic
 

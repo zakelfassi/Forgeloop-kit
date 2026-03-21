@@ -37,10 +37,12 @@ function buildOverviewTool(api) {
       const babysitter = data.babysitter || {};
       const flags = data.control_flags || {};
 
+      const backlogLabel = backlog.source?.label || "IMPLEMENTATION_PLAN.md";
+
       const text = [
         `Forgeloop overview (${serviceBaseUrl(api)})`,
         `Runtime: ${runtime.status || "unknown"} / ${runtime.mode || "unknown"} via ${runtime.surface || "unknown"} on ${runtime.branch || "unknown"}`,
-        `Backlog: ${pendingCount(backlog.items)} pending items (needs_build=${Boolean(backlog["needs_build?"] ?? backlog.needs_build)})`,
+        `Backlog: ${pendingCount(backlog.items)} pending items from ${backlogLabel} (needs_build=${Boolean(backlog["needs_build?"] ?? backlog.needs_build)})`,
         `Flags: pause=${boolFlag(flags["pause_requested?"] ?? flags.pause_requested)} replan=${boolFlag(flags["replan_requested?"] ?? flags.replan_requested)}`,
         `Questions: ${questions.length} total, ${questions.filter((item) => item.status_kind === "awaiting_response").length} awaiting response`,
         `Escalations: ${escalations.length}`,

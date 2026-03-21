@@ -53,7 +53,7 @@ defmodule ForgeloopV2.ControlPlane do
   @spec runtime(GenServer.server()) :: {:ok, ForgeloopV2.RuntimeState.t() | nil} | {:error, term()}
   def runtime(server \\ __MODULE__), do: GenServer.call(server, :runtime)
 
-  @spec backlog(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  @spec backlog(GenServer.server()) :: {:ok, PlanStore.Backlog.t()} | {:error, term()}
   def backlog(server \\ __MODULE__), do: GenServer.call(server, :backlog)
 
   @spec questions(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Question.t()]} | {:error, term()}
@@ -413,13 +413,7 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
-  defp read_backlog(config) do
-    case PlanStore.read(config) do
-      {:ok, items} -> {:ok, %{needs_build?: PlanStore.needs_build?(config), items: Enum.filter(items, &(&1.status == :pending))}}
-      :missing -> {:ok, %{needs_build?: true, items: []}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defp read_backlog(config), do: PlanStore.summary(config)
 
   defp read_control_flags(config) do
     {:ok,
@@ -644,6 +638,7 @@ defmodule ForgeloopV2.ServiceJSON do
   @moduledoc false
 
   alias ForgeloopV2.Coordination.{Escalation, Question}
+  alias ForgeloopV2.PlanStore
   alias ForgeloopV2.PlanStore.Item
   alias ForgeloopV2.RuntimeState
   alias ForgeloopV2.WorkflowCatalog.Entry
@@ -667,8 +662,23 @@ defmodule ForgeloopV2.ServiceJSON do
   def runtime_state(nil), do: nil
   def runtime_state(%RuntimeState{} = state), do: RuntimeState.to_map(state)
 
-  def backlog(%{needs_build?: needs_build?, items: items}) do
-    %{needs_build?: needs_build?, items: Enum.map(items, &plan_item/1)}
+  def backlog(%PlanStore.Backlog{} = backlog) do
+    %{
+      source: backlog_source(backlog.source),
+      exists?: backlog.exists?,
+      needs_build?: backlog.needs_build?,
+      items: Enum.map(backlog.items, &plan_item/1)
+    }
+  end
+
+  defp backlog_source(%{kind: kind, label: label, path: path, canonical?: canonical?, phase: phase}) do
+    %{
+      kind: Atom.to_string(kind),
+      label: label,
+      path: path,
+      canonical?: canonical?,
+      phase: phase
+    }
   end
 
   def control_flags(%{pause_requested?: pause_requested?, replan_requested?: replan_requested?}) do

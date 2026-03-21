@@ -15,11 +15,34 @@ defmodule ForgeloopV2.PlanStore.Item do
   defstruct [:line_number, :section, :text, :depth, :status, :raw_line]
 end
 
+defmodule ForgeloopV2.PlanStore.Backlog do
+  @moduledoc false
+
+  alias ForgeloopV2.PlanStore.Item
+
+  @type source :: %{
+          kind: :implementation_plan,
+          label: String.t(),
+          path: String.t(),
+          canonical?: boolean(),
+          phase: String.t()
+        }
+
+  @type t :: %__MODULE__{
+          source: source(),
+          exists?: boolean(),
+          needs_build?: boolean(),
+          items: [Item.t()]
+        }
+
+  defstruct [:source, :exists?, :needs_build?, items: []]
+end
+
 defmodule ForgeloopV2.PlanStore do
   @moduledoc false
 
   alias ForgeloopV2.Config
-  alias ForgeloopV2.PlanStore.Item
+  alias ForgeloopV2.PlanStore.{Backlog, Item}
 
   @spec read(Config.t()) :: {:ok, [Item.t()]} | :missing | {:error, term()}
   def read(%Config{} = config) do
@@ -30,21 +53,62 @@ defmodule ForgeloopV2.PlanStore do
     end
   end
 
+  @spec summary(Config.t()) :: {:ok, Backlog.t()}
+  def summary(%Config{} = config) do
+    source = source_metadata(config)
+
+    case read(config) do
+      {:ok, items} ->
+        pending = Enum.filter(items, &(&1.status == :pending))
+
+        {:ok,
+         %Backlog{
+           source: source,
+           exists?: true,
+           needs_build?: Enum.any?(pending, &(&1.depth == 0)),
+           items: pending
+         }}
+
+      :missing ->
+        {:ok,
+         %Backlog{
+           source: source,
+           exists?: false,
+           needs_build?: true,
+           items: []
+         }}
+
+      {:error, _reason} ->
+        {:ok,
+         %Backlog{
+           source: source,
+           exists?: File.exists?(config.plan_file),
+           needs_build?: true,
+           items: []
+         }}
+    end
+  end
+
   @spec pending_items(Config.t()) :: [Item.t()]
   def pending_items(%Config{} = config) do
-    case read(config) do
-      {:ok, items} -> Enum.filter(items, &(&1.status == :pending))
-      _ -> []
-    end
+    {:ok, %Backlog{items: items}} = summary(config)
+    items
   end
 
   @spec needs_build?(Config.t()) :: boolean()
   def needs_build?(%Config{} = config) do
-    case read(config) do
-      {:ok, items} -> Enum.any?(items, &(&1.status == :pending and &1.depth == 0))
-      :missing -> true
-      {:error, _reason} -> true
-    end
+    {:ok, %Backlog{needs_build?: needs_build?}} = summary(config)
+    needs_build?
+  end
+
+  defp source_metadata(%Config{} = config) do
+    %{
+      kind: :implementation_plan,
+      label: Path.basename(config.plan_file),
+      path: config.plan_file,
+      canonical?: true,
+      phase: "phase1"
+    }
   end
 
   defp parse_items(body) do
