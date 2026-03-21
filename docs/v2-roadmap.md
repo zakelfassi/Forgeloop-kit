@@ -12,7 +12,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - fail-closed escalation artifact writing
   - repeated-failure and blocker tracking
   - shell/noop work drivers
-  - daemon baseline
+  - daemon baseline with checklist `plan` / `build` routed through babysitter-managed disposable worktrees on the Elixir path
   - workflow loading with last-known-good reload
   - tracker boundary plus memory adapter and a repo-local projection seam
   - metadata-first workspace and path-safety helpers
@@ -53,7 +53,7 @@ With parser/read-path groundwork and repo-safe mutation helpers now in place, El
 3. canonical repo-root artifacts preserved while shell execution happens inside the disposable checkout
 4. a loopback-only JSON control-plane service layered on top of the same file-first state
 
-That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree and expose the current state over a local service without introducing a second source of truth. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
+That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree, expose the current state over a local service without introducing a second source of truth, and route Elixir-daemon checklist work through the same babysitter/worktree substrate. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
 
 ## Next Acceptance Bar
 
@@ -81,7 +81,7 @@ These are still out of scope for the current phase:
 - Phoenix UI and dashboard work
 - Broadway or any hot-path queue/pipeline
 - Postgres-backed event storage
-- daemon-integrated babysitter scheduling and long-lived worktree orchestration
+- bash-daemon / wrapper convergence onto the babysitter path and long-lived worktree orchestration
 - daemon-integrated UI/OpenClaw orchestration
 - richer workflow history / checkpoint-resume semantics beyond the current active-run + artifact view
 - graph workflows

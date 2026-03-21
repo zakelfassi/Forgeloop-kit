@@ -72,8 +72,8 @@ Format:
     - `ForgeloopV2.Babysitter` runs a single child loop in that checkout, writes heartbeat metadata under `.forgeloop/v2/babysitter`, and can stop/pause canonically
     - `ShellLoop` can execute from a disposable checkout while keeping runtime/control artifacts pointed at canonical repo-root files
   - Deferred after this slice:
-    - daemon scheduling through the babysitter
-    - loopback service/UI surfaces on top of babysitter snapshots
+    - bash daemon / wrapper convergence onto the babysitter path
+    - stronger worktree-aware ownership semantics if active-runtime claims ever widen
 
 - [x] Define a bounded OpenClaw plugin seam on top of the loopback control plane
   - Acceptance:
@@ -98,6 +98,25 @@ Format:
     - event subscription test
     - replay/tail ordering test
     - existing event tests stay green
+
+- [x] Route Elixir daemon checklist work through the managed babysitter by default
+  - Acceptance:
+    - `mix forgeloop_v2.daemon --repo ..` routes checklist `plan` / `build` work through the same babysitter/disposable-worktree/runtime-state path as other managed runs.
+    - Managed daemon start failures fail closed through the existing failure tracker/escalation artifact chain instead of degrading into silent polling.
+    - `[REPLAN]` is consumed only after the managed daemon plan run has actually started.
+    - Public docs stay explicit that `./forgeloop.sh daemon` still uses the bash daemon path in this slice.
+  - REQUIRED TESTS:
+    - `elixir/test/forgeloop_v2/daemon_test.exs`
+    - `elixir/test/forgeloop_v2/events_test.exs`
+    - `elixir/test/forgeloop_v2/babysitter_test.exs`
+    - full shell/eval/Elixir gates stay green
+  - Shipped behavior:
+    - `ForgeloopV2.Daemon` now starts temporary unnamed babysitters for checklist `plan` / `build` decisions and waits for their managed worktree runs to finish before rescheduling.
+    - Managed start failures now write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-*-start-error-last.txt` and flow through `FailureTracker.handle/2` with daemon surface/mode semantics.
+    - `mix forgeloop_v2.babysit` now reuses `Babysitter.await_result/2`, and Elixir docs/site copy now distinguish the managed Elixir daemon path from the still-bash `./forgeloop.sh daemon` wrapper.
+  - Deferred after this slice:
+    - bash daemon / wrapper convergence onto the babysitter path
+    - workflow-aware daemon scheduling / richer workflow history beyond the current active-run + artifact view
 
 - [x] Route manual workflow-pack actions through the managed control plane
   - Acceptance:

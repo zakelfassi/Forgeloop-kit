@@ -102,4 +102,31 @@ defmodule ForgeloopV2.EventsTest do
     assert "provider_attempted" in event_types
     assert "provider_failed_over" in event_types
   end
+
+  test "daemon checklist runs emit babysitter and worktree events" do
+    repo =
+      create_git_repo_fixture!(
+        loop_script_body: """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "daemon-managed"
+        """,
+        plan_content: "- [ ] build\n"
+      )
+
+    config = config_for!(repo.repo_root, shell_driver_enabled: true)
+    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.ShellLoop, schedule: false)
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    event_types = Events.read_all(config) |> Enum.map(& &1["event_type"])
+
+    assert "worktree_prepared" in event_types
+    assert "babysitter_started" in event_types
+    assert "loop_started" in event_types
+    assert "loop_completed" in event_types
+    assert "babysitter_completed" in event_types
+    assert "worktree_cleaned" in event_types
+  end
 end

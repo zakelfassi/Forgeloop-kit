@@ -66,6 +66,17 @@ defmodule ForgeloopV2.Babysitter do
     GenServer.call(server, :snapshot)
   end
 
+  @spec await_result(GenServer.server(), keyword()) ::
+          {:ok, map()} | {:retry, pos_integer()} | {:stopped, term()} | {:error, term()}
+  def await_result(server \\ __MODULE__, opts \\ []) do
+    do_await_result(
+      server,
+      Keyword.get(opts, :poll_interval_ms, 20),
+      Keyword.get(opts, :stop?, false),
+      Keyword.get(opts, :stop_timeout_ms, 5_000)
+    )
+  end
+
   @impl true
   def init(opts) do
     case Keyword.get(opts, :config) do
@@ -413,6 +424,39 @@ defmodule ForgeloopV2.Babysitter do
 
   defp maybe_cleanup_worktree(%State{worktree: nil}), do: :ok
   defp maybe_cleanup_worktree(%State{config: config, worktree: worktree}), do: Worktree.cleanup(config, worktree)
+
+  defp do_await_result(server, poll_interval_ms, stop?, stop_timeout_ms) do
+    case safe_snapshot(server) do
+      {:ok, %{running?: true}} ->
+        Process.sleep(poll_interval_ms)
+        do_await_result(server, poll_interval_ms, stop?, stop_timeout_ms)
+
+      {:ok, %{last_result: result}} when not is_nil(result) ->
+        if stop?, do: safe_stop(server, stop_timeout_ms)
+        result
+
+      {:ok, _snapshot} ->
+        if stop?, do: safe_stop(server, stop_timeout_ms)
+        {:error, :babysitter_exited}
+
+      :error ->
+        {:error, :babysitter_exited}
+    end
+  end
+
+  defp safe_snapshot(server) do
+    {:ok, snapshot(server)}
+  catch
+    :exit, _reason -> :error
+  end
+
+  defp safe_stop(server, timeout_ms) do
+    try do
+      GenServer.stop(server, :normal, timeout_ms)
+    catch
+      :exit, _reason -> :ok
+    end
+  end
 
   defp schedule_heartbeat(task_ref, interval_ms) do
     Process.send_after(self(), {:heartbeat, task_ref}, interval_ms)

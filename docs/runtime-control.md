@@ -111,13 +111,14 @@ That means a runtime state can legitimately look like:
 - Human escalation artifacts live in repo-local files so the operator can inspect them without external services
 - Full-auto mode should assume the VM/container is the security boundary
 
-## Manual disposable-worktree babysitter (experimental Elixir v2)
+## Disposable-worktree babysitter substrate (experimental Elixir v2)
 
-Today, the fail-closed contract is still anchored in the canonical repo checkout, but Elixir now has a **manual experimental babysitter** that can launch one child `plan` or `build` run inside a **disposable git worktree**.
+Today, the fail-closed contract is still anchored in the canonical repo checkout, but Elixir now has an experimental babysitter substrate that can launch `plan` or `build` runs inside a **disposable git worktree** for manual babysits, UI-triggered one-offs, and Elixir-daemon checklist work.
 
 ```bash
 cd elixir
 mix forgeloop_v2.babysit build --repo ..
+mix forgeloop_v2.daemon --once --repo ..
 ```
 
 That babysitter keeps the same repo-local artifact chain canonical at repo root:
@@ -132,8 +133,8 @@ This worktree layer is a repo-internal hygiene boundary, **not** the primary sec
 
 Important current limits:
 
-- the bash daemon does **not** schedule babysitter runs yet
-- the workflow lane is still manual-only and is not yet babysat through this path
+- the public bash daemon (`./forgeloop.sh daemon`) does **not** schedule babysitter runs yet
+- the workflow lane is still manual-only and is not daemon-scheduled through this path yet
 - the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
 
 ## Loopback JSON control-plane service (experimental Elixir v2)
@@ -172,7 +173,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 
 Still intentionally deferred here:
 
-- daemon-integrated babysitter scheduling
+- bash-daemon / wrapper convergence onto the babysitter path
 - workflow-aware daemon scheduling / richer workflow history beyond the current active-run + artifact view
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 

@@ -35,12 +35,13 @@ defmodule Mix.Tasks.ForgeloopV2.Babysit do
         driver: driver_module(opts[:driver] || if(config.shell_driver_enabled, do: "shell", else: "noop"))
       )
 
-    case Babysitter.start_run(pid) do
-      :ok -> wait_until_idle(pid)
-      {:error, reason} -> Mix.raise("babysitter failed to start: #{inspect(reason)}")
-    end
+    result =
+      case Babysitter.start_run(pid) do
+        :ok -> Babysitter.await_result(pid, stop?: true)
+        {:error, reason} -> Mix.raise("babysitter failed to start: #{inspect(reason)}")
+      end
 
-    case Babysitter.snapshot(pid).last_result do
+    case result do
       {:ok, _payload} -> :ok
       {:retry, count} -> Mix.raise("babysitter child requested retry after failure count=#{count}")
       {:stopped, reason} -> Mix.raise("babysitter child stopped: #{inspect(reason)}")
@@ -51,13 +52,4 @@ defmodule Mix.Tasks.ForgeloopV2.Babysit do
 
   defp driver_module("noop"), do: ForgeloopV2.WorkDrivers.Noop
   defp driver_module(_), do: ForgeloopV2.WorkDrivers.ShellLoop
-
-  defp wait_until_idle(pid) do
-    if Babysitter.snapshot(pid).running? do
-      Process.sleep(20)
-      wait_until_idle(pid)
-    else
-      :ok
-    end
-  end
 end

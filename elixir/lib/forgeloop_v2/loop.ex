@@ -513,15 +513,18 @@ defmodule ForgeloopV2.Daemon do
 
   alias ForgeloopV2.{
     ActiveRuntime,
+    Babysitter,
     Config,
     ControlFiles,
+    ControlLock,
     Daemon.State,
     Escalation,
     Events,
-    Loop,
+    FailureTracker,
     Orchestrator,
     RuntimeLifecycle,
-    RuntimeStateStore
+    RuntimeStateStore,
+    Worktree
   }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -711,17 +714,9 @@ defmodule ForgeloopV2.Daemon do
          _context
        )
        when mode in [:plan, :build] do
-    if consume_replan?, do: :ok = ControlFiles.consume_flag(state.config, "REPLAN")
-
     task =
       Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-        Loop.run(mode, state.config,
-          driver: state.driver,
-          driver_opts: state.driver_opts,
-          surface: "daemon",
-          runtime_mode: Atom.to_string(mode),
-          branch: state.config.default_branch
-        )
+        run_checklist_via_babysitter(state, mode, consume_replan?)
       end)
 
     %State{
@@ -731,6 +726,119 @@ defmodule ForgeloopV2.Daemon do
         running?: true,
         last_action: mode
     }
+  end
+
+  defp run_checklist_via_babysitter(%State{} = state, mode, consume_replan?) do
+    case ensure_managed_run_available(state.config) do
+      :ok ->
+        do_run_checklist_via_babysitter(state, mode, consume_replan?)
+
+      {:error, {:managed_run_active, payload}} ->
+        {:stopped, {:managed_run_active, payload}}
+
+      {:error, reason} ->
+        normalize_managed_start_failure(state.config, mode, reason)
+    end
+  end
+
+  defp do_run_checklist_via_babysitter(%State{} = state, mode, consume_replan?) do
+    try do
+      case Babysitter.start_link(
+             config: state.config,
+             mode: mode,
+             branch: state.config.default_branch,
+             runtime_surface: "daemon",
+             driver: state.driver,
+             driver_opts: state.driver_opts,
+             name: nil
+           ) do
+        {:ok, pid} ->
+          case Babysitter.start_run(pid) do
+            :ok ->
+              case maybe_consume_replan_after_start(state.config, pid, consume_replan?) do
+                :ok ->
+                  case Babysitter.await_result(pid, stop?: true) do
+                    {:error, :babysitter_exited} = error -> normalize_managed_start_failure(state.config, mode, error)
+                    result -> result
+                  end
+
+                {:error, reason} ->
+                  _ = stop_babysitter(pid)
+                  normalize_managed_start_failure(state.config, mode, reason)
+              end
+
+            {:error, reason} ->
+              stop_babysitter(pid)
+              normalize_managed_start_failure(state.config, mode, reason)
+          end
+
+        {:error, reason} ->
+          normalize_managed_start_failure(state.config, mode, reason)
+      end
+    catch
+      :exit, reason -> normalize_managed_start_failure(state.config, mode, {:babysitter_exit, reason})
+    end
+  end
+
+  defp ensure_managed_run_available(%Config{} = config) do
+    case Worktree.active_run_state(config) do
+      :missing -> :ok
+      {:stale, _payload} -> :ok
+      {:active, payload} -> {:error, {:managed_run_active, payload}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_consume_replan_after_start(_config, _pid, false), do: :ok
+  defp maybe_consume_replan_after_start(config, _pid, true), do: ControlFiles.consume_flag(config, "REPLAN")
+
+  defp normalize_managed_start_failure(config, mode, reason) do
+    summary = managed_start_failure_summary(mode, reason)
+    evidence_file = write_managed_start_error(config, mode, summary, reason)
+
+    case FailureTracker.handle(config, %{
+           kind: Atom.to_string(mode),
+           summary: summary,
+           evidence_file: evidence_file,
+           requested_action: config.failure_escalation_action,
+           surface: "daemon",
+           mode: Atom.to_string(mode),
+           branch: config.default_branch
+         }) do
+      {:retry, count} -> {:retry, count}
+      {:stop, count} -> {:stopped, {:escalated, count}}
+      {:error, failure_reason} -> {:error, failure_reason}
+    end
+  end
+
+  defp managed_start_failure_summary(mode, reason) do
+    "Managed daemon #{mode} run failed before loop start: #{format_managed_start_reason(reason)}"
+  end
+
+  defp format_managed_start_reason(reason), do: inspect(reason)
+
+  defp write_managed_start_error(%Config{} = config, mode, summary, reason) do
+    path = managed_start_error_file(config, mode)
+    body = [summary, "", inspect(reason), ""] |> Enum.join("\n")
+
+    case ControlLock.with_lock(config, path, :runtime, [timeout_ms: config.control_lock_timeout_ms], fn ->
+           ControlLock.atomic_write(config, path, :runtime, body)
+         end) do
+      {:ok, :ok} -> path
+      _ -> nil
+    end
+  end
+
+  defp managed_start_error_file(%Config{} = config, mode) do
+    Path.join([config.v2_state_dir, "babysitter", "daemon-#{mode}-start-error-last.txt"])
+  end
+
+  defp stop_babysitter(pid) do
+    try do
+      GenServer.stop(pid, :normal, 5_000)
+    catch
+      :exit, _reason -> :ok
+    end
   end
 
   defp maybe_schedule(%State{schedule?: false} = state, _delay), do: %State{state | timer_ref: nil}

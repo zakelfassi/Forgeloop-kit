@@ -55,6 +55,21 @@ defmodule ForgeloopV2.Worktree do
     end
   end
 
+  @spec active_run_state(Config.t()) :: :missing | {:active, map()} | {:stale, map()} | {:error, term()}
+  def active_run_state(%Config{} = config) do
+    case read_active_run(config) do
+      {:ok, payload} ->
+        if stale_active_run_payload?(config, payload) do
+          {:stale, payload}
+        else
+          {:active, payload}
+        end
+
+      other ->
+        other
+    end
+  end
+
   @spec prepare(Config.t(), Workspace.t(), keyword()) :: {:ok, Handle.t()} | {:error, term()}
   def prepare(%Config{} = config, %Workspace{} = workspace, _opts \\ []) do
     with :ok <- ensure_clean_repo(config),
@@ -121,12 +136,13 @@ defmodule ForgeloopV2.Worktree do
 
     with {:ok, result} <-
            ControlLock.with_lock(config, active_run_path(config), :runtime, lock_opts, fn ->
-             active_workspace_id = stale_active_workspace_id(config)
+             {active_workspace_id, active_run_stale?} = stale_active_workspace(config)
              metadata_workspace_ids = metadata_workspace_ids(config)
 
              workspace_ids =
-               ([active_workspace_id] ++ metadata_workspace_ids)
+               ([if(active_run_stale?, do: active_workspace_id)] ++ metadata_workspace_ids)
                |> Enum.reject(&is_nil/1)
+               |> Enum.reject(fn workspace_id -> workspace_id == active_workspace_id and not active_run_stale? end)
                |> Enum.uniq()
 
              cleaned =
@@ -137,7 +153,7 @@ defmodule ForgeloopV2.Worktree do
                  end
                end)
 
-             _ = File.rm(active_run_path(config))
+             if active_run_stale?, do: _ = File.rm(active_run_path(config))
              Enum.reverse(cleaned)
            end) do
       {:ok, result}
@@ -283,16 +299,41 @@ defmodule ForgeloopV2.Worktree do
     end
   end
 
-  defp stale_active_workspace_id(%Config{} = config) do
-    case File.read(active_run_path(config)) do
-      {:ok, body} ->
-        case Jason.decode(body) do
-          {:ok, %{"workspace_id" => workspace_id}} when is_binary(workspace_id) and workspace_id != "" -> workspace_id
-          _ -> nil
-        end
+  defp stale_active_workspace(%Config{} = config) do
+    case active_run_state(config) do
+      {:stale, payload} -> {active_workspace_id(payload), true}
+      {:active, payload} -> {active_workspace_id(payload), false}
+      _ -> {nil, false}
+    end
+  end
 
-      _ ->
-        nil
+  defp active_workspace_id(%{"workspace_id" => workspace_id}) when is_binary(workspace_id) and workspace_id != "", do: workspace_id
+  defp active_workspace_id(_payload), do: nil
+
+  defp stale_active_run_payload?(%Config{} = config, payload) do
+    status = Map.get(payload, "status")
+
+    cond do
+      status not in ["running", "stopping"] ->
+        true
+
+      true ->
+        case Map.get(payload, "last_heartbeat_at") do
+          heartbeat when is_binary(heartbeat) -> heartbeat_stale?(heartbeat, stale_threshold_ms(config))
+          _ -> true
+        end
+    end
+  end
+
+  defp stale_threshold_ms(%Config{} = config) do
+    max(config.babysitter_heartbeat_interval_ms * 3, config.babysitter_shutdown_grace_ms + config.babysitter_heartbeat_interval_ms)
+  end
+
+  defp heartbeat_stale?(heartbeat, threshold_ms) do
+    with {:ok, at, _offset} <- DateTime.from_iso8601(heartbeat) do
+      DateTime.diff(DateTime.utc_now(), at, :millisecond) > threshold_ms
+    else
+      _ -> true
     end
   end
 

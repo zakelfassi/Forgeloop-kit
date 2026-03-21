@@ -63,6 +63,8 @@ printf '.forgeloop-test/\n.workflow-runner.log\n' > "$tmp_repo/.gitignore"
   git init -b main >/dev/null
   git config user.name 'Forgeloop Test' >/dev/null
   git config user.email 'forgeloop@example.com' >/dev/null
+  git config commit.gpgsign false >/dev/null
+  git config tag.gpgsign false >/dev/null
   git add . >/dev/null
   git commit -m 'workflow fixture' >/dev/null
 )

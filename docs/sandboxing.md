@@ -34,7 +34,7 @@ That current slice lets Elixir:
 
 It is **not** a replacement for the VM/container boundary. Treat worktrees as hygiene and blast-radius reduction inside the real sandbox, not as a security primitive.
 
-Important current limits remain open: daemon scheduling through the babysitter, workflow-lane babysitting, UI/API control surfaces, and any worktree-aware ownership-claim semantics.
+Important current limits remain open: bash-daemon / wrapper convergence onto the babysitter path, workflow-aware daemon scheduling, and any worktree-aware ownership-claim semantics.
 
 Workflow-pack runners may also declare runner-side worktree behavior such as `worktree_mode`, but that remains runner-internal hygiene inside the VM/container boundary. It does not replace Forgeloop’s own sandboxing requirements.
 
