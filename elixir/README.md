@@ -23,9 +23,9 @@ Current scope:
 - workflow package catalog discovery plus a read-only visibility service for latest workflow preflight/run artifacts in the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
 - a manual single-child babysitter/supervisor that launches `Loop.run/3` inside a disposable git worktree while keeping repo-root control artifacts canonical
 - a loopback-only control-plane service that exposes runtime, backlog, questions, escalations, events, workflows, provider health, and babysitter start/stop/status over the existing file-first control plane
-- a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and no Node asset pipeline
+- a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and interactive controls for pause/clear-pause/replan/question answer-resolve/manual plan-build runs, all still backed by the same canonical files and babysitter path
 
-The next integration slice is still ahead of us: interactive UI controls on top of the loopback service, daemon scheduling through the babysitter, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
+The next integration slice is still ahead of us: daemon scheduling through the babysitter, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
 
 Still intentionally deferred:
 

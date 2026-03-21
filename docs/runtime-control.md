@@ -155,18 +155,19 @@ That service reuses the same file-first control plane rather than introducing a 
 - provider health derived from the existing provider-state file + provider events
 - babysitter status plus manual babysitter `plan` / `build` start/stop
 - a live SSE snapshot stream for browser updates
+- interactive UI controls for pause, clear-pause, replan, question answer/resolve, and one-off `plan` / `build`
 
 Operator mutations still go through the same helpers and runtime-state transitions:
 
 - pause requests append `[PAUSE]` and may write `paused` through the service writer only when no other runtime is already marked `running`
+- clear-pause requests remove `[PAUSE]` without writing `recovered`; the next daemon/loop cycle still owns recovery
 - replan requests append `[REPLAN]`
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
-- manual runs still flow through `Loop.run/3` via the babysitter path instead of a new executor
-- the UI remains read-only in this slice; canonical repo files and the existing JSON endpoints remain authoritative
+- manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, but now record `surface: "ui"`
+- canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
 
-- interactive UI mutations on top of the read surface
 - daemon-integrated babysitter scheduling
 - workflow-lane babysitting
 

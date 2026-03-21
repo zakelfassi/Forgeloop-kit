@@ -133,6 +133,35 @@ defmodule ForgeloopV2.BabysitterTest do
     assert recovery_index < loop_started_index
   end
 
+  test "ui runtime surface is recorded separately from babysitter ownership metadata" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root, shell_driver_enabled: true, babysitter_shutdown_grace_ms: 50)
+
+    {:ok, pid} =
+      Babysitter.start_link(
+        config: config,
+        mode: :build,
+        runtime_surface: "ui",
+        driver: ForgeloopV2.WorkDrivers.ShellLoop,
+        heartbeat_interval_ms: 25,
+        shutdown_grace_ms: 50,
+        name: nil
+      )
+
+    assert :ok = Babysitter.start_run(pid)
+    wait_until(fn -> Babysitter.snapshot(pid).running? and File.exists?(Worktree.active_run_path(config)) end)
+
+    snapshot = Babysitter.snapshot(pid)
+    active_run = Worktree.active_run_path(config) |> File.read!() |> Jason.decode!()
+
+    assert snapshot.runtime_surface == "ui"
+    assert active_run["runtime_surface"] == "ui"
+    assert active_run["surface"] == "babysitter"
+
+    assert :ok = Babysitter.stop_child(pid, :kill)
+    wait_until(fn -> not Babysitter.snapshot(pid).running? end)
+  end
+
   test "stale worktree cleanup runs before a fresh babysitter child starts" do
     repo = create_git_repo_fixture!()
     config = config_for!(repo.repo_root)

@@ -18,7 +18,7 @@
           <p class="eyebrow">Forgeloop // Operator HUD</p>
           <h1>Self-hosting control room</h1>
           <p class="lead">
-            Read-only, loopback-only, and backed by the same canonical repo files. The UI is a live map, not a second source of truth.
+            Loopback-only, file-first, and now interactive. The UI can steer the control plane, but the repo-local files and runtime artifacts still remain authoritative.
           </p>
         </div>
         <div class="hero-meta">
@@ -33,12 +33,24 @@
       <section class="command-deck panel">
         <div>
           <h2>Quick launch</h2>
-          <p>One command gets the loopback service and this UI online.</p>
+          <p>One command brings up the loopback service and this HUD.</p>
         </div>
         <div class="command-card">
           <code>./forgeloop.sh serve</code>
           <span>Fallback: <code>cd elixir &amp;&amp; mix forgeloop_v2.serve --repo ..</code></span>
         </div>
+      </section>
+
+      <section class="controls-panel panel">
+        <div class="panel-head">
+          <div>
+            <h2>Operator controls</h2>
+            <p class="subtle-copy">Pause, clear pause, request replan, or launch a one-off plan/build run without leaving the loopback HUD.</p>
+          </div>
+          <span class="panel-tag">controls</span>
+        </div>
+        <div id="control-status" class="notice info">Loading operator controls…</div>
+        <div id="controls-body" class="stack empty">Waiting for control snapshot…</div>
       </section>
 
       <section class="grid">
@@ -93,7 +105,7 @@
 
       <section class="footer-note panel">
         <p>
-          This slice is intentionally additive: no Phoenix, no database, no Node asset pipeline, and no new authority beyond the repo-local files and JSON endpoints.
+          This slice stays additive: no Phoenix, no database, no Node asset pipeline, and no second source of truth beyond the existing repo-local files, runtime JSON, and loopback API.
         </p>
       </section>
     </main>

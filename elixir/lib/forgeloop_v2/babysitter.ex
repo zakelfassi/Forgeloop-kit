@@ -7,6 +7,7 @@ defmodule ForgeloopV2.Babysitter.State do
     :driver,
     :driver_opts,
     :branch,
+    :runtime_surface,
     :heartbeat_interval_ms,
     :shutdown_grace_ms,
     :workspace,
@@ -54,7 +55,7 @@ defmodule ForgeloopV2.Babysitter do
     GenServer.call(server, :start_run, :infinity)
   end
 
-  @spec stop_child(GenServer.server(), :pause | :kill) :: :ok
+  @spec stop_child(GenServer.server(), :pause | :kill) :: :ok | {:error, term()}
   def stop_child(server \\ __MODULE__, reason \\ :pause) do
     GenServer.call(server, {:stop_child, reason}, :infinity)
   end
@@ -76,6 +77,7 @@ defmodule ForgeloopV2.Babysitter do
           driver: Keyword.get(opts, :driver, default_driver(config)),
           driver_opts: Keyword.get(opts, :driver_opts, []),
           branch: Keyword.get(opts, :branch, config.default_branch),
+          runtime_surface: Keyword.get(opts, :runtime_surface, "babysitter"),
           heartbeat_interval_ms:
             Keyword.get(opts, :heartbeat_interval_ms, config.babysitter_heartbeat_interval_ms),
           shutdown_grace_ms:
@@ -120,6 +122,7 @@ defmodule ForgeloopV2.Babysitter do
        running?: state.running?,
        stopping?: state.stopping?,
        current_task_kind: if(state.running?, do: state.mode, else: nil),
+       runtime_surface: state.runtime_surface,
        workspace_id: state.workspace && state.workspace.workspace_id,
        worktree_path: state.worktree && state.worktree.checkout_path,
        last_action: state.last_action,
@@ -144,7 +147,10 @@ defmodule ForgeloopV2.Babysitter do
   end
 
   def handle_call({:stop_child, reason}, _from, %State{} = state) do
-    {:reply, :ok, do_stop_child(state, reason)}
+    case do_stop_child(state, reason) do
+      {:ok, next_state} -> {:reply, :ok, next_state}
+      {:error, stop_reason, next_state} -> {:reply, {:error, stop_reason}, next_state}
+    end
   end
 
   @impl true
@@ -187,7 +193,7 @@ defmodule ForgeloopV2.Babysitter do
                 state.driver_opts
                 |> Keyword.put(:worktree, worktree)
                 |> Keyword.put(:runtime_branch, state.branch),
-              surface: "babysitter",
+              surface: state.runtime_surface,
               runtime_mode: Atom.to_string(state.mode),
               branch: state.branch
             )
@@ -225,7 +231,8 @@ defmodule ForgeloopV2.Babysitter do
       "mode" => Atom.to_string(state.mode),
       "branch" => state.branch,
       "worktree_path" => worktree.checkout_path,
-      "surface" => "babysitter"
+      "surface" => "babysitter",
+      "runtime_surface" => state.runtime_surface
     })
 
     :ok
@@ -264,9 +271,9 @@ defmodule ForgeloopV2.Babysitter do
     result = Task.shutdown(task, state.shutdown_grace_ms)
     Process.demonitor(task.ref, [:flush])
 
-    _ = ControlFiles.append_pause_flag(state.config)
+    pause_write_result = ControlFiles.append_pause_flag(state.config)
 
-    _ =
+    runtime_result =
       RuntimeLifecycle.transition(state.config, :paused_by_operator, :babysitter, %{
         surface: "babysitter",
         mode: Atom.to_string(state.mode),
@@ -277,25 +284,35 @@ defmodule ForgeloopV2.Babysitter do
     _ = delete_active_run(state.config)
     _ = maybe_cleanup_worktree(state)
 
+    stop_error = first_stop_error(pause_write_result, runtime_result)
+
     Events.emit(state.config, :babysitter_stopped, %{
       "workspace_id" => state.workspace && state.workspace.workspace_id,
       "mode" => Atom.to_string(state.mode),
       "branch" => state.branch,
+      "runtime_surface" => state.runtime_surface,
       "reason" => Atom.to_string(reason),
-      "forced" => is_nil(result)
+      "forced" => is_nil(result),
+      "error" => if(stop_error, do: inspect(stop_error), else: nil)
     })
 
-    %{state |
-      running?: false,
-      stopping?: false,
-      current_task: nil,
-      heartbeat_timer_ref: nil,
-      worktree: nil,
-      workspace: nil,
-      last_result: {:stopped, reason},
-      last_action: :stopped,
-      last_heartbeat_at: state.last_heartbeat_at,
-      started_at: nil}
+    next_state =
+      %{state |
+        running?: false,
+        stopping?: false,
+        current_task: nil,
+        heartbeat_timer_ref: nil,
+        worktree: nil,
+        workspace: nil,
+        last_result: if(stop_error, do: {:stop_error, stop_error}, else: {:stopped, reason}),
+        last_action: :stopped,
+        last_heartbeat_at: state.last_heartbeat_at,
+        started_at: nil}
+
+    case stop_error do
+      nil -> {:ok, next_state}
+      error -> {:error, error, next_state}
+    end
   end
 
   defp finish_run(%State{} = state, result) do
@@ -313,6 +330,7 @@ defmodule ForgeloopV2.Babysitter do
       "workspace_id" => state.workspace && state.workspace.workspace_id,
       "mode" => Atom.to_string(state.mode),
       "branch" => state.branch,
+      "runtime_surface" => state.runtime_surface,
       "result" => inspect(result)
     })
 
@@ -334,6 +352,7 @@ defmodule ForgeloopV2.Babysitter do
       "mode" => Atom.to_string(state.mode),
       "branch" => state.branch,
       "surface" => "babysitter",
+      "runtime_surface" => state.runtime_surface,
       "worktree_path" => worktree.checkout_path,
       "loop_script_path" => worktree.loop_script_path,
       "started_at" => started_at,
@@ -382,6 +401,12 @@ defmodule ForgeloopV2.Babysitter do
     _ = Process.cancel_timer(timer_ref, async: false, info: false)
     :ok
   end
+
+  defp first_stop_error(:ok, {:ok, _state}), do: nil
+  defp first_stop_error(:ok, {:error, reason}), do: reason
+  defp first_stop_error({:error, reason}, _runtime_result), do: reason
+  defp first_stop_error(_other, {:error, reason}), do: reason
+  defp first_stop_error(_other, _runtime_result), do: nil
 
   defp stop_reason(:kill), do: "Babysitter killed child run"
   defp stop_reason(_reason), do: "Babysitter paused child run"

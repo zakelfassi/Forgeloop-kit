@@ -127,7 +127,7 @@ Format:
     - `ForgeloopV2.ProviderHealth` derives provider badges from `providers-state.json` plus provider events without introducing a new store.
     - Installed repos now get `./forgeloop.sh serve` as the one-command launcher for the local operator UI.
 
-- [ ] Add interactive UI flows for answering questions, resolving questions, pausing, clearing pause, requesting replan, and triggering one-off `plan` / `build` runs
+- [x] Add interactive UI flows for answering questions, resolving questions, pausing, clearing pause, requesting replan, and triggering one-off `plan` / `build` runs
   - Acceptance:
     - Answering a question updates `QUESTIONS.md` and leaves recovery to the next daemon/loop cycle.
     - Clearing pause removes `[PAUSE]` without falsely writing `recovered`.
@@ -136,6 +136,11 @@ Format:
     - question-answer affects next recovery decision
     - clear-pause followed by daemon tick preserves recovered->idle/running semantics
     - UI-triggered build failures still escalate through the existing failure tracker/artifact chain
+  - Shipped behavior:
+    - `/api/control/clear-pause` removes `[PAUSE]` idempotently and leaves recovery to the next daemon/loop cycle.
+    - `/api/control/run` launches one-off `plan` / `build` work through the babysitter while recording `surface: "ui"` in the runtime/evidence chain.
+    - The static HUD now drives pause / clear-pause / replan / question answer-resolve / manual run flows directly against the loopback control plane.
+    - Question drafts stay browser-local while canonical question state continues to stream from `/api/overview` and `/api/stream`.
 
 - [ ] Make the UI the primary human coordination surface in docs and escalation copy while keeping repo-local files canonical
   - Acceptance:

@@ -65,6 +65,8 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["ok"] == true
     assert payload["data"]["runtime_state"]["status"] == "running"
     assert payload["data"]["backlog"]["needs_build?"] == true
+    assert payload["data"]["control_flags"]["pause_requested?"] == false
+    assert payload["data"]["control_flags"]["replan_requested?"] == false
     assert Enum.at(payload["data"]["questions"], 0)["id"] == "Q-1"
     assert Enum.at(payload["data"]["escalations"], 0)["id"] == "E-1"
     assert Enum.any?(payload["data"]["events"], &(&1["event_type"] == "daemon_tick"))
@@ -90,7 +92,7 @@ defmodule ForgeloopV2.ServiceTest do
     assert html.body =~ "hud"
   end
 
-  test "pause, replan, and question answer endpoints mutate canonical files safely" do
+  test "pause, replan, question answer, and resolve endpoints mutate canonical files safely" do
     repo =
       create_repo_fixture!(
         questions: """
@@ -117,6 +119,15 @@ defmodule ForgeloopV2.ServiceTest do
 
     assert answer_payload["ok"] == true
     assert answer_payload["data"]["question"]["status_kind"] == "answered"
+
+    resolve_payload =
+      post_json!(base_url <> "/api/questions/Q-1/resolve", %{
+        "answer" => "Proceed.",
+        "expected_revision" => answer_payload["data"]["question"]["revision"]
+      })
+
+    assert resolve_payload["ok"] == true
+    assert resolve_payload["data"]["question"]["status_kind"] == "resolved"
     assert File.read!(config.requests_file) =~ "[PAUSE]"
     assert File.read!(config.requests_file) =~ "[REPLAN]"
     assert File.read!(config.questions_file) =~ "Proceed."
@@ -124,6 +135,101 @@ defmodule ForgeloopV2.ServiceTest do
     assert {:ok, state} = RuntimeStateStore.read(config)
     assert state.status == "paused"
     assert state.surface == "service"
+  end
+
+  test "clear pause endpoint is idempotent and recovery stays daemon-driven" do
+    repo = create_repo_fixture!(requests: "[PAUSE]\n", plan_content: "# done\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    assert {:ok, _state} =
+             RuntimeStateStore.write(config, %{
+               status: "paused",
+               transition: "paused",
+               surface: "daemon",
+               mode: "daemon",
+               reason: "Paused via operator",
+               requested_action: "",
+               branch: "main"
+             })
+
+    {:ok, service_pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(service_pid, :shutdown) end)
+
+    clear_payload = post_json!(base_url <> "/api/control/clear-pause", %{})
+    assert clear_payload["ok"] == true
+    assert clear_payload["data"]["cleared?"] == true
+    refute File.read!(config.requests_file) =~ "[PAUSE]"
+
+    assert {:ok, paused_state} = RuntimeStateStore.read(config)
+    assert paused_state.status == "paused"
+
+    second_payload = post_json!(base_url <> "/api/control/clear-pause", %{})
+    assert second_payload["ok"] == true
+    assert second_payload["data"]["cleared?"] == false
+
+    {:ok, daemon_pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    Daemon.run_once(daemon_pid)
+    wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
+
+    assert {:ok, recovered_state} = RuntimeStateStore.read(config)
+    assert recovered_state.status == "recovered"
+
+    Daemon.run_once(daemon_pid)
+    wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
+
+    assert {:ok, final_state} = RuntimeStateStore.read(config)
+    assert final_state.status == "idle"
+  end
+
+  test "answering a question through the service changes the next recovery decision" do
+    repo =
+      create_repo_fixture!(
+        plan_content: "# done\n",
+        questions: """
+        ## Q-1
+        **Question**: Need input?
+        **Status**: ⏳ Awaiting response
+        """
+      )
+
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, _} =
+      RuntimeLifecycle.transition(config, :human_escalated, :escalation, %{
+        surface: "loop",
+        mode: "build",
+        reason: "Need operator input",
+        requested_action: "issue",
+        branch: "main"
+      })
+
+    :ok = ControlFiles.consume_flag(config, "PAUSE")
+
+    {:ok, service_pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(service_pid, :shutdown) end)
+
+    {:ok, daemon_pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    Daemon.run_once(daemon_pid)
+    wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
+    assert RuntimeStateStore.status(config) == "awaiting-human"
+
+    question = get_json!(base_url <> "/api/questions")["data"] |> Enum.at(0)
+
+    answer_payload =
+      post_json!(base_url <> "/api/questions/Q-1/answer", %{
+        "answer" => "Approved.",
+        "expected_revision" => question["revision"]
+      })
+
+    assert answer_payload["ok"] == true
+
+    Daemon.run_once(daemon_pid)
+    wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.status == "recovered"
   end
 
   test "babysitter endpoints serialize manual runs and allow stop through the loopback service" do
@@ -159,6 +265,124 @@ defmodule ForgeloopV2.ServiceTest do
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
     assert File.read!(config.requests_file) =~ "[PAUSE]"
     assert RuntimeStateStore.status(config) == "paused"
+  end
+
+  test "ui control runs use the ui surface and reject concurrent starts" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: true,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    start_payload = post_json!(base_url <> "/api/control/run", %{"mode" => "build"})
+    assert start_payload["ok"] == true
+    assert start_payload["data"]["surface"] == "ui"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] end)
+
+    babysitter_payload = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter_payload["runtime_surface"] == "ui"
+    assert babysitter_payload["active_run"]["runtime_surface"] == "ui"
+    assert babysitter_payload["active_run"]["surface"] == "babysitter"
+
+    conflict = post_json_response!(base_url <> "/api/control/run", %{"mode" => "build"})
+    assert conflict.status == 409
+    assert conflict.body["error"]["reason"] == "babysitter_already_running"
+
+    stop_payload = post_json!(base_url <> "/api/babysitter/stop", %{"reason" => "kill"})
+    assert stop_payload["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+  end
+
+  test "idle managed babysitters are replaced when mode or runtime surface changes" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: true,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    assert post_json!(base_url <> "/api/control/run", %{"mode" => "build"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] end)
+    assert post_json!(base_url <> "/api/babysitter/stop", %{"reason" => "kill"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+
+    second_start = post_json!(base_url <> "/api/babysitter/start", %{"mode" => "plan"})
+    assert second_start["ok"] == true
+    assert second_start["data"]["surface"] == "babysitter"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] end)
+
+    babysitter_payload = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter_payload["mode"] == "plan"
+    assert babysitter_payload["runtime_surface"] == "babysitter"
+    assert babysitter_payload["active_run"]["mode"] == "plan"
+    assert babysitter_payload["active_run"]["runtime_surface"] == "babysitter"
+
+    assert post_json!(base_url <> "/api/babysitter/stop", %{"reason" => "kill"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+  end
+
+  test "ui-triggered failing builds still escalate through canonical artifacts" do
+    repo =
+      create_git_repo_fixture!(
+        loop_script_body: """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "boom"
+        exit 1
+        """,
+        plan_content: "- [ ] build\n"
+      )
+
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        shell_driver_enabled: true,
+        failure_escalate_after: 1,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    start_payload = post_json!(base_url <> "/api/control/run", %{"mode" => "build"})
+    assert start_payload["ok"] == true
+    assert start_payload["data"]["surface"] == "ui"
+
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end, 4_000)
+
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+    assert File.read!(config.questions_file) =~ "## Q-"
+    assert File.read!(config.escalations_file) =~ "## E-"
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.status == "awaiting-human"
+    assert state.surface == "ui"
   end
 
   test "stream endpoint emits bootstrap and follow-up snapshots when overview changes" do

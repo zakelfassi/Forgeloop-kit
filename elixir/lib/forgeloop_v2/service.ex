@@ -10,6 +10,7 @@ defmodule ForgeloopV2.ControlPlane.State do
     :babysitter_ref,
     :babysitter_mode,
     :babysitter_branch,
+    :babysitter_runtime_surface,
     :last_action,
     :last_result
   ]
@@ -83,6 +84,9 @@ defmodule ForgeloopV2.ControlPlane do
   @spec replan(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def replan(server \\ __MODULE__), do: GenServer.call(server, :replan, :infinity)
 
+  @spec clear_pause(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def clear_pause(server \\ __MODULE__), do: GenServer.call(server, :clear_pause, :infinity)
+
   @spec answer_question(GenServer.server(), String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def answer_question(server \\ __MODULE__, question_id, answer, opts \\ []) do
     GenServer.call(server, {:answer_question, question_id, answer, opts}, :infinity)
@@ -150,10 +154,11 @@ defmodule ForgeloopV2.ControlPlane do
     {:reply,
      %{
        started_at: state.started_at,
-       last_action: state.last_action,
-       last_result: state.last_result,
-       babysitter_mode: state.babysitter_mode,
-       babysitter_branch: state.babysitter_branch
+         last_action: state.last_action,
+         last_result: state.last_result,
+         babysitter_mode: state.babysitter_mode,
+         babysitter_branch: state.babysitter_branch,
+         babysitter_runtime_surface: state.babysitter_runtime_surface
      }, state}
   end
 
@@ -161,6 +166,7 @@ defmodule ForgeloopV2.ControlPlane do
     reply =
       with {:ok, runtime_state} <- read_runtime_state(state.config),
            {:ok, backlog} <- read_backlog(state.config),
+           {:ok, control_flags} <- read_control_flags(state.config),
            {:ok, questions} <- read_questions(state.config),
            {:ok, escalations} <- read_escalations(state.config),
            {:ok, provider_health} <- read_provider_health(state.config),
@@ -170,6 +176,7 @@ defmodule ForgeloopV2.ControlPlane do
          %{
            runtime_state: runtime_state,
            backlog: backlog,
+           control_flags: control_flags,
            questions: questions,
            escalations: escalations,
            provider_health: provider_health,
@@ -241,6 +248,13 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  def handle_call(:clear_pause, _from, %State{} = state) do
+    case do_clear_pause(state) do
+      {:ok, payload, next_state} -> {:reply, {:ok, payload}, next_state}
+      {:error, reason, next_state} -> {:reply, {:error, reason}, next_state}
+    end
+  end
+
   def handle_call({:answer_question, question_id, answer, opts}, _from, %State{} = state) do
     case ControlFiles.answer_question(state.config, question_id, answer, opts) do
       {:ok, result} ->
@@ -305,38 +319,61 @@ defmodule ForgeloopV2.ControlPlane do
     with :ok <- ControlFiles.append_flag(state.config, "PAUSE"),
          {:ok, running_snapshot} <- babysitter_status(state, true),
          :ok <- maybe_pause_runtime(state.config, running_snapshot),
-         :ok <- maybe_stop_managed_babysitter(state, running_snapshot) do
+         :ok <- maybe_stop_managed_babysitter(state, running_snapshot),
+         {:ok, updated_snapshot} <- babysitter_status(state, true) do
       Events.emit(state.config, :operator_action, %{
         "surface" => "service",
         "action" => "pause_requested",
         "recorded_at" => iso_now()
       })
 
-      {:ok, %{requested?: true, babysitter: running_snapshot}, %{state | last_action: :pause, last_result: :ok}}
+      {:ok, %{requested?: true, babysitter: updated_snapshot}, %{state | last_action: :pause, last_result: :ok}}
     else
       {:error, reason} ->
         {:error, reason, %{state | last_action: :pause_failed, last_result: {:error, reason}}}
     end
   end
 
+  defp do_clear_pause(%State{} = state) do
+    pause_requested? = ControlFiles.has_flag?(state.config, "PAUSE")
+
+    case ControlFiles.consume_flag(state.config, "PAUSE") do
+      :ok ->
+        Events.emit(state.config, :operator_action, %{
+          "surface" => "service",
+          "action" => "clear_pause",
+          "recorded_at" => iso_now()
+        })
+
+        {:ok,
+         %{cleared?: pause_requested?, pause_requested?: false},
+         %{state | last_action: :clear_pause, last_result: :ok}}
+
+      {:error, reason} ->
+        {:error, reason, %{state | last_action: :clear_pause_failed, last_result: {:error, reason}}}
+    end
+  end
+
   defp do_start_run(%State{} = state, mode, opts) do
     with {:ok, normalized_mode} <- normalize_mode(mode),
+         {:ok, runtime_surface} <- normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
          {:ok, babysitter} <- babysitter_status(state, true),
          :ok <- ensure_start_allowed(babysitter),
-         {:ok, next_state, pid} <- ensure_babysitter_instance(state, normalized_mode, opts),
+         {:ok, next_state, pid} <- ensure_babysitter_instance(state, normalized_mode, runtime_surface, opts),
          :ok <- Babysitter.start_run(pid),
          {:ok, updated_babysitter} <- babysitter_status(next_state, true) do
       Events.emit(state.config, :operator_action, %{
         "surface" => "service",
         "action" => "start_run",
         "mode" => Atom.to_string(normalized_mode),
+        "runtime_surface" => runtime_surface,
         "recorded_at" => iso_now()
       })
 
       {:ok,
        %{
          mode: Atom.to_string(normalized_mode),
-         surface: "babysitter",
+         surface: runtime_surface,
          babysitter: updated_babysitter
        }, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
     else
@@ -382,6 +419,14 @@ defmodule ForgeloopV2.ControlPlane do
       :missing -> {:ok, %{needs_build?: true, items: []}}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp read_control_flags(config) do
+    {:ok,
+     %{
+       pause_requested?: ControlFiles.has_flag?(config, "PAUSE"),
+       replan_requested?: ControlFiles.has_flag?(config, "REPLAN")
+     }}
   end
 
   defp read_questions(config) do
@@ -439,6 +484,7 @@ defmodule ForgeloopV2.ControlPlane do
        managed?: not is_nil(managed_snapshot),
        mode: state.babysitter_mode,
        branch: state.babysitter_branch,
+       runtime_surface: state.babysitter_runtime_surface,
        snapshot: managed_snapshot,
        active_run: active_run,
        running?: babysitter_running?(managed_snapshot, active_run)
@@ -482,11 +528,11 @@ defmodule ForgeloopV2.ControlPlane do
   defp ensure_start_allowed(%{running?: true, active_run: active_run}), do: {:error, {:babysitter_unmanaged_active, active_run}}
   defp ensure_start_allowed(_), do: :ok
 
-  defp ensure_babysitter_instance(%State{} = state, mode, opts) do
+  defp ensure_babysitter_instance(%State{} = state, mode, runtime_surface, opts) do
     branch = opts[:branch] || state.config.default_branch
 
     cond do
-      reusable_babysitter?(state, mode, branch) ->
+      reusable_babysitter?(state, mode, branch, runtime_surface) ->
         {:ok, state, state.babysitter_pid}
 
       is_pid(state.babysitter_pid) ->
@@ -494,37 +540,56 @@ defmodule ForgeloopV2.ControlPlane do
           Process.exit(state.babysitter_pid, :shutdown)
         end
 
-        start_babysitter(state, mode, branch)
+        start_babysitter(state, mode, branch, runtime_surface)
 
       true ->
-        start_babysitter(state, mode, branch)
+        start_babysitter(state, mode, branch, runtime_surface)
     end
   end
 
-  defp start_babysitter(%State{} = state, mode, branch) do
+  defp start_babysitter(%State{} = state, mode, branch, runtime_surface) do
     case Babysitter.start_link(
            config: state.config,
            mode: mode,
            branch: branch,
+           runtime_surface: runtime_surface,
            driver: state.driver,
            driver_opts: state.driver_opts,
            name: nil
          ) do
       {:ok, pid} ->
+        Process.unlink(pid)
         ref = Process.monitor(pid)
-        {:ok, %{state | babysitter_pid: pid, babysitter_ref: ref, babysitter_mode: mode, babysitter_branch: branch}, pid}
+
+        {:ok,
+         %{state |
+           babysitter_pid: pid,
+           babysitter_ref: ref,
+           babysitter_mode: mode,
+           babysitter_branch: branch,
+           babysitter_runtime_surface: runtime_surface}, pid}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp reusable_babysitter?(%State{babysitter_pid: pid, babysitter_mode: mode, babysitter_branch: branch}, mode, branch)
+  defp reusable_babysitter?(
+         %State{
+           babysitter_pid: pid,
+           babysitter_mode: mode,
+           babysitter_branch: branch,
+           babysitter_runtime_surface: runtime_surface
+         },
+         mode,
+         branch,
+         runtime_surface
+       )
        when is_pid(pid) do
     Process.alive?(pid)
   end
 
-  defp reusable_babysitter?(_, _, _), do: false
+  defp reusable_babysitter?(_, _, _, _), do: false
 
   defp managed_babysitter_pid(%State{babysitter_pid: pid}) when is_pid(pid) do
     if Process.alive?(pid), do: {:ok, pid}, else: {:error, :babysitter_not_managed}
@@ -533,7 +598,14 @@ defmodule ForgeloopV2.ControlPlane do
   defp managed_babysitter_pid(_state), do: {:error, :babysitter_not_managed}
 
   defp clear_babysitter(%State{} = state) do
-    %{state | babysitter_pid: nil, babysitter_ref: nil, babysitter_mode: nil, babysitter_branch: nil}
+    %{
+      state
+      | babysitter_pid: nil,
+        babysitter_ref: nil,
+        babysitter_mode: nil,
+        babysitter_branch: nil,
+        babysitter_runtime_surface: nil
+    }
   end
 
   defp normalize_mode(:plan), do: {:ok, :plan}
@@ -541,6 +613,10 @@ defmodule ForgeloopV2.ControlPlane do
   defp normalize_mode("plan"), do: {:ok, :plan}
   defp normalize_mode("build"), do: {:ok, :build}
   defp normalize_mode(other), do: {:error, {:invalid_mode, other}}
+
+  defp normalize_runtime_surface("ui"), do: {:ok, "ui"}
+  defp normalize_runtime_surface("babysitter"), do: {:ok, "babysitter"}
+  defp normalize_runtime_surface(other), do: {:error, {:invalid_runtime_surface, other}}
 
   defp normalize_stop_reason(:pause), do: {:ok, :pause}
   defp normalize_stop_reason(:kill), do: {:ok, :kill}
@@ -577,6 +653,7 @@ defmodule ForgeloopV2.ServiceJSON do
     %{
       runtime_state: runtime_state(payload.runtime_state),
       backlog: backlog(payload.backlog),
+      control_flags: control_flags(payload.control_flags),
       questions: Enum.map(payload.questions, &question/1),
       escalations: Enum.map(payload.escalations, &escalation/1),
       provider_health: provider_health(payload.provider_health),
@@ -591,6 +668,10 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def backlog(%{needs_build?: needs_build?, items: items}) do
     %{needs_build?: needs_build?, items: Enum.map(items, &plan_item/1)}
+  end
+
+  def control_flags(%{pause_requested?: pause_requested?, replan_requested?: replan_requested?}) do
+    %{pause_requested?: pause_requested?, replan_requested?: replan_requested?}
   end
 
   def question(%Question{} = question) do
@@ -643,11 +724,12 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def provider_health(payload) when is_map(payload), do: sanitize(payload)
 
-  def babysitter(%{managed?: managed?, mode: mode, branch: branch, snapshot: snapshot, active_run: active_run, running?: running?}) do
+  def babysitter(%{managed?: managed?, mode: mode, branch: branch, runtime_surface: runtime_surface, snapshot: snapshot, active_run: active_run, running?: running?}) do
     %{
       managed?: managed?,
       mode: mode,
       branch: branch,
+      runtime_surface: runtime_surface,
       running?: running?,
       snapshot: sanitize(snapshot),
       active_run: sanitize(active_run)
@@ -1053,6 +1135,13 @@ defmodule ForgeloopV2.Service do
     end
   end
 
+  defp route(%{method: "POST", path: "/api/control/clear-pause"}, _config, control_plane_pid) do
+    case ControlPlane.clear_pause(control_plane_pid) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+      {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
   defp route(%{method: "POST", path: "/api/control/replan"}, _config, control_plane_pid) do
     case ControlPlane.replan(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
@@ -1060,8 +1149,25 @@ defmodule ForgeloopV2.Service do
     end
   end
 
+  defp route(%{method: "POST", path: "/api/control/run", json: body}, _config, control_plane_pid) do
+    case ControlPlane.start_run(
+           control_plane_pid,
+           Map.get(body, "mode"),
+           branch: Map.get(body, "branch"),
+           runtime_surface: "ui"
+         ) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+      {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
   defp route(%{method: "POST", path: "/api/babysitter/start", json: body}, _config, control_plane_pid) do
-    case ControlPlane.start_run(control_plane_pid, Map.get(body, "mode"), branch: Map.get(body, "branch")) do
+    case ControlPlane.start_run(
+           control_plane_pid,
+           Map.get(body, "mode"),
+           branch: Map.get(body, "branch"),
+           runtime_surface: "babysitter"
+         ) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
@@ -1231,6 +1337,7 @@ defmodule ForgeloopV2.Service do
   defp error_code({:blank_answer, _}), do: "blank_answer"
   defp error_code({:question_not_found, _}), do: "question_not_found"
   defp error_code({:invalid_mode, _}), do: "invalid_mode"
+  defp error_code({:invalid_runtime_surface, _}), do: "invalid_runtime_surface"
   defp error_code({:invalid_stop_reason, _}), do: "invalid_stop_reason"
   defp error_code({:babysitter_unmanaged_active, _}), do: "babysitter_unmanaged_active"
   defp error_code(:babysitter_already_running), do: "babysitter_already_running"
@@ -1245,6 +1352,7 @@ defmodule ForgeloopV2.Service do
   defp status_for_error({:missing_expected_revision, _}), do: 400
   defp status_for_error({:blank_answer, _}), do: 400
   defp status_for_error({:invalid_mode, _}), do: 400
+  defp status_for_error({:invalid_runtime_surface, _}), do: 400
   defp status_for_error({:invalid_stop_reason, _}), do: 400
   defp status_for_error(:invalid_json_body), do: 400
   defp status_for_error(:unsupported_content_type), do: 415
