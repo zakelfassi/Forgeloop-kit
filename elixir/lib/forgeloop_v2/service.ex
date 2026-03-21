@@ -26,6 +26,7 @@ defmodule ForgeloopV2.ControlPlane do
     Coordination,
     Events,
     PlanStore,
+    ProviderHealth,
     RuntimeLifecycle,
     RuntimeStateStore,
     WorkflowService,
@@ -59,6 +60,9 @@ defmodule ForgeloopV2.ControlPlane do
 
   @spec escalations(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Escalation.t()]} | {:error, term()}
   def escalations(server \\ __MODULE__), do: GenServer.call(server, :escalations)
+
+  @spec provider_health(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def provider_health(server \\ __MODULE__), do: GenServer.call(server, :provider_health)
 
   @spec events(GenServer.server(), keyword()) :: {:ok, [map()]}
   def events(server \\ __MODULE__, opts \\ []), do: GenServer.call(server, {:events, opts})
@@ -159,6 +163,7 @@ defmodule ForgeloopV2.ControlPlane do
            {:ok, backlog} <- read_backlog(state.config),
            {:ok, questions} <- read_questions(state.config),
            {:ok, escalations} <- read_escalations(state.config),
+           {:ok, provider_health} <- read_provider_health(state.config),
            {:ok, workflow_overview} <- WorkflowService.overview(state.config),
            {:ok, babysitter} <- babysitter_status(state, Keyword.get(opts, :include_active_run?, true)) do
         {:ok,
@@ -167,6 +172,7 @@ defmodule ForgeloopV2.ControlPlane do
            backlog: backlog,
            questions: questions,
            escalations: escalations,
+           provider_health: provider_health,
            events: limited_events(state.config, opts),
            workflows: workflow_overview,
            babysitter: babysitter
@@ -190,6 +196,10 @@ defmodule ForgeloopV2.ControlPlane do
 
   def handle_call(:escalations, _from, %State{} = state) do
     {:reply, read_escalations(state.config), state}
+  end
+
+  def handle_call(:provider_health, _from, %State{} = state) do
+    {:reply, read_provider_health(state.config), state}
   end
 
   def handle_call({:events, opts}, _from, %State{} = state) do
@@ -390,6 +400,8 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  defp read_provider_health(config), do: {:ok, ProviderHealth.read(config)}
+
   defp limited_events(config, opts) do
     limit = opts |> Keyword.get(:limit, 50) |> normalize_limit()
     config |> Events.read_all() |> Enum.take(-limit)
@@ -567,6 +579,7 @@ defmodule ForgeloopV2.ServiceJSON do
       backlog: backlog(payload.backlog),
       questions: Enum.map(payload.questions, &question/1),
       escalations: Enum.map(payload.escalations, &escalation/1),
+      provider_health: provider_health(payload.provider_health),
       events: payload.events,
       workflows: workflow_overview(payload.workflows),
       babysitter: babysitter(payload.babysitter)
@@ -627,6 +640,8 @@ defmodule ForgeloopV2.ServiceJSON do
       latest_activity_at: summary.latest_activity_at
     }
   end
+
+  def provider_health(payload) when is_map(payload), do: sanitize(payload)
 
   def babysitter(%{managed?: managed?, mode: mode, branch: branch, snapshot: snapshot, active_run: active_run, running?: running?}) do
     %{
@@ -705,6 +720,7 @@ defmodule ForgeloopV2.Service.State do
     :owns_control_plane?,
     :listener,
     :acceptor_pid,
+    :client_refs,
     :host,
     :port,
     :base_url,
@@ -716,9 +732,12 @@ defmodule ForgeloopV2.Service do
   @moduledoc false
   use GenServer
 
-  alias ForgeloopV2.{Config, ControlPlane, Events, Service.State, ServiceJSON}
+  alias ForgeloopV2.{Config, ControlPlane, Events, Service.State, ServiceJSON, UIAssets}
 
   @recv_timeout_ms 5_000
+  @stream_poll_interval_ms 1_000
+  @stream_heartbeat_interval_ms 15_000
+  @stream_retry_ms 2_000
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -735,32 +754,47 @@ defmodule ForgeloopV2.Service do
   def init(opts) do
     with {:ok, config} <- load_config(opts),
          {:ok, {host, ip}} <- normalize_loopback_host(Keyword.get(opts, :host, config.service_host)),
-         {:ok, control_plane_pid, owns_control_plane?} <- start_control_plane(config, opts),
+         :ok <- UIAssets.validate!(config),
          {:ok, listener} <- listen(ip, Keyword.get(opts, :port, config.service_port)),
-         {:ok, port} <- listener_port(listener),
-         {:ok, acceptor_pid} <- start_accept_loop(listener, control_plane_pid) do
-      started_at = iso_now()
-      base_url = base_url_for(host, port)
+         {:ok, port} <- listener_port(listener) do
+      case start_control_plane(config, opts) do
+        {:ok, control_plane_pid, owns_control_plane?} ->
+          case start_accept_loop(listener, config, control_plane_pid, self()) do
+            {:ok, acceptor_pid} ->
+              started_at = iso_now()
+              base_url = base_url_for(host, port)
 
-      Events.emit(config, :service_http_started, %{
-        "surface" => "service",
-        "host" => host,
-        "port" => port,
-        "started_at" => started_at
-      })
+              Events.emit(config, :service_http_started, %{
+                "surface" => "service",
+                "host" => host,
+                "port" => port,
+                "started_at" => started_at
+              })
 
-      {:ok,
-       %State{
-         config: config,
-         control_plane_pid: control_plane_pid,
-         owns_control_plane?: owns_control_plane?,
-         listener: listener,
-         acceptor_pid: acceptor_pid,
-         host: host,
-         port: port,
-         base_url: base_url,
-         started_at: started_at
-       }}
+              {:ok,
+               %State{
+                 config: config,
+                 control_plane_pid: control_plane_pid,
+                 owns_control_plane?: owns_control_plane?,
+                 listener: listener,
+                 acceptor_pid: acceptor_pid,
+                 client_refs: %{},
+                 host: host,
+                 port: port,
+                 base_url: base_url,
+                 started_at: started_at
+               }}
+
+            {:error, reason} ->
+              maybe_stop_control_plane(control_plane_pid, owns_control_plane?)
+              :gen_tcp.close(listener)
+              {:stop, reason}
+          end
+
+        {:error, reason} ->
+          :gen_tcp.close(listener)
+          {:stop, reason}
+      end
     else
       {:error, reason} -> {:stop, reason}
     end
@@ -779,13 +813,15 @@ defmodule ForgeloopV2.Service do
       Process.exit(state.acceptor_pid, :shutdown)
     end
 
+    Enum.each(Map.keys(state.client_refs || %{}), fn pid ->
+      if Process.alive?(pid), do: Process.exit(pid, :shutdown)
+    end)
+
     if is_port(state.listener) do
       :gen_tcp.close(state.listener)
     end
 
-    if state.owns_control_plane? and is_pid(state.control_plane_pid) and Process.alive?(state.control_plane_pid) do
-      Process.exit(state.control_plane_pid, :shutdown)
-    end
+    maybe_stop_control_plane(state.control_plane_pid, state.owns_control_plane?)
 
     :ok
   end
@@ -799,6 +835,22 @@ defmodule ForgeloopV2.Service do
        base_url: state.base_url,
        started_at: state.started_at
      }, state}
+  end
+
+  @impl true
+  def handle_info({:service_client_started, pid}, %State{} = state) when is_pid(pid) do
+    ref = Process.monitor(pid)
+    {:noreply, %{state | client_refs: Map.put(state.client_refs || %{}, pid, ref)}}
+  end
+
+  def handle_info({:DOWN, ref, :process, pid, _reason}, %State{} = state) do
+    client_refs = state.client_refs || %{}
+
+    if Map.get(client_refs, pid) == ref do
+      {:noreply, %{state | client_refs: Map.delete(client_refs, pid)}}
+    else
+      {:noreply, state}
+    end
   end
 
   defp load_config(opts) do
@@ -838,6 +890,12 @@ defmodule ForgeloopV2.Service do
 
   defp normalize_loopback_host(other), do: {:error, {:invalid_service_host, other}}
 
+  defp maybe_stop_control_plane(pid, true) when is_pid(pid) do
+    if Process.alive?(pid), do: Process.exit(pid, :shutdown)
+  end
+
+  defp maybe_stop_control_plane(_pid, _owns_control_plane?), do: :ok
+
   defp listen(ip, port) do
     :gen_tcp.listen(port, [
       :binary,
@@ -856,19 +914,20 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp start_accept_loop(listener, control_plane_pid) do
-    Task.Supervisor.start_child(ForgeloopV2.TaskSupervisor, fn -> accept_loop(listener, control_plane_pid) end)
+  defp start_accept_loop(listener, config, control_plane_pid, owner_pid) do
+    Task.Supervisor.start_child(ForgeloopV2.TaskSupervisor, fn -> accept_loop(listener, config, control_plane_pid, owner_pid) end)
   end
 
-  defp accept_loop(listener, control_plane_pid) do
+  defp accept_loop(listener, config, control_plane_pid, owner_pid) do
     case :gen_tcp.accept(listener) do
       {:ok, socket} ->
-        {:ok, _pid} =
+        {:ok, client_pid} =
           Task.Supervisor.start_child(ForgeloopV2.TaskSupervisor, fn ->
-            handle_socket(socket, control_plane_pid)
+            handle_socket(socket, config, control_plane_pid)
           end)
 
-        accept_loop(listener, control_plane_pid)
+        send(owner_pid, {:service_client_started, client_pid})
+        accept_loop(listener, config, control_plane_pid, owner_pid)
 
       {:error, :closed} ->
         :ok
@@ -878,71 +937,96 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp handle_socket(socket, control_plane_pid) do
-    response =
-      case read_request(socket) do
-        {:ok, request} -> route(request, control_plane_pid)
-        {:error, reason} -> error_response(status_for_error(reason), reason)
-      end
+  defp handle_socket(socket, config, control_plane_pid) do
+    case read_request(socket) do
+      {:ok, request} ->
+        case route(request, config, control_plane_pid) do
+          {:stream, limit} ->
+            case stream_snapshots(socket, control_plane_pid, stream_limit(limit)) do
+              :ok -> :ok
+              {:error, reason} -> send_body_response(socket, error_response(status_for_error(reason), reason))
+            end
 
-    :ok = :gen_tcp.send(socket, encode_response(response))
+          response ->
+            send_body_response(socket, response)
+        end
+
+      {:error, reason} ->
+        send_body_response(socket, error_response(status_for_error(reason), reason))
+    end
+  after
     :gen_tcp.close(socket)
   end
 
-  defp route(%{method: "GET", path: "/health"}, _control_plane_pid) do
+  defp route(%{method: "GET", path: path}, config, _control_plane_pid) when path in ["/", "/index.html", "/assets/app.css", "/assets/app.js"] do
+    static_asset_response(config, path)
+  end
+
+  defp route(%{method: "GET", path: "/health"}, _config, _control_plane_pid) do
     json_response(200, %{ok: true, service: "forgeloop_v2", mode: "loopback"})
   end
 
-  defp route(%{method: "GET", path: "/api/overview", query: query}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/overview", query: query}, _config, control_plane_pid) do
     case ControlPlane.overview(control_plane_pid, limit: Map.get(query, "limit", 50)) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.overview(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/runtime"}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/providers"}, _config, control_plane_pid) do
+    case ControlPlane.provider_health(control_plane_pid) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.provider_health(payload)})
+      {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
+  defp route(%{method: "GET", path: "/api/stream", query: query}, _config, _control_plane_pid) do
+    {:stream, Map.get(query, "limit", 50)}
+  end
+
+  defp route(%{method: "GET", path: "/api/runtime"}, _config, control_plane_pid) do
     case ControlPlane.runtime(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.runtime_state(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/backlog"}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/backlog"}, _config, control_plane_pid) do
     case ControlPlane.backlog(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.backlog(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/questions"}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/questions"}, _config, control_plane_pid) do
     case ControlPlane.questions(control_plane_pid) do
       {:ok, questions} -> json_response(200, %{ok: true, data: Enum.map(questions, &ServiceJSON.question/1)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/escalations"}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/escalations"}, _config, control_plane_pid) do
     case ControlPlane.escalations(control_plane_pid) do
       {:ok, escalations} -> json_response(200, %{ok: true, data: Enum.map(escalations, &ServiceJSON.escalation/1)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/events", query: query}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/events", query: query}, _config, control_plane_pid) do
     case ControlPlane.events(control_plane_pid, limit: Map.get(query, "limit", 50)) do
       {:ok, events} -> json_response(200, %{ok: true, data: events})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/workflows", query: query}, control_plane_pid) do
+  defp route(%{method: "GET", path: "/api/workflows", query: query}, _config, control_plane_pid) do
     case ControlPlane.workflow_overview(control_plane_pid, include_output?: truthy?(Map.get(query, "include_output"))) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.workflow_overview(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: path, query: query}, control_plane_pid) do
+  defp route(%{method: "GET", path: path, query: query}, _config, control_plane_pid) do
     case String.split(path, "/", trim: true) do
       ["api", "workflows", name] ->
         case ControlPlane.workflow_fetch(control_plane_pid, URI.decode(name), include_output?: truthy?(Map.get(query, "include_output"))) do
@@ -962,35 +1046,35 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: "POST", path: "/api/control/pause"}, control_plane_pid) do
+  defp route(%{method: "POST", path: "/api/control/pause"}, _config, control_plane_pid) do
     case ControlPlane.pause(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "POST", path: "/api/control/replan"}, control_plane_pid) do
+  defp route(%{method: "POST", path: "/api/control/replan"}, _config, control_plane_pid) do
     case ControlPlane.replan(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "POST", path: "/api/babysitter/start", json: body}, control_plane_pid) do
+  defp route(%{method: "POST", path: "/api/babysitter/start", json: body}, _config, control_plane_pid) do
     case ControlPlane.start_run(control_plane_pid, Map.get(body, "mode"), branch: Map.get(body, "branch")) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "POST", path: "/api/babysitter/stop", json: body}, control_plane_pid) do
+  defp route(%{method: "POST", path: "/api/babysitter/stop", json: body}, _config, control_plane_pid) do
     case ControlPlane.stop_run(control_plane_pid, Map.get(body, "reason", "pause")) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "POST", path: path, json: body}, control_plane_pid) do
+  defp route(%{method: "POST", path: path, json: body}, _config, control_plane_pid) do
     case String.split(path, "/", trim: true) do
       ["api", "questions", question_id, "answer"] ->
         case ControlPlane.answer_question(
@@ -1018,7 +1102,7 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: _method}, _control_plane_pid) do
+  defp route(%{method: _method}, _config, _control_plane_pid) do
     error_response(404, :not_found)
   end
 
@@ -1120,11 +1204,11 @@ defmodule ForgeloopV2.Service do
   end
 
   defp json_response(status, payload) do
-    {:json, status, payload}
+    body_response(status, "application/json", Jason.encode!(payload))
   end
 
   defp error_response(status, reason) do
-    {:json, status, %{ok: false, error: error_payload(reason)}}
+    json_response(status, %{ok: false, error: error_payload(reason)})
   end
 
   defp error_payload({:question_conflict, question_id, current_revision}) do
@@ -1174,18 +1258,108 @@ defmodule ForgeloopV2.Service do
   defp status_for_error(:babysitter_not_managed), do: 409
   defp status_for_error(_), do: 500
 
-  defp encode_response({:json, status, payload}) do
-    body = Jason.encode!(payload)
+  defp body_response(status, content_type, body) do
+    {:body, status, [{"content-type", content_type}], body}
+  end
 
-    [
-      "HTTP/1.1 ", Integer.to_string(status), " ", reason_phrase(status), "\r\n",
-      "content-type: application/json\r\n",
-      "content-length: ", Integer.to_string(byte_size(body)), "\r\n",
-      "connection: close\r\n",
-      "\r\n",
-      body
-    ]
-    |> IO.iodata_to_binary()
+  defp static_asset_response(config, path) do
+    case UIAssets.fetch(config, path) do
+      {:ok, %{content_type: content_type, body: body}} ->
+        body_response(200, content_type, body)
+
+      :missing ->
+        error_response(404, :not_found)
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
+    end
+  end
+
+  defp send_body_response(socket, {:body, status, headers, body}) do
+    response =
+      [
+        "HTTP/1.1 ", Integer.to_string(status), " ", reason_phrase(status), "\r\n",
+        Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end),
+        "content-length: ", Integer.to_string(byte_size(body)), "\r\n",
+        "connection: close\r\n",
+        "\r\n",
+        body
+      ]
+      |> IO.iodata_to_binary()
+
+    :gen_tcp.send(socket, response)
+  end
+
+  defp stream_snapshots(socket, control_plane_pid, limit) do
+    case overview_json(control_plane_pid, limit) do
+      {:ok, initial_json} ->
+        case send_sse_headers(socket) do
+          :ok ->
+            case send_snapshot(socket, initial_json) do
+              :ok -> stream_loop(socket, control_plane_pid, limit, initial_json, 0)
+              {:error, _reason} -> :ok
+            end
+
+          {:error, _reason} ->
+            :ok
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp stream_loop(socket, control_plane_pid, limit, last_json, idle_ms) do
+    receive do
+    after
+      @stream_poll_interval_ms ->
+        case overview_json(control_plane_pid, limit) do
+          {:ok, json} when json != last_json ->
+            case send_snapshot(socket, json) do
+              :ok -> stream_loop(socket, control_plane_pid, limit, json, 0)
+              {:error, _reason} -> :ok
+            end
+
+          {:ok, _json} when idle_ms + @stream_poll_interval_ms >= @stream_heartbeat_interval_ms ->
+            case :gen_tcp.send(socket, ": keepalive\n\n") do
+              :ok -> stream_loop(socket, control_plane_pid, limit, last_json, 0)
+              {:error, _reason} -> :ok
+            end
+
+          {:ok, _json} ->
+            stream_loop(socket, control_plane_pid, limit, last_json, idle_ms + @stream_poll_interval_ms)
+
+          {:error, _reason} ->
+            :ok
+        end
+    end
+  end
+
+  defp overview_json(control_plane_pid, limit) do
+    case ControlPlane.overview(control_plane_pid, limit: limit) do
+      {:ok, payload} -> {:ok, Jason.encode!(%{ok: true, data: ServiceJSON.overview(payload)})}
+      {:error, reason} -> {:error, reason}
+    end
+  catch
+    :exit, _reason -> {:error, :control_plane_unavailable}
+  end
+
+  defp send_sse_headers(socket) do
+    :gen_tcp.send(
+      socket,
+      [
+        "HTTP/1.1 200 ", reason_phrase(200), "\r\n",
+        "content-type: text/event-stream\r\n",
+        "cache-control: no-cache\r\n",
+        "connection: close\r\n",
+        "\r\n",
+        "retry: ", Integer.to_string(@stream_retry_ms), "\n\n"
+      ]
+    )
+  end
+
+  defp send_snapshot(socket, json) do
+    :gen_tcp.send(socket, ["event: snapshot\n", "data: ", json, "\n\n"])
   end
 
   defp reason_phrase(200), do: "OK"
@@ -1198,6 +1372,17 @@ defmodule ForgeloopV2.Service do
 
   defp truthy?(value) when value in [true, "true", "1", 1, "yes", "on"], do: true
   defp truthy?(_), do: false
+
+  defp stream_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 500)
+
+  defp stream_limit(limit) when is_binary(limit) do
+    case Integer.parse(limit) do
+      {int, ""} when int > 0 -> min(int, 500)
+      _ -> 50
+    end
+  end
+
+  defp stream_limit(_), do: 50
 
   defp maybe_put_answer(opts, nil), do: opts
   defp maybe_put_answer(opts, answer), do: Keyword.put(opts, :answer, answer)

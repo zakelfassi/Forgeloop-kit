@@ -73,6 +73,7 @@ See `evals/README.md` for the public proof surface.
 In the target repo:
 
 ```bash
+./forgeloop.sh serve
 ./forgeloop.sh evals
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
@@ -86,6 +87,28 @@ For continuous operation:
 ```
 
 That daemon is **interval-based**. It does not watch git in real time. It periodically checks the repo and control files, then decides whether to plan, build, pause, deploy, or ingest logs.
+
+## Local operator UI (experimental)
+
+Forgeloop now ships a loopback-only, read-only operator UI on top of the same file-backed control plane:
+
+```bash
+./forgeloop.sh serve
+```
+
+It is intentionally small and additive in this slice:
+
+- served directly by the Elixir control-plane service
+- live-updating via SSE
+- no Phoenix, database, or Node asset pipeline
+- canonical repo files and `.forgeloop/runtime-state.json` remain authoritative
+
+If you are working inside this repo directly, the equivalent command is:
+
+```bash
+cd elixir
+mix forgeloop_v2.serve --repo ..
+```
 
 ### Supported daemon control flags
 
@@ -148,7 +171,7 @@ If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main`
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
 
-Elixir now ships two experimental operator surfaces in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one child run in a disposable git worktree, and `mix forgeloop_v2.serve --repo ..` starts a loopback-only JSON control-plane service for runtime/backlog/questions/escalations/events/workflows plus babysitter visibility/control. Both keep `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. Daemon scheduling through the babysitter, a static UI/SSE layer, workflow babysitting, and the future OpenClaw seam are still not implemented.
+Elixir now ships two experimental operator surfaces in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one child run in a disposable git worktree, and `mix forgeloop_v2.serve --repo ..` starts a loopback-only control-plane service that serves both JSON endpoints and a static live-updating UI for runtime/backlog/questions/escalations/events/workflows/provider health plus babysitter visibility/control. Both keep `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. Daemon scheduling through the babysitter, interactive UI controls, workflow babysitting, and the future OpenClaw seam are still not implemented.
 
 Current coexistence rule:
 
@@ -164,7 +187,7 @@ Current scope:
 - repeated-failure and blocker tracking
 - a small GenServer daemon baseline
 - initial provider failover tests
-- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts, a manual single-child disposable-worktree babysitter skeleton, and a loopback JSON control-plane service in Elixir
+- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts, a manual single-child disposable-worktree babysitter skeleton, and a loopback control-plane service + static SSE-backed operator UI in Elixir
 
 When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
 

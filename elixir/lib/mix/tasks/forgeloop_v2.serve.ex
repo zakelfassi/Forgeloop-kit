@@ -30,7 +30,8 @@ defmodule Mix.Tasks.ForgeloopV2.Serve do
       )
 
     snapshot = Service.snapshot(pid)
-    Mix.shell().info("Forgeloop v2 service listening on #{snapshot.base_url}")
+    Mix.shell().info("Forgeloop v2 operator UI ready at #{snapshot.base_url}")
+    Mix.shell().info("Loopback-only, file-backed, and live-updating via SSE.")
     Process.sleep(:infinity)
   end
 end

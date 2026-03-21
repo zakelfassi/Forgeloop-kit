@@ -107,14 +107,12 @@ Format:
     - operator-writer runtime transition tests
   - Shipped behavior:
     - `ForgeloopV2.ControlPlane` serializes loopback operator actions over the existing file-first control plane.
-    - `ForgeloopV2.Service` exposes local JSON endpoints for runtime, backlog, questions, escalations, events, workflows, and babysitter start/stop/status.
-    - The service is loopback-only, file-backed, and intentionally not Phoenix/UI/SSE yet.
+    - `ForgeloopV2.Service` exposes local JSON endpoints for runtime, backlog, questions, escalations, events, workflows, provider health, and babysitter start/stop/status.
+    - The service now also serves a static loopback-only UI at `/` with SSE-backed live snapshots over the same file-first control plane.
   - Deferred after this slice:
-    - SSE/event subscriptions for live browser updates
-    - static repo-local UI on top of the JSON API
     - direct UI-triggered `surface: "ui"` one-off runs separate from the babysitter path
 
-- [ ] Ship a static repo-local UI for runtime status, backlog, questions, escalations, events, and provider health
+- [x] Ship a static repo-local UI for runtime status, backlog, questions, escalations, events, and provider health
   - Acceptance:
     - A local operator can open the UI and see the same repo-local state visible in markdown/json files.
     - Event updates appear live when the daemon or loop runs.
@@ -123,6 +121,11 @@ Format:
     - HTTP smoke test for static assets and bootstrap JSON
     - SSE/browser smoke test for live updates
     - repo-root and vendored layout startup both work
+  - Shipped behavior:
+    - `ForgeloopV2.Service` now serves `/`, `/assets/app.css`, and `/assets/app.js` directly from `elixir/priv/static/ui` without Phoenix or a Node pipeline.
+    - `/api/stream` publishes full-snapshot SSE updates over the existing `ControlPlane.overview/2` read model.
+    - `ForgeloopV2.ProviderHealth` derives provider badges from `providers-state.json` plus provider events without introducing a new store.
+    - Installed repos now get `./forgeloop.sh serve` as the one-command launcher for the local operator UI.
 
 - [ ] Add interactive UI flows for answering questions, resolving questions, pausing, clearing pause, requesting replan, and triggering one-off `plan` / `build` runs
   - Acceptance:

@@ -145,14 +145,16 @@ cd elixir
 mix forgeloop_v2.serve --repo ..
 ```
 
-That service reuses the same file-first control plane rather than introducing a second state store. Today it exposes JSON endpoints for:
+That service reuses the same file-first control plane rather than introducing a second state store. It now also serves a static operator UI at the service root, and today exposes:
 
 - runtime state
 - backlog / pending plan items
 - questions and escalations
 - recent JSONL events
 - workflow visibility snapshots
+- provider health derived from the existing provider-state file + provider events
 - babysitter status plus manual babysitter `plan` / `build` start/stop
+- a live SSE snapshot stream for browser updates
 
 Operator mutations still go through the same helpers and runtime-state transitions:
 
@@ -160,11 +162,11 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - replan requests append `[REPLAN]`
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
 - manual runs still flow through `Loop.run/3` via the babysitter path instead of a new executor
+- the UI remains read-only in this slice; canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
 
-- SSE / live browser subscriptions
-- a static repo-local UI on top of the JSON API
+- interactive UI mutations on top of the read surface
 - daemon-integrated babysitter scheduling
 - workflow-lane babysitting
 

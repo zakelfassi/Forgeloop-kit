@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forgeloop Operator UI</title>
+    <meta
+      name="description"
+      content="Loopback-only operator UI for Forgeloop’s file-first control plane."
+    />
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <div class="grain"></div>
+    <main class="shell">
+      <header class="hero panel">
+        <div>
+          <p class="eyebrow">Forgeloop // Operator HUD</p>
+          <h1>Self-hosting control room</h1>
+          <p class="lead">
+            Read-only, loopback-only, and backed by the same canonical repo files. The UI is a live map, not a second source of truth.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="status-pill" id="connection-pill" data-state="loading">Booting…</div>
+          <div class="status-lines">
+            <span id="runtime-brief">No runtime state yet</span>
+            <span id="canonical-brief">Canonical files remain authoritative.</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="command-deck panel">
+        <div>
+          <h2>Quick launch</h2>
+          <p>One command gets the loopback service and this UI online.</p>
+        </div>
+        <div class="command-card">
+          <code>./forgeloop.sh serve</code>
+          <span>Fallback: <code>cd elixir &amp;&amp; mix forgeloop_v2.serve --repo ..</code></span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel runtime-panel" id="runtime-panel">
+          <div class="panel-head">
+            <h2>Runtime</h2>
+            <span class="panel-tag">state</span>
+          </div>
+          <div id="runtime-body" class="stack empty">Waiting for runtime snapshot…</div>
+        </article>
+
+        <article class="panel provider-panel" id="provider-panel">
+          <div class="panel-head">
+            <h2>Provider health</h2>
+            <span class="panel-tag">routing</span>
+          </div>
+          <div id="provider-body" class="stack empty">No provider state yet.</div>
+        </article>
+
+        <article class="panel backlog-panel">
+          <div class="panel-head">
+            <h2>Backlog</h2>
+            <span class="panel-tag">plan</span>
+          </div>
+          <div id="backlog-body" class="stack empty">No pending plan items.</div>
+        </article>
+
+        <article class="panel questions-panel">
+          <div class="panel-head">
+            <h2>Questions</h2>
+            <span class="panel-tag">human gates</span>
+          </div>
+          <div id="questions-body" class="stack empty">No questions are open.</div>
+        </article>
+
+        <article class="panel escalations-panel">
+          <div class="panel-head">
+            <h2>Escalations</h2>
+            <span class="panel-tag">interrupts</span>
+          </div>
+          <div id="escalations-body" class="stack empty">No escalation artifacts yet.</div>
+        </article>
+
+        <article class="panel events-panel">
+          <div class="panel-head">
+            <h2>Live events</h2>
+            <span class="panel-tag">stream</span>
+          </div>
+          <div id="events-body" class="stack empty">No recent events.</div>
+        </article>
+      </section>
+
+      <section class="footer-note panel">
+        <p>
+          This slice is intentionally additive: no Phoenix, no database, no Node asset pipeline, and no new authority beyond the repo-local files and JSON endpoints.
+        </p>
+      </section>
+    </main>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

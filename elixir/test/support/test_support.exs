@@ -17,6 +17,7 @@ defmodule ForgeloopV2.TestSupport do
         Events,
         FailureTracker,
         Orchestrator,
+        ProviderHealth,
         WorkflowCatalog,
         WorkflowService,
         PathPolicy,
@@ -25,6 +26,7 @@ defmodule ForgeloopV2.TestSupport do
         RuntimeLifecycle,
         RuntimeStateStore,
         Service,
+        UIAssets,
         Workspace,
         Worktree
       }
@@ -89,6 +91,23 @@ defmodule ForgeloopV2.TestSupport do
     run_git!(repo.repo_root, ["add", "."])
     run_git!(repo.repo_root, ["commit", "-m", Keyword.get(opts, :commit_message, "initial fixture")])
     repo
+  end
+
+  def create_ui_layout!(repo_root, layout \\ :repo_root) do
+    forgeloop_root =
+      case layout do
+        :repo_root -> repo_root
+        :vendored -> Path.join(repo_root, "forgeloop")
+      end
+
+    ui_root = Path.join([forgeloop_root, "elixir", "priv", "static", "ui"])
+    File.mkdir_p!(ui_root)
+    File.write!(Path.join(forgeloop_root, "config.sh"), "# test config\n")
+    File.write!(Path.join(ui_root, "index.html"), "<!doctype html><html><body>hud</body></html>\n")
+    File.write!(Path.join(ui_root, "app.css"), "body { color: #fff; }\n")
+    File.write!(Path.join(ui_root, "app.js"), "console.log('hud');\n")
+
+    %{forgeloop_root: forgeloop_root, app_root: Path.join(forgeloop_root, "elixir")}
   end
 
   def config_for!(repo_root, opts \\ []) do

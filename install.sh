@@ -431,6 +431,7 @@ Usage:
   ./forgeloop.sh workflow preflight <name>
   ./forgeloop.sh workflow run <name> [runner args...]
   ./forgeloop.sh review
+  ./forgeloop.sh serve [--host 127.0.0.1] [--port 4010]
   ./forgeloop.sh evals
   ./forgeloop.sh upgrade --from <path-to-kit> [--force] [--skills] [--batch|--interactive]
   ./forgeloop.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
@@ -495,6 +496,13 @@ case "$cmd" in
     ;;
   review)
     exec "$REPO_DIR/forgeloop/bin/loop.sh" review
+    ;;
+  serve)
+    shift
+    cd "$REPO_DIR/forgeloop/elixir"
+    mix deps.get >/dev/null
+    mix compile >/dev/null
+    exec mix forgeloop_v2.serve --repo .. "$@"
     ;;
   tasks)
     exec "$REPO_DIR/forgeloop/bin/loop-tasks.sh" "${2:-10}"
@@ -628,11 +636,13 @@ main() {
     echo "Next (in the target repo):"
     echo "  cd \"$TARGET_REPO_DIR\""
     if [ "$WRAPPER" = "true" ]; then
+        echo "  ./forgeloop.sh serve"
         echo "  ./forgeloop.sh evals"
         echo "  ./forgeloop.sh plan 1"
         echo "  ./forgeloop.sh build 5"
         echo "  ./forgeloop.sh workflow list"
     else
+        echo "  (cd ./forgeloop/elixir && mix forgeloop_v2.serve --repo ..)"
         echo "  bash ./forgeloop/evals/run.sh"
         echo "  ./forgeloop/bin/loop.sh plan 1"
         echo "  ./forgeloop/bin/loop.sh 5"
