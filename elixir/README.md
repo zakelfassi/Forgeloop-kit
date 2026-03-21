@@ -21,8 +21,9 @@ Current scope:
 - provider auth/rate-limit failover unit coverage
 - locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` so pause/replan flags and question answers can be updated safely without faking runtime recovery
 - workflow package catalog discovery plus a read-only visibility service for latest workflow preflight/run artifacts in the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
+- a manual single-child babysitter/supervisor that launches `Loop.run/3` inside a disposable git worktree while keeping repo-root control artifacts canonical
 
-The next planned slice is **not implemented yet**: disposable git worktrees for sandboxed self-hosting, a babysitter/supervisor mode above child runs, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
+The next integration slice is still ahead of us: daemon/service wiring above the manual babysitter, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
 
 Still intentionally deferred:
 
@@ -48,5 +49,12 @@ mix test
 ```bash
 cd elixir
 mix forgeloop_v2.daemon --once --repo ..
+```
+
+## Run one manual babysitter cycle
+
+```bash
+cd elixir
+mix forgeloop_v2.babysit build --repo ..
 ```
 

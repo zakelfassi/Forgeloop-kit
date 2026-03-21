@@ -10,6 +10,7 @@ defmodule ForgeloopV2.TestSupport do
         ControlFiles,
         ControlLock,
         Coordination,
+        Babysitter,
         Daemon,
         Escalation,
         Events,
@@ -22,7 +23,8 @@ defmodule ForgeloopV2.TestSupport do
         RepoPaths,
         RuntimeLifecycle,
         RuntimeStateStore,
-        Workspace
+        Workspace,
+        Worktree
       }
 
       import ForgeloopV2.TestSupport
@@ -69,6 +71,24 @@ defmodule ForgeloopV2.TestSupport do
     package_root
   end
 
+  def create_git_repo_fixture!(opts \\ []) do
+    repo = create_repo_fixture!(opts)
+    loop_script_body = Keyword.get(opts, :loop_script_body)
+
+    if is_binary(loop_script_body) do
+      write_executable!(Path.join(repo.repo_root, "bin/loop.sh"), loop_script_body)
+    end
+
+    File.write!(Path.join(repo.repo_root, ".gitignore"), Keyword.get(opts, :gitignore, ".forgeloop-test/\n"))
+
+    run_git!(repo.repo_root, ["init", "-b", Keyword.get(opts, :branch, "main")])
+    run_git!(repo.repo_root, ["config", "user.name", "Forgeloop Test"])
+    run_git!(repo.repo_root, ["config", "user.email", "forgeloop@example.com"])
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", Keyword.get(opts, :commit_message, "initial fixture")])
+    repo
+  end
+
   def config_for!(repo_root, opts \\ []) do
     runtime_dir = Keyword.get(opts, :runtime_dir, Path.join(repo_root, ".forgeloop-test"))
 
@@ -111,6 +131,13 @@ defmodule ForgeloopV2.TestSupport do
         {key, nil} -> System.delete_env(key)
         {key, value} -> System.put_env(key, value)
       end)
+    end
+  end
+
+  def run_git!(repo_root, args) do
+    case System.cmd("git", ["-C", repo_root | args], stderr_to_stdout: true) do
+      {output, 0} -> output
+      {output, status} -> raise "git command failed status=#{status}: git -C #{repo_root} #{Enum.join(args, " ")}\n#{output}"
     end
   end
 

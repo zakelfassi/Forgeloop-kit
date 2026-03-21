@@ -13,7 +13,7 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
                branch: "main"
              })
 
-    assert {:error, {:invalid_runtime_writer, :loop, [:daemon]}} =
+    assert {:error, {:invalid_runtime_writer, :loop, [:daemon, :babysitter]}} =
              RuntimeLifecycle.transition(config, :paused_by_operator, :loop, %{
                surface: "loop",
                mode: "build",

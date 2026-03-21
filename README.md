@@ -148,7 +148,7 @@ If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main`
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
 
-The next planned runtime-isolation slice is **not implemented yet**: disposable git worktrees for sandboxed self-hosting, a babysitter/supervisor mode that watches child runs, and a future OpenClaw integration seam rather than another ad hoc runtime switch.
+A manual experimental runtime-isolation slice now exists in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one child run in a disposable git worktree while keeping `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. Daemon scheduling, UI/API control, workflow babysitting, and the future OpenClaw seam are still not implemented.
 
 Current coexistence rule:
 
@@ -164,7 +164,7 @@ Current scope:
 - repeated-failure and blocker tracking
 - a small GenServer daemon baseline
 - initial provider failover tests
-- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, and a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts
+- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts, and a manual single-child disposable-worktree babysitter skeleton in Elixir
 
 When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
 
@@ -186,7 +186,7 @@ See `elixir/README.md` for the current scope and how to run `mix test`.
 
 If you use auto-permissions / full-auto mode, treat the **VM or container as the security boundary**.
 
-Disposable git worktrees are part of the planned self-hosting story, but they are a repo-internal hygiene boundary inside that VM/container, not a replacement for it.
+Disposable git worktrees are now part of the experimental self-hosting story in Elixir, but they are still a repo-internal hygiene boundary inside that VM/container, not a replacement for it.
 
 - Guide: `docs/sandboxing.md`
 - GCP runner helper: `ops/gcp/provision.sh`

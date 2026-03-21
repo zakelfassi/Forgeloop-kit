@@ -19,11 +19,11 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
 - Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` plus a read-only workflow visibility seam over bash-written workflow artifacts; that groundwork helps future service/UI work but is not yet a full parity contract on its own.
 
-## Planned next parity targets
+## Current experimental v2-only extensions
 
-These are not part of the current proof matrix yet:
+These are now present in Elixir v2, but they are still experimental extensions rather than full bash-parity anchors:
 
-- self-hosted runs in disposable worktrees still preserve the same repo-local fail-closed artifact chain
-- a babysitter/supervisor can stop, recover, and clean up child runs without spin
-- future external integration seams such as OpenClaw preserve the same control surfaces instead of bypassing them
+- self-hosted runs in disposable worktrees preserve the same repo-local fail-closed artifact chain
+- a single-child babysitter/supervisor can stop, recover, and clean up child runs without bypassing runtime-state transitions
+- future external integration seams such as OpenClaw still need to preserve the same control surfaces instead of bypassing them
 

@@ -100,6 +100,6 @@ The workflow lane is an execution seam, not the endpoint.
 Planned future work includes:
 
 - embedding this read-only workflow visibility seam into the local service/UI
-- worktree-aware babysitter supervision for workflow runs
+- wiring the manual disposable-worktree babysitter into workflow runs without widening the current workflow-lane contract
 - OpenClaw monitoring/piloting of the loop and the babysitter
 - deciding whether native graph execution belongs inside Forgeloop or remains delegated to a workflow runner

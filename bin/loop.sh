@@ -145,7 +145,7 @@ if [[ "$INFINITE" == "true" ]]; then
 fi
 
 ITERATION=0
-CURRENT_BRANCH=$(forgeloop_core__git_current_branch)
+CURRENT_BRANCH="${FORGELOOP_RUNTIME_BRANCH:-$(forgeloop_core__git_current_branch)}"
 
 if [ "$MODE" = "plan-work" ]; then
     if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then

@@ -111,19 +111,30 @@ That means a runtime state can legitimately look like:
 - Human escalation artifacts live in repo-local files so the operator can inspect them without external services
 - Full-auto mode should assume the VM/container is the security boundary
 
-## Planned isolation extension (not supported yet)
+## Manual disposable-worktree babysitter (experimental Elixir v2)
 
-Today, the fail-closed contract is enforced in the canonical repo checkout.
+Today, the fail-closed contract is still anchored in the canonical repo checkout, but Elixir now has a **manual experimental babysitter** that can launch one child `plan` or `build` run inside a **disposable git worktree**.
 
-The next planned self-hosting extension is to let a babysitter/supervisor launch bounded autonomous work inside a **disposable git worktree** while preserving the same repo-local artifact chain:
+```bash
+cd elixir
+mix forgeloop_v2.babysit build --repo ..
+```
 
-- `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, and `ESCALATIONS.md` remain the canonical coordination surface
+That babysitter keeps the same repo-local artifact chain canonical at repo root:
+
+- `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, and `ESCALATIONS.md` remain the coordination surface
 - `.forgeloop/runtime-state.json` remains the machine-readable source of truth
 - repeated failures and repeated unanswered blockers still pause and escalate instead of spinning
 
-That planned worktree layer is meant to protect the canonical checkout from autonomous churn; it is **not** the primary security boundary. The VM/container remains that boundary.
+It also writes worktree/heartbeat metadata under `.forgeloop/v2/babysitter/` and cleans stale disposable checkouts on the next babysitter start.
 
-The current `.forgeloop/v2/active-runtime.json` claim is also not yet worktree-aware or cross-runtime. It is only the current Elixir-side coexistence guard.
+This worktree layer is a repo-internal hygiene boundary, **not** the primary security boundary. The VM/container remains that boundary.
+
+Important current limits:
+
+- the bash daemon does **not** schedule babysitter runs yet
+- the workflow lane is still manual-only and is not yet babysat through this path
+- the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
 
 ## Proof suite
 

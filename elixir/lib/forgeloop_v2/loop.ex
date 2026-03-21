@@ -43,7 +43,7 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
   @moduledoc false
   @behaviour ForgeloopV2.WorkDriver
 
-  alias ForgeloopV2.Config
+  alias ForgeloopV2.{Config, Worktree}
 
   @impl true
   def run(mode, %Config{} = config, opts) do
@@ -51,35 +51,21 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
     evidence_file = Path.join([config.v2_state_dir, "driver", "#{mode}-last.txt"])
     args = loop_args(mode, Keyword.get(opts, :iterations, 10))
     timeout_ms = timeout_ms(mode, config)
+    worktree = Keyword.get(opts, :worktree)
+    {cmd_path, cmd_opts} = shell_command_opts(config, worktree, opts)
 
-    task =
-      Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-        try do
-          System.cmd(config.loop_script, args,
-            cd: config.repo_root,
-            stderr_to_stdout: true
-          )
-        rescue
-          error in ErlangError ->
-            case error.original do
-              :enoent -> {"command not found: #{config.loop_script}", 127}
-              _ -> reraise(error, __STACKTRACE__)
-            end
-        end
-      end)
+    case run_command(cmd_path, args, cmd_opts, timeout_ms) do
+      {:timeout, output} ->
+        File.write!(evidence_file, output <> "#{mode} command timed out\n")
+        {:error, %{kind: "timeout", summary: "#{mode} command timed out", evidence_file: evidence_file}}
 
-    case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {output, 0}} ->
+      {output, 0} ->
         File.write!(evidence_file, output)
         {:ok, %{mode: mode, evidence_file: evidence_file}}
 
-      {:ok, {output, _status}} ->
+      {output, _status} ->
         File.write!(evidence_file, output)
         {:error, %{kind: Atom.to_string(mode), summary: "#{mode} command failed", evidence_file: evidence_file}}
-
-      nil ->
-        File.write!(evidence_file, "#{mode} command timed out\n")
-        {:error, %{kind: "timeout", summary: "#{mode} command timed out", evidence_file: evidence_file}}
     end
   end
 
@@ -87,6 +73,75 @@ defmodule ForgeloopV2.WorkDrivers.ShellLoop do
   defp loop_args(:build, iterations), do: [to_string(iterations)]
   defp timeout_ms(:plan, config), do: config.plan_timeout_seconds * 1_000
   defp timeout_ms(:build, config), do: config.build_timeout_seconds * 1_000
+
+  defp shell_command_opts(%Config{} = config, nil, _opts) do
+    {config.loop_script, [cd: config.repo_root, env: []]}
+  end
+
+  defp shell_command_opts(%Config{} = config, %Worktree.Handle{} = worktree, opts) do
+    {worktree.loop_script_path,
+     [
+       cd: worktree.checkout_path,
+       env: canonical_env(config, opts)
+     ]}
+  end
+
+  defp canonical_env(%Config{} = config, opts) do
+    [
+      {"FORGELOOP_RUNTIME_DIR", config.runtime_dir},
+      {"FORGELOOP_RUNTIME_STATE_FILE", config.runtime_state_file},
+      {"FORGELOOP_REQUESTS_FILE", config.requests_file},
+      {"FORGELOOP_QUESTIONS_FILE", config.questions_file},
+      {"FORGELOOP_ESCALATIONS_FILE", config.escalations_file},
+      {"FORGELOOP_IMPLEMENTATION_PLAN_FILE", config.plan_file},
+      {"FORGELOOP_RUNTIME_BRANCH", to_string(Keyword.get(opts, :runtime_branch, config.default_branch))}
+    ]
+  end
+
+  defp run_command(cmd_path, args, cmd_opts, timeout_ms) do
+    port =
+      Port.open({:spawn_executable, String.to_charlist(cmd_path)}, [
+        :binary,
+        :exit_status,
+        :use_stdio,
+        :stderr_to_stdout,
+        :hide,
+        {:args, Enum.map(args, &String.to_charlist/1)},
+        {:cd, String.to_charlist(Keyword.fetch!(cmd_opts, :cd))},
+        {:env,
+         cmd_opts
+         |> Keyword.get(:env, [])
+         |> Enum.map(fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)}
+      ])
+
+    collect_port_output(port, "", timeout_ms)
+  rescue
+    error in ErlangError ->
+      case Map.get(error, :original) do
+        :enoent -> {"command not found: #{cmd_path}", 127}
+        _ -> reraise(error, __STACKTRACE__)
+      end
+  end
+
+  defp collect_port_output(port, output, timeout_ms) do
+    receive do
+      {^port, {:data, chunk}} ->
+        collect_port_output(port, output <> chunk, timeout_ms)
+
+      {^port, {:exit_status, status}} ->
+        {output, status}
+    after
+      timeout_ms ->
+        _ = safe_close_port(port)
+        {:timeout, output}
+    end
+  end
+
+  defp safe_close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  end
 end
 
 defmodule ForgeloopV2.Loop do
@@ -220,6 +275,7 @@ defmodule ForgeloopV2.Loop do
     do: "Resuming #{mode} after clearing awaiting-human state"
 
   defp writer_for("daemon"), do: :daemon
+  defp writer_for("babysitter"), do: :babysitter
   defp writer_for(_surface), do: :loop
 end
 

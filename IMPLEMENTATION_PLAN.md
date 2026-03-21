@@ -54,7 +54,7 @@ Format:
 
 ## Backlog
 
-- [ ] Add sandboxed self-hosting via disposable git worktrees and a babysitter/supervisor operating mode
+- [x] Add sandboxed self-hosting via disposable git worktrees and a babysitter/supervisor operating mode
   - Acceptance:
     - Docs and code define disposable worktrees as repo-internal isolation for autonomous runs, not the primary security boundary.
     - A babysitter/supervisor owns child-run lifecycle, heartbeat/watchdog behavior, and worktree cleanup without changing the current fail-closed artifact chain.
@@ -65,6 +65,15 @@ Format:
     - babysitter pause/resume/kill test
     - self-hosted run still writes canonical runtime-state + escalation artifacts
     - dirty-tree and crash-recovery cleanup tests
+  - Shipped behavior:
+    - `ForgeloopV2.Worktree` creates/cleans disposable git worktrees under `.forgeloop/v2/workspaces`
+    - `ForgeloopV2.Babysitter` runs a single child loop in that checkout, writes heartbeat metadata under `.forgeloop/v2/babysitter`, and can stop/pause canonically
+    - `ShellLoop` can execute from a disposable checkout while keeping runtime/control artifacts pointed at canonical repo-root files
+  - Deferred after this slice:
+    - daemon scheduling through the babysitter
+    - loopback service/UI surfaces on top of babysitter snapshots
+    - workflow-lane babysitting
+    - OpenClaw/plugin seam work
 
 - [ ] Define a plugin/integration seam for future OpenClaw support
   - Acceptance:

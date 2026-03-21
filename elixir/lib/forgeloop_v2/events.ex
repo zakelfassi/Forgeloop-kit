@@ -17,6 +17,13 @@ defmodule ForgeloopV2.Events do
     provider_failed_over
     pause_detected
     recovery_started
+    worktree_prepared
+    worktree_cleaned
+    babysitter_started
+    babysitter_heartbeat
+    babysitter_stopped
+    babysitter_completed
+    babysitter_failed
   )
 
   @spec allowed_event_types() :: [String.t()]

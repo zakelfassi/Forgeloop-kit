@@ -89,13 +89,13 @@ defmodule ForgeloopV2.RuntimeLifecycle do
   @transition_specs %{
     loop_started: %{
       status: "running",
-      writers: [:loop, :daemon],
+      writers: [:loop, :daemon, :babysitter],
       allowed_previous: :any
     },
     failure_blocked: %{
       status: "blocked",
       transition: "blocked",
-      writers: [:loop, :daemon],
+      writers: [:loop, :daemon, :babysitter],
       allowed_previous: :any
     },
     human_escalated: %{
@@ -107,19 +107,19 @@ defmodule ForgeloopV2.RuntimeLifecycle do
     paused_by_operator: %{
       status: "paused",
       transition: "paused",
-      writers: [:daemon],
+      writers: [:daemon, :babysitter],
       allowed_previous: :any
     },
     recovered: %{
       status: "recovered",
       transition: "resuming",
-      writers: [:daemon, :loop],
+      writers: [:daemon, :loop, :babysitter],
       allowed_previous: ["paused", "awaiting-human", "blocked"]
     },
     loop_completed: %{
       status: "idle",
       transition: "completed",
-      writers: [:loop, :daemon],
+      writers: [:loop, :daemon, :babysitter],
       allowed_previous: ["running", "recovered", "blocked"]
     },
     daemon_idle: %{

@@ -22,19 +22,19 @@ You can override these via environment variables (see `forgeloop/config.sh` afte
 - Disk: 80–200 GB
 - Tools: `git`, `curl`, `jq`, Node.js, `pnpm`, plus the `claude` and/or `codex` CLIs
 
-## Planned repo-internal isolation (not implemented yet)
+## Repo-internal isolation (experimental manual Elixir slice)
 
-Inside the VM/container boundary, the next planned self-hosting layer is **repo-internal isolation via disposable git worktrees**.
+Inside the VM/container boundary, Forgeloop now has an **experimental manual self-hosting layer via disposable git worktrees**.
 
-That future slice is meant to:
+That current slice lets Elixir:
 
-- let Forgeloop work on Forgeloop without mutating the canonical checkout directly
-- give a babysitter/supervisor process a bounded place to launch, watch, pause, and clean up child runs
-- improve containment and cleanup for self-hosting runs without mutating the canonical checkout directly
+- launch one child `plan` or `build` run inside a disposable checkout
+- give a babysitter/supervisor process a bounded place to launch, watch, pause, and clean up that child run
+- keep repo-root control artifacts and `.forgeloop/runtime-state.json` canonical while shell execution happens in the disposable checkout
 
 It is **not** a replacement for the VM/container boundary. Treat worktrees as hygiene and blast-radius reduction inside the real sandbox, not as a security primitive.
 
-Open questions for that future slice include naming, dirty-tree fallback, crash recovery, cleanup timing, and how ownership claims become worktree-aware.
+Important current limits remain open: daemon scheduling through the babysitter, workflow-lane babysitting, UI/API control surfaces, and any worktree-aware ownership-claim semantics.
 
 Workflow-pack runners may also declare runner-side worktree behavior such as `worktree_mode`, but that remains runner-internal hygiene inside the VM/container boundary. It does not replace Forgeloop’s own sandboxing requirements.
 

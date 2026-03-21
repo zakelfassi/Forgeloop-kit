@@ -41,15 +41,15 @@ Read-only Elixir visibility groundwork for workflow catalogs and latest workflow
 
 See `docs/workflows.md` for the detailed operator contract.
 
-## Next Planned Slice
+## Current Self-Hosting Skeleton
 
-With parser/read-path groundwork and repo-safe mutation helpers now in place, the next runtime-isolation slice is:
+With parser/read-path groundwork and repo-safe mutation helpers now in place, Elixir now has a manual runtime-isolation skeleton:
 
 1. sandboxed self-hosting via disposable git worktrees
-2. a bounded babysitter/supervisor operating mode above the child loop
-3. a future integration seam for external plugin surfaces such as OpenClaw
+2. a bounded single-child babysitter/supervisor above the child loop
+3. canonical repo-root artifacts preserved while shell execution happens inside the disposable checkout
 
-That slice is meant to preserve the same fail-closed artifact chain while making it safe to let Forgeloop work on Forgeloop inside a disposable worktree instead of directly against the canonical checkout.
+That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree instead of directly against the canonical checkout.
 
 ## Next Acceptance Bar
 
@@ -60,6 +60,7 @@ Elixir is not promoted by feature count. It is promoted by preserving the bash f
 3. keep runtime-state transitions legible and constrained
 4. keep recovery explicit and safe
 5. keep repo-root and vendored layouts working
+6. make babysitter orchestration and service exposure as reviewable as the rest of the control plane
 
 The required local gates for each milestone are:
 
@@ -76,7 +77,7 @@ These are still out of scope for the current phase:
 - Phoenix UI and dashboard work
 - Broadway or any hot-path queue/pipeline
 - Postgres-backed event storage
-- persistent workspace mirrors and long-lived worktree orchestration
+- daemon-integrated babysitter scheduling and long-lived worktree orchestration
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers

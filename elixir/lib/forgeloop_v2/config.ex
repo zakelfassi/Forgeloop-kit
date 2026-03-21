@@ -84,6 +84,8 @@ defmodule ForgeloopV2.Config do
     :workflow_search_dirs,
     :default_branch,
     :control_lock_timeout_ms,
+    :babysitter_heartbeat_interval_ms,
+    :babysitter_shutdown_grace_ms,
     :failure_escalate_after,
     :failure_escalation_action,
     :max_blocked_iterations,
@@ -144,6 +146,10 @@ defmodule ForgeloopV2.Config do
         workflow_search_dirs: workflow_search_dirs,
         default_branch: opts[:default_branch] || env_value("FORGELOOP_DEFAULT_BRANCH", shell_env) || git_current_branch(repo_root) || "main",
         control_lock_timeout_ms: positive_int(opts[:control_lock_timeout_ms], "FORGELOOP_CONTROL_LOCK_TIMEOUT_MS", 2000, shell_env),
+        babysitter_heartbeat_interval_ms:
+          positive_int(opts[:babysitter_heartbeat_interval_ms], "FORGELOOP_BABYSITTER_HEARTBEAT_MS", 1000, shell_env),
+        babysitter_shutdown_grace_ms:
+          positive_int(opts[:babysitter_shutdown_grace_ms], "FORGELOOP_BABYSITTER_SHUTDOWN_GRACE_MS", 5000, shell_env),
         failure_escalate_after: positive_int(opts[:failure_escalate_after], "FORGELOOP_FAILURE_ESCALATE_AFTER", 3, shell_env),
         failure_escalation_action: escalation_action(opts[:failure_escalation_action] || env_value("FORGELOOP_FAILURE_ESCALATION_ACTION", shell_env) || "issue"),
         max_blocked_iterations: positive_int(opts[:max_blocked_iterations], "FORGELOOP_MAX_BLOCKED_ITERATIONS", 3, shell_env),
