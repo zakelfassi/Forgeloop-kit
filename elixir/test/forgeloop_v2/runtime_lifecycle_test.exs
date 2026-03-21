@@ -13,13 +13,24 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
                branch: "main"
              })
 
-    assert {:error, {:invalid_runtime_writer, :loop, [:daemon, :babysitter]}} =
+    assert {:error, {:invalid_runtime_writer, :loop, [:daemon, :babysitter, :service]}} =
              RuntimeLifecycle.transition(config, :paused_by_operator, :loop, %{
                surface: "loop",
                mode: "build",
                reason: "Bad writer",
                branch: "main"
              })
+
+    assert {:ok, paused_state} =
+             RuntimeLifecycle.transition(config, :paused_by_operator, :service, %{
+               surface: "service",
+               mode: "service",
+               reason: "Paused via loopback control plane",
+               branch: "main"
+             })
+
+    assert paused_state.status == "paused"
+    assert paused_state.surface == "service"
 
     repo2 = create_repo_fixture!()
     config2 = config_for!(repo2.repo_root)

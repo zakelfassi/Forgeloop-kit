@@ -40,6 +40,21 @@ defmodule ForgeloopV2.Worktree do
   @spec metadata_path(Config.t(), String.t()) :: Path.t()
   def metadata_path(%Config{} = config, workspace_id), do: Path.join(metadata_dir(config), workspace_id <> ".json")
 
+  @spec read_active_run(Config.t()) :: {:ok, map()} | :missing | {:error, term()}
+  def read_active_run(%Config{} = config) do
+    case File.read(active_run_path(config)) do
+      {:ok, body} ->
+        case Jason.decode(body) do
+          {:ok, payload} when is_map(payload) -> {:ok, payload}
+          {:ok, _payload} -> {:error, :invalid_active_run_payload}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :enoent} -> :missing
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec prepare(Config.t(), Workspace.t(), keyword()) :: {:ok, Handle.t()} | {:error, term()}
   def prepare(%Config{} = config, %Workspace{} = workspace, _opts \\ []) do
     with :ok <- ensure_clean_repo(config),

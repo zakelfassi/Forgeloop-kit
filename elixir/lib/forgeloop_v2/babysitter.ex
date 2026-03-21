@@ -68,6 +68,8 @@ defmodule ForgeloopV2.Babysitter do
   def init(opts) do
     case Keyword.get(opts, :config) do
       %Config{} = config ->
+        Process.flag(:trap_exit, true)
+
         state = %State{
           config: config,
           mode: Keyword.get(opts, :mode, :build),
@@ -95,6 +97,20 @@ defmodule ForgeloopV2.Babysitter do
           {:error, reason} -> {:stop, reason}
         end
     end
+  end
+
+  @impl true
+  def terminate(_reason, %State{} = state) do
+    cancel_timer(state.heartbeat_timer_ref)
+
+    if match?(%Task{}, state.current_task) do
+      _ = Task.shutdown(state.current_task, state.shutdown_grace_ms)
+      Process.demonitor(state.current_task.ref, [:flush])
+    end
+
+    _ = delete_active_run(state.config)
+    _ = maybe_cleanup_worktree(state)
+    :ok
   end
 
   @impl true
@@ -147,6 +163,10 @@ defmodule ForgeloopV2.Babysitter do
   end
 
   def handle_info({:heartbeat, _task_ref}, %State{} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:EXIT, _pid_or_port, _reason}, %State{} = state) do
     {:noreply, state}
   end
 

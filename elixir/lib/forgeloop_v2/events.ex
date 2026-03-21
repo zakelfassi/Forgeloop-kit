@@ -24,6 +24,11 @@ defmodule ForgeloopV2.Events do
     babysitter_stopped
     babysitter_completed
     babysitter_failed
+    control_plane_started
+    control_plane_stopped
+    service_http_started
+    service_http_stopped
+    operator_action
   )
 
   @spec allowed_event_types() :: [String.t()]

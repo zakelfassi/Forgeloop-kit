@@ -136,6 +136,38 @@ Important current limits:
 - the workflow lane is still manual-only and is not yet babysat through this path
 - the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
 
+## Loopback JSON control-plane service (experimental Elixir v2)
+
+Elixir now also ships a loopback-only service layer:
+
+```bash
+cd elixir
+mix forgeloop_v2.serve --repo ..
+```
+
+That service reuses the same file-first control plane rather than introducing a second state store. Today it exposes JSON endpoints for:
+
+- runtime state
+- backlog / pending plan items
+- questions and escalations
+- recent JSONL events
+- workflow visibility snapshots
+- babysitter status plus manual babysitter `plan` / `build` start/stop
+
+Operator mutations still go through the same helpers and runtime-state transitions:
+
+- pause requests append `[PAUSE]` and may write `paused` through the service writer only when no other runtime is already marked `running`
+- replan requests append `[REPLAN]`
+- question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
+- manual runs still flow through `Loop.run/3` via the babysitter path instead of a new executor
+
+Still intentionally deferred here:
+
+- SSE / live browser subscriptions
+- a static repo-local UI on top of the JSON API
+- daemon-integrated babysitter scheduling
+- workflow-lane babysitting
+
 ## Proof suite
 
 Run the public safe-autonomy proof suite with:

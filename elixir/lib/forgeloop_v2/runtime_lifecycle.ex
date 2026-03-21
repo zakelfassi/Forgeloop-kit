@@ -107,7 +107,7 @@ defmodule ForgeloopV2.RuntimeLifecycle do
     paused_by_operator: %{
       status: "paused",
       transition: "paused",
-      writers: [:daemon, :babysitter],
+      writers: [:daemon, :babysitter, :service],
       allowed_previous: :any
     },
     recovered: %{

@@ -86,6 +86,8 @@ defmodule ForgeloopV2.Config do
     :control_lock_timeout_ms,
     :babysitter_heartbeat_interval_ms,
     :babysitter_shutdown_grace_ms,
+    :service_host,
+    :service_port,
     :failure_escalate_after,
     :failure_escalation_action,
     :max_blocked_iterations,
@@ -150,6 +152,10 @@ defmodule ForgeloopV2.Config do
           positive_int(opts[:babysitter_heartbeat_interval_ms], "FORGELOOP_BABYSITTER_HEARTBEAT_MS", 1000, shell_env),
         babysitter_shutdown_grace_ms:
           positive_int(opts[:babysitter_shutdown_grace_ms], "FORGELOOP_BABYSITTER_SHUTDOWN_GRACE_MS", 5000, shell_env),
+        service_host:
+          opts[:service_host] || env_value("FORGELOOP_SERVICE_HOST", shell_env) || "127.0.0.1",
+        service_port:
+          non_negative_int(opts[:service_port], "FORGELOOP_SERVICE_PORT", 4010, shell_env),
         failure_escalate_after: positive_int(opts[:failure_escalate_after], "FORGELOOP_FAILURE_ESCALATE_AFTER", 3, shell_env),
         failure_escalation_action: escalation_action(opts[:failure_escalation_action] || env_value("FORGELOOP_FAILURE_ESCALATION_ACTION", shell_env) || "issue"),
         max_blocked_iterations: positive_int(opts[:max_blocked_iterations], "FORGELOOP_MAX_BLOCKED_ITERATIONS", 3, shell_env),
@@ -218,6 +224,22 @@ defmodule ForgeloopV2.Config do
       binary when is_binary(binary) ->
         case Integer.parse(binary) do
           {int, ""} when int > 0 -> int
+          _ -> default
+        end
+
+      _ ->
+        default
+    end
+  end
+
+  defp non_negative_int(explicit, env_name, default, shell_env) do
+    value = explicit || env_value(env_name, shell_env) || default
+
+    case value do
+      int when is_integer(int) and int >= 0 -> int
+      binary when is_binary(binary) ->
+        case Integer.parse(binary) do
+          {int, ""} when int >= 0 -> int
           _ -> default
         end
 

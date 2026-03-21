@@ -17,6 +17,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - tracker boundary plus memory adapter
   - metadata-first workspace and path-safety helpers
   - local JSONL event history
+- a loopback-only JSON control-plane service for runtime/backlog/questions/escalations/events/workflows plus babysitter control
 
 ## Coexistence Rule
 
@@ -37,19 +38,20 @@ Architecturally, that lane is intentionally narrow:
 - it leaves native graph execution deferred until the workflow-pack lane is proven
 - it keeps the workflow lane focused on native Forgeloop workflow packs rather than alternate product identities
 
-Read-only Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; HTTP/UI surfaces, babysitter supervision, and plugin integrations remain future work.
+Read-only Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; the loopback JSON service now exposes that read model, while static UI/SSE, workflow babysitting, and plugin integrations remain future work.
 
 See `docs/workflows.md` for the detailed operator contract.
 
 ## Current Self-Hosting Skeleton
 
-With parser/read-path groundwork and repo-safe mutation helpers now in place, Elixir now has a manual runtime-isolation skeleton:
+With parser/read-path groundwork and repo-safe mutation helpers now in place, Elixir now has a manual runtime-isolation + operator-service skeleton:
 
 1. sandboxed self-hosting via disposable git worktrees
 2. a bounded single-child babysitter/supervisor above the child loop
 3. canonical repo-root artifacts preserved while shell execution happens inside the disposable checkout
+4. a loopback-only JSON control-plane service layered on top of the same file-first state
 
-That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree instead of directly against the canonical checkout.
+That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree and expose the current state over a local service without introducing a second source of truth.
 
 ## Next Acceptance Bar
 
@@ -78,6 +80,7 @@ These are still out of scope for the current phase:
 - Broadway or any hot-path queue/pipeline
 - Postgres-backed event storage
 - daemon-integrated babysitter scheduling and long-lived worktree orchestration
+- static repo-local UI and SSE/browser live updates
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers

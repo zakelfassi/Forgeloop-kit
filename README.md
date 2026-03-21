@@ -148,7 +148,7 @@ If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main`
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains the default production path while the Elixir foundation grows toward feature parity.
 
-A manual experimental runtime-isolation slice now exists in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one child run in a disposable git worktree while keeping `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. Daemon scheduling, UI/API control, workflow babysitting, and the future OpenClaw seam are still not implemented.
+Elixir now ships two experimental operator surfaces in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one child run in a disposable git worktree, and `mix forgeloop_v2.serve --repo ..` starts a loopback-only JSON control-plane service for runtime/backlog/questions/escalations/events/workflows plus babysitter visibility/control. Both keep `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. Daemon scheduling through the babysitter, a static UI/SSE layer, workflow babysitting, and the future OpenClaw seam are still not implemented.
 
 Current coexistence rule:
 
@@ -164,7 +164,7 @@ Current scope:
 - repeated-failure and blocker tracking
 - a small GenServer daemon baseline
 - initial provider failover tests
-- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts, and a manual single-child disposable-worktree babysitter skeleton in Elixir
+- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts, a manual single-child disposable-worktree babysitter skeleton, and a loopback JSON control-plane service in Elixir
 
 When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
 

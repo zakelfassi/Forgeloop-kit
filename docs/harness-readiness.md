@@ -30,5 +30,6 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - Keep open PRs short-lived and rewrite stacked draft history into focused successors.
 - Keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows.
 - Add daemon-integrated babysitter child-run recovery and watchdog checks.
+- Add HTTP/SSE smoke tests for the loopback service and future static UI.
 - Add integration-surface smoke tests for future plugin seams such as OpenClaw.
 

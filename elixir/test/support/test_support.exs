@@ -10,6 +10,7 @@ defmodule ForgeloopV2.TestSupport do
         ControlFiles,
         ControlLock,
         Coordination,
+        ControlPlane,
         Babysitter,
         Daemon,
         Escalation,
@@ -23,6 +24,7 @@ defmodule ForgeloopV2.TestSupport do
         RepoPaths,
         RuntimeLifecycle,
         RuntimeStateStore,
+        Service,
         Workspace,
         Worktree
       }

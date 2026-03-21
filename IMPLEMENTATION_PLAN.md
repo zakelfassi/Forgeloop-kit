@@ -96,15 +96,23 @@ Format:
     - replay/tail ordering test
     - existing event tests stay green
 
-- [ ] Add an embedded Elixir service mode with a control-plane GenServer and loopback-only HTTP API
+- [x] Add an embedded Elixir service mode with a control-plane GenServer and loopback-only HTTP API
   - Acceptance:
-    - `mix forgeloop_v2.serve --repo ..` starts a local service exposing runtime, backlog, questions, escalations, and events.
-    - Manual `plan`/`build` requests reuse `Loop.run/3` and reject concurrent execution cleanly.
+    - `mix forgeloop_v2.serve --repo ..` starts a local loopback service exposing runtime, backlog, questions, escalations, events, workflow visibility, and babysitter state.
+    - Manual `plan`/`build` requests now flow through the service-managed babysitter (`/api/babysitter/start`) and still reuse `Loop.run/3` while rejecting concurrent runs cleanly.
     - Pause requests can write paused runtime state through an operator writer without changing recovery semantics.
   - REQUIRED TESTS:
     - service/control-plane tests
     - busy/manual-run serialization tests
     - operator-writer runtime transition tests
+  - Shipped behavior:
+    - `ForgeloopV2.ControlPlane` serializes loopback operator actions over the existing file-first control plane.
+    - `ForgeloopV2.Service` exposes local JSON endpoints for runtime, backlog, questions, escalations, events, workflows, and babysitter start/stop/status.
+    - The service is loopback-only, file-backed, and intentionally not Phoenix/UI/SSE yet.
+  - Deferred after this slice:
+    - SSE/event subscriptions for live browser updates
+    - static repo-local UI on top of the JSON API
+    - direct UI-triggered `surface: "ui"` one-off runs separate from the babysitter path
 
 - [ ] Ship a static repo-local UI for runtime status, backlog, questions, escalations, events, and provider health
   - Acceptance:
