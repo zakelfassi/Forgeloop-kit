@@ -174,7 +174,18 @@ Format:
 
 ## Later / Strategic
 
-- [ ] Add a repo-local tracker adapter (for example `ForgeloopV2.Tracker.RepoLocal`) that projects plan/task state into `Tracker.Issue` structs
+- [x] Add a repo-local tracker adapter (for example `ForgeloopV2.Tracker.RepoLocal`) that projects repo-local backlog/workflow state into `Tracker.Issue` structs
+  - Acceptance:
+    - Canonical backlog items and native workflow packs can be projected into `Tracker.Issue`-shaped entries without mutating external trackers.
+    - The loopback service/HUD/OpenClaw seam can expose that projection as a read-only repo-local tracker view.
+    - `WORKFLOW.md` service-owned-key boundaries remain unchanged.
+  - REQUIRED TESTS:
+    - repo-local tracker projection tests for canonical backlog + workflow packs
+    - service/OpenClaw tracker surface tests
+  - Shipped behavior:
+    - `ForgeloopV2.Tracker.RepoLocal` now projects phase-1 canonical backlog items and workflow packs into read-only `Tracker.Issue` structs, with adapter-compatible fetch helpers plus explicit `:read_only_tracker` responses for mutation calls.
+    - The loopback service now exposes `/api/tracker` and includes the same projection in `/api/overview`, and the HUD + OpenClaw overview summarize that repo-local tracker view.
+    - README/docs/site copy now describe the projection as additive, read-only, and still separate from later tracker/`prd.json` unification.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Decide whether bash should participate in `.forgeloop/v2/active-runtime.json` before making stronger split-brain-prevention claims
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven

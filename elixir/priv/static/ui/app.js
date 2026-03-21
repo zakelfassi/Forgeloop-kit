@@ -18,6 +18,7 @@ const refs = {
   runtimeBody: document.getElementById("runtime-body"),
   providerBody: document.getElementById("provider-body"),
   backlogBody: document.getElementById("backlog-body"),
+  trackerBody: document.getElementById("tracker-body"),
   questionsBody: document.getElementById("questions-body"),
   escalationsBody: document.getElementById("escalations-body"),
   eventsBody: document.getElementById("events-body")
@@ -150,6 +151,7 @@ function applySnapshot(snapshot) {
   renderRuntime(snapshot.runtime_state, snapshot.babysitter, snapshot.control_flags);
   renderProviders(snapshot.provider_health);
   renderBacklog(snapshot.backlog);
+  renderTracker(snapshot.tracker);
   renderQuestions(snapshot.questions || []);
   renderEscalations(snapshot.escalations || []);
   renderEvents(snapshot.events || []);
@@ -302,6 +304,44 @@ function renderBacklog(backlog) {
         ${badge(`line ${item.line_number}`, "info")}
       </div>
       <h3>${escapeHtml(item.text || item.raw_line || "Untitled item")}</h3>
+    </article>
+  `).join("")}`;
+}
+
+function renderTracker(tracker) {
+  const issues = tracker && tracker.issues ? tracker.issues : [];
+  const counts = tracker && tracker.counts ? tracker.counts : {};
+  const sources = tracker && tracker.sources ? tracker.sources : {};
+  const backlogSource = sources.backlog || {};
+  const workflowSource = sources.workflows || {};
+  const summaryCard = `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge(`${counts.total || 0} total`, "info")}
+        ${badge(`${counts.backlog || 0} backlog`, "purple")}
+        ${badge(`${counts.workflows || 0} workflows`, "good")}
+      </div>
+      <h3>Projected read-only tracker view</h3>
+      <p>Derived from <code>${escapeHtml(backlogSource.label || "IMPLEMENTATION_PLAN.md")}</code> and <code>${escapeHtml(workflowSource.path || "workflows/")}</code> without changing the canonical files or mutating external trackers yet.</p>
+    </article>
+  `;
+
+  if (!issues.length) {
+    refs.trackerBody.className = "stack empty";
+    refs.trackerBody.innerHTML = `${summaryCard}<p>No repo-local tracker issues are projected yet.</p>`;
+    return;
+  }
+
+  refs.trackerBody.className = "stack";
+  refs.trackerBody.innerHTML = `${summaryCard}${issues.map((issue) => `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge(issue.state || "ready", badgeClass(issue.state || "ready"))}
+        ${badge((issue.workflow_state || "issue").replaceAll("_", " "), issue.workflow_state === "workflow_pack" ? "good" : issue.workflow_state === "backlog_alert" ? "bad" : "purple")}
+        ${badge(issue.identifier || issue.id || "repo-local", "info")}
+      </div>
+      <h3>${escapeHtml(issue.title || "Repo-local issue")}</h3>
+      <p>${escapeHtml(issue.description || "Projected from canonical repo state.")}</p>
     </article>
   `).join("")}`;
 }

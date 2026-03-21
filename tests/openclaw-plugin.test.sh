@@ -65,6 +65,7 @@ globalThis.fetch = async (url, options = {}) => {
           items: [{ id: "task-1" }]
         },
         control_flags: { "pause_requested?": false, "replan_requested?": true },
+        tracker: { issues: [{ id: "plan:1" }, { id: "workflow:alpha" }] },
         questions: [{ id: "Q-1", status_kind: "awaiting_response" }],
         escalations: [{ id: "E-1" }],
         events: [{ event_type: "daemon_tick" }],
@@ -96,6 +97,7 @@ const questionTool = registrations.find(({ tool }) => tool.name === "forgeloop_q
 const overviewResult = await overviewTool.execute("1", { limit: 9 });
 assert.match(overviewResult.content[0].text, /Runtime: running \/ build via ui on main/);
 assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPLEMENTATION_PLAN\.md/);
+assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
 
 const controlResult = await controlTool.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);

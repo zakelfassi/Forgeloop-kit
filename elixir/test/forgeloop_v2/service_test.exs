@@ -73,6 +73,11 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["backlog"]["source"]["phase"] == "phase1"
     assert payload["data"]["control_flags"]["pause_requested?"] == false
     assert payload["data"]["control_flags"]["replan_requested?"] == false
+    assert payload["data"]["tracker"]["counts"]["total"] == 2
+    assert payload["data"]["tracker"]["counts"]["backlog"] == 1
+    assert payload["data"]["tracker"]["counts"]["workflows"] == 1
+    assert Enum.any?(payload["data"]["tracker"]["issues"], &(&1["workflow_state"] == "plan_item"))
+    assert Enum.any?(payload["data"]["tracker"]["issues"], &(&1["workflow_state"] == "workflow_pack"))
     assert Enum.at(payload["data"]["questions"], 0)["id"] == "Q-1"
     assert Enum.at(payload["data"]["escalations"], 0)["id"] == "E-1"
     assert Enum.any?(payload["data"]["events"], &(&1["event_type"] == "daemon_tick"))
@@ -126,6 +131,32 @@ defmodule ForgeloopV2.ServiceTest do
     assert length(backlog_payload["data"]["items"]) == 2
   end
 
+  test "service tracker endpoint exposes repo-local projected issues" do
+    repo =
+      create_repo_fixture!(
+        plan_content: """
+        ## Phase 1
+        - [ ] Ship tracker seam
+          - [ ] Keep it read-only
+        """
+      )
+
+    create_workflow_package!(repo.repo_root, "alpha")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    tracker_payload = get_json!(base_url <> "/api/tracker")
+
+    assert tracker_payload["ok"] == true
+    assert tracker_payload["data"]["counts"]["total"] == 2
+    assert tracker_payload["data"]["sources"]["backlog"]["kind"] == "implementation_plan"
+    assert tracker_payload["data"]["sources"]["workflows"]["kind"] == "workflow_catalog"
+    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "plan:2" and &1["workflow_state"] == "plan_item"))
+    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "workflow:alpha" and &1["workflow_state"] == "workflow_pack"))
+  end
+
   test "service backlog stays fail-closed when the configured plan path is unreadable" do
     repo = create_repo_fixture!()
     layout = create_ui_layout!(repo.repo_root)
@@ -134,12 +165,16 @@ defmodule ForgeloopV2.ServiceTest do
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
     backlog_payload = get_json!(base_url <> "/api/backlog")
+    tracker_payload = get_json!(base_url <> "/api/tracker")
 
     assert backlog_payload["ok"] == true
     assert backlog_payload["data"]["needs_build?"] == true
     assert backlog_payload["data"]["exists?"] == true
     assert backlog_payload["data"]["items"] == []
     assert backlog_payload["data"]["source"]["path"] == repo.repo_root
+    assert tracker_payload["ok"] == true
+    assert tracker_payload["data"]["counts"]["blocked"] == 1
+    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "plan:alert" and &1["workflow_state"] == "backlog_alert"))
   end
 
   test "pause, replan, question answer, and resolve endpoints mutate canonical files safely" do

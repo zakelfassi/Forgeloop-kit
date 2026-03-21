@@ -153,14 +153,25 @@ end
 defmodule ForgeloopV2.Tracker.Service do
   @moduledoc false
 
+  alias ForgeloopV2.Config
   alias ForgeloopV2.Tracker
   alias ForgeloopV2.Tracker.Issue
+  alias ForgeloopV2.Tracker.RepoLocal
 
   @spec list_candidate_work() :: {:ok, [Issue.t()]} | {:error, term()}
   def list_candidate_work, do: Tracker.fetch_candidate_issues()
 
   @spec refresh_issue_snapshots([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def refresh_issue_snapshots(issue_ids), do: Tracker.fetch_issue_states_by_ids(issue_ids)
+
+  @spec repo_local_overview(Config.t()) :: {:ok, RepoLocal.Overview.t()} | {:error, term()}
+  def repo_local_overview(%Config{} = config), do: RepoLocal.overview(config)
+
+  @spec repo_local_overview(Config.t(), ForgeloopV2.PlanStore.Backlog.t(), ForgeloopV2.WorkflowService.Overview.t()) ::
+          {:ok, RepoLocal.Overview.t()}
+  def repo_local_overview(%Config{} = config, %ForgeloopV2.PlanStore.Backlog{} = backlog, %ForgeloopV2.WorkflowService.Overview{} = workflows) do
+    RepoLocal.overview(config, backlog, workflows)
+  end
 
   @spec transition_issue_after_outcome(String.t(), atom() | String.t()) :: :ok | {:error, term()}
   def transition_issue_after_outcome(issue_id, outcome) do

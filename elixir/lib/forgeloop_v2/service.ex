@@ -30,6 +30,7 @@ defmodule ForgeloopV2.ControlPlane do
     ProviderHealth,
     RuntimeLifecycle,
     RuntimeStateStore,
+    Tracker,
     WorkflowService,
     Worktree
   }
@@ -58,6 +59,9 @@ defmodule ForgeloopV2.ControlPlane do
 
   @spec questions(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Question.t()]} | {:error, term()}
   def questions(server \\ __MODULE__), do: GenServer.call(server, :questions)
+
+  @spec tracker(GenServer.server()) :: {:ok, ForgeloopV2.Tracker.RepoLocal.Overview.t()} | {:error, term()}
+  def tracker(server \\ __MODULE__), do: GenServer.call(server, :tracker)
 
   @spec escalations(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Escalation.t()]} | {:error, term()}
   def escalations(server \\ __MODULE__), do: GenServer.call(server, :escalations)
@@ -171,12 +175,14 @@ defmodule ForgeloopV2.ControlPlane do
            {:ok, escalations} <- read_escalations(state.config),
            {:ok, provider_health} <- read_provider_health(state.config),
            {:ok, workflow_overview} <- WorkflowService.overview(state.config),
+           {:ok, tracker} <- read_tracker(state.config, backlog, workflow_overview),
            {:ok, babysitter} <- babysitter_status(state, Keyword.get(opts, :include_active_run?, true)) do
         {:ok,
          %{
            runtime_state: runtime_state,
            backlog: backlog,
            control_flags: control_flags,
+           tracker: tracker,
            questions: questions,
            escalations: escalations,
            provider_health: provider_health,
@@ -199,6 +205,10 @@ defmodule ForgeloopV2.ControlPlane do
 
   def handle_call(:questions, _from, %State{} = state) do
     {:reply, read_questions(state.config), state}
+  end
+
+  def handle_call(:tracker, _from, %State{} = state) do
+    {:reply, read_tracker(state.config), state}
   end
 
   def handle_call(:escalations, _from, %State{} = state) do
@@ -414,6 +424,17 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   defp read_backlog(config), do: PlanStore.summary(config)
+
+  defp read_tracker(config) do
+    with {:ok, backlog} <- read_backlog(config),
+         {:ok, workflow_overview} <- WorkflowService.overview(config) do
+      read_tracker(config, backlog, workflow_overview)
+    end
+  end
+
+  defp read_tracker(config, backlog, workflow_overview) do
+    Tracker.Service.repo_local_overview(config, backlog, workflow_overview)
+  end
 
   defp read_control_flags(config) do
     {:ok,
@@ -641,6 +662,8 @@ defmodule ForgeloopV2.ServiceJSON do
   alias ForgeloopV2.PlanStore
   alias ForgeloopV2.PlanStore.Item
   alias ForgeloopV2.RuntimeState
+  alias ForgeloopV2.Tracker.Issue
+  alias ForgeloopV2.Tracker.RepoLocal.Overview, as: TrackerOverview
   alias ForgeloopV2.WorkflowCatalog.Entry
   alias ForgeloopV2.WorkflowService.{ActionSnapshot, Overview, WorkflowSummary}
 
@@ -650,6 +673,7 @@ defmodule ForgeloopV2.ServiceJSON do
       runtime_state: runtime_state(payload.runtime_state),
       backlog: backlog(payload.backlog),
       control_flags: control_flags(payload.control_flags),
+      tracker: tracker_overview(payload.tracker),
       questions: Enum.map(payload.questions, &question/1),
       escalations: Enum.map(payload.escalations, &escalation/1),
       provider_health: provider_health(payload.provider_health),
@@ -685,6 +709,14 @@ defmodule ForgeloopV2.ServiceJSON do
     %{pause_requested?: pause_requested?, replan_requested?: replan_requested?}
   end
 
+  def tracker_overview(%TrackerOverview{} = overview) do
+    %{
+      sources: %{backlog: backlog_source(overview.sources.backlog), workflows: backlog_source(overview.sources.workflows)},
+      counts: overview.counts,
+      issues: Enum.map(overview.issues, &tracker_issue/1)
+    }
+  end
+
   def question(%Question{} = question) do
     %{
       id: question.id,
@@ -713,6 +745,22 @@ defmodule ForgeloopV2.ServiceJSON do
       evidence: escalation.evidence,
       host: escalation.host,
       draft: escalation.draft
+    }
+  end
+
+  def tracker_issue(%Issue{} = issue) do
+    %{
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description,
+      state: issue.state,
+      workflow_state: issue.workflow_state,
+      url: issue.url,
+      labels: issue.labels,
+      assignees: issue.assignees,
+      created_at: iso_datetime(issue.created_at),
+      updated_at: iso_datetime(issue.updated_at)
     }
   end
 
@@ -787,6 +835,9 @@ defmodule ForgeloopV2.ServiceJSON do
       raw_line: item.raw_line
     }
   end
+
+  defp iso_datetime(nil), do: nil
+  defp iso_datetime(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
 
   defp serialize_error(nil), do: nil
   defp serialize_error(error) when is_binary(error), do: error
@@ -1087,6 +1138,13 @@ defmodule ForgeloopV2.Service do
   defp route(%{method: "GET", path: "/api/backlog"}, _config, control_plane_pid) do
     case ControlPlane.backlog(control_plane_pid) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.backlog(payload)})
+      {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
+  defp route(%{method: "GET", path: "/api/tracker"}, _config, control_plane_pid) do
+    case ControlPlane.tracker(control_plane_pid) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.tracker_overview(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end

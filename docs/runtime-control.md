@@ -166,6 +166,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, and record `surface: "ui"`
 - the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
 - in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
+- the same service/HUD/OpenClaw plane now also exposes a read-only repo-local tracker projection for canonical backlog items + workflow packs without mutating external trackers yet
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
@@ -195,7 +196,7 @@ That suite is curated to demonstrate:
 
 The repo now also contains an experimental `elixir/` foundation that preserves the same operator-facing artifacts and `.forgeloop/runtime-state.json` contract for the phase-1 safety nucleus.
 
-For now, deploy/log-ingest orchestration, tracker integration, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.
+For now, deploy/log-ingest orchestration, external tracker mutation/integration, and the rest of the planned Phoenix service remain future work; the bash runtime is still the default operational path.
 
 The current coexistence rule is intentionally narrow:
 

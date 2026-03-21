@@ -28,14 +28,17 @@ defmodule ForgeloopV2.PlanStore.Backlog do
           phase: String.t()
         }
 
+  @type read_status :: :available | :missing | :unreadable
+
   @type t :: %__MODULE__{
           source: source(),
           exists?: boolean(),
           needs_build?: boolean(),
+          read_status: read_status(),
           items: [Item.t()]
         }
 
-  defstruct [:source, :exists?, :needs_build?, items: []]
+  defstruct [:source, :exists?, :needs_build?, :read_status, items: []]
 end
 
 defmodule ForgeloopV2.PlanStore do
@@ -66,6 +69,7 @@ defmodule ForgeloopV2.PlanStore do
            source: source,
            exists?: true,
            needs_build?: Enum.any?(pending, &(&1.depth == 0)),
+           read_status: :available,
            items: pending
          }}
 
@@ -75,6 +79,7 @@ defmodule ForgeloopV2.PlanStore do
            source: source,
            exists?: false,
            needs_build?: true,
+           read_status: :missing,
            items: []
          }}
 
@@ -84,6 +89,7 @@ defmodule ForgeloopV2.PlanStore do
            source: source,
            exists?: File.exists?(config.plan_file),
            needs_build?: true,
+           read_status: :unreadable,
            items: []
          }}
     end

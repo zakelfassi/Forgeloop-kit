@@ -56,7 +56,7 @@ Runner state is exposed through:
 
 That means repeated workflow failures still pause and escalate instead of spinning.
 
-Elixir now exposes a **read-only visibility seam** over this lane: it can read the workflow catalog plus the latest `last-preflight.txt` / `last-run.txt` artifacts, and the loopback JSON service now publishes that same read model without widening the workflow execution contract yet.
+Elixir now exposes a **read-only visibility seam** over this lane: it can read the workflow catalog plus the latest `last-preflight.txt` / `last-run.txt` artifacts, the loopback JSON service publishes that same read model, and the repo-local tracker projection can map workflow packs into `Tracker.Issue`-shaped entries without widening the workflow execution contract yet.
 
 ## Current limitations
 

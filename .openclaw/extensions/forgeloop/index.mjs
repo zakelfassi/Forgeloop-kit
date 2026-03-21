@@ -32,6 +32,8 @@ function buildOverviewTool(api) {
       const backlog = data.backlog || {};
       const questions = Array.isArray(data.questions) ? data.questions : [];
       const escalations = Array.isArray(data.escalations) ? data.escalations : [];
+      const tracker = data.tracker || {};
+      const trackerIssues = Array.isArray(tracker.issues) ? tracker.issues : [];
       const events = Array.isArray(data.events) ? data.events : [];
       const workflows = data.workflows?.workflows || [];
       const babysitter = data.babysitter || {};
@@ -46,6 +48,7 @@ function buildOverviewTool(api) {
         `Flags: pause=${boolFlag(flags["pause_requested?"] ?? flags.pause_requested)} replan=${boolFlag(flags["replan_requested?"] ?? flags.replan_requested)}`,
         `Questions: ${questions.length} total, ${questions.filter((item) => item.status_kind === "awaiting_response").length} awaiting response`,
         `Escalations: ${escalations.length}`,
+        `Tracker: ${trackerIssues.length} projected repo-local issues`,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
         `Workflows: ${workflows.length} discovered`,
         `Recent events: ${events.length}`,

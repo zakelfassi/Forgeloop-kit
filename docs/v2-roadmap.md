@@ -14,10 +14,10 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - shell/noop work drivers
   - daemon baseline
   - workflow loading with last-known-good reload
-  - tracker boundary plus memory adapter
+  - tracker boundary plus memory adapter and a repo-local projection seam
   - metadata-first workspace and path-safety helpers
   - local JSONL event history
-- a loopback-only control-plane service for runtime plus the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), alongside questions/escalations/events/workflows/provider health and babysitter control
+- a loopback-only control-plane service for runtime plus the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), a read-only repo-local tracker projection, and questions/escalations/events/workflows/provider health plus babysitter control
 - a static repo-local operator UI with SSE-backed live updates, interactive control mutations, and no Node asset pipeline
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it
 
@@ -87,6 +87,6 @@ These are still out of scope for the current phase:
 - exact checkpoint/resume
 - multi-host workers
 - tracker/`prd.json` backlog unification beyond the phase-1 implementation-plan surface
-- raw tracker mutation tooling
+- raw or external tracker mutation tooling
 - OpenClaw as a supported runtime/provider option today
 
