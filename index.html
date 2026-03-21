@@ -1168,8 +1168,8 @@ flowchart LR
 
           <div class="callout" style="margin-top: 14px">
             <b>Daemon mode:</b> Optionally run <code>./forgeloop.sh daemon 300</code> to poll on an interval and run loops automatically.
-            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, and <code>[INGEST_LOGS]</code>.
-            Elixir control-plane groundwork now treats <code>[PAUSE]</code>/<code>[REPLAN]</code> as locked, idempotent marker edits, keeps question answers from faking recovery, can manually launch one disposable-worktree babysitter run with <code>mix forgeloop_v2.babysit build --repo ..</code>, routes Elixir-daemon checklist runs through that same babysitter/worktree substrate with <code>mix forgeloop_v2.daemon --repo ..</code>, and now exposes a loopback control-plane service + live operator UI with <code>./forgeloop.sh serve</code> (or <code>mix forgeloop_v2.serve --repo ..</code> in this repo) that can pause, clear pause, answer/resolve questions, and trigger one-off <code>plan</code>/<code>build</code> runs. The repo now also ships a local OpenClaw plugin seam at <code>.openclaw/extensions/forgeloop</code> for piloting that same control plane, while the public <code>./forgeloop.sh daemon</code> wrapper still follows the bash path in this slice.
+            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, and <code>[INGEST_LOGS]</code> on the public bash path.
+            Elixir control-plane groundwork now treats <code>[PAUSE]</code>/<code>[REPLAN]</code> as locked, idempotent marker edits, keeps question answers from faking recovery, can manually launch one disposable-worktree babysitter run with <code>mix forgeloop_v2.babysit build --repo ..</code>, routes Elixir-daemon checklist runs plus one explicit <code>[WORKFLOW]</code> request through that same babysitter/worktree substrate with <code>mix forgeloop_v2.daemon --repo ..</code>, and now exposes a loopback control-plane service + live operator UI with <code>./forgeloop.sh serve</code> (or <code>mix forgeloop_v2.serve --repo ..</code> in this repo) that can pause, clear pause, answer/resolve questions, and trigger one-off <code>plan</code>/<code>build</code> runs. The repo now also ships a local OpenClaw plugin seam at <code>.openclaw/extensions/forgeloop</code> for piloting that same control plane, while the public <code>./forgeloop.sh daemon</code> wrapper still follows the bash path in this slice.
             When verify/CI/push keeps failing, Forgeloop pauses and drafts the handoff instead of free-spinning.
           </div>
 
@@ -1379,7 +1379,7 @@ flowchart LR
             <div class="card" style="grid-column: span 4">
               <h3>Workflow Lane (experimental)</h3>
               <p>
-                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog and latest workflow artifacts through the control plane and surface them in the loopback operator UI.
+                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog and latest workflow artifacts through the control plane, surface them in the loopback operator UI, and honor one explicit daemon <code>[WORKFLOW]</code> request against a configured target.
               </p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#lane-workflow">Copy</button>
@@ -1388,7 +1388,7 @@ flowchart LR
 ./forgeloop.sh workflow run issue-to-pr</pre>
               </div>
               <div class="chiprow" role="list">
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>manual-only</span></span>
+                <span class="chip blue" role="listitem"><span class="tag"></span><span>manual-first</span></span>
                 <span class="chip pink" role="listitem"><span class="tag"></span><span>configured runner</span></span>
               </div>
             </div>
@@ -1442,7 +1442,7 @@ flowchart LR
               Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. The HUD/OpenClaw plane now also
               projects a read-only repo-local tracker view from backlog items + workflow packs, can trigger managed workflow
               <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, and shares that managed substrate
-              with Elixir-daemon checklist runs, while tracker/<code>prd.json</code> unification remains a later slice and workflow
+              with Elixir-daemon checklist runs plus one explicit configured <code>[WORKFLOW]</code> request, while tracker/<code>prd.json</code> unification remains a later slice and workflow
               metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
             </p>
           </div>

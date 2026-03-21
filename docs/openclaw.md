@@ -65,7 +65,7 @@ These map directly onto the existing loopback JSON API:
 
 - This does **not** make OpenClaw a Forgeloop runtime/provider.
 - This does **not** bypass the fail-closed repo-local artifact chain.
-- This does **not** yet add daemon-integrated OpenClaw orchestration.
-- This does **not** yet add workflow-aware daemon scheduling, richer workflow history, or native graph execution.
+- This does **not** yet add daemon-integrated OpenClaw orchestration beyond the current bounded `[WORKFLOW]` request visibility.
+- This does **not** yet add richer workflow history, broader workflow orchestration, or native graph execution.
 
 Those are later slices.

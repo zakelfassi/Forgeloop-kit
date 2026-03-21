@@ -8,7 +8,7 @@ Forgeloop now has **three execution lanes**:
 
 For phase-1 self-hosting, the checklist lane is the canonical backlog surfaced by the Elixir service/UI/OpenClaw seam. The tasks lane remains supported, but tracker/`prd.json` unification is intentionally deferred until after the UI core is stable.
 
-This workflow lane is a **native Forgeloop capability**, but it is still manual-only and still delegates execution to a configured workflow runner in this slice. `preflight` / `run` now route through the managed babysitter + disposable-worktree control-plane path rather than bypassing it. Treat this document as the detailed contract; other README/docs/site surfaces should summarize and point here.
+This workflow lane is a **native Forgeloop capability**, but it still delegates execution to a configured workflow runner in this slice and remains intentionally narrow. Manual `preflight` / `run` actions route through the managed babysitter + disposable-worktree control-plane path rather than bypassing it, and the experimental Elixir daemon can now honor one explicit `[WORKFLOW]` marker to launch a single configured workflow target through that same path. Treat this document as the detailed contract; other README/docs/site surfaces should summarize and point here.
 
 ## What it is
 
@@ -60,11 +60,12 @@ Elixir now exposes a managed control + visibility seam over this lane: workflow 
 
 ## Current limitations
 
-This lane is intentionally narrow in the first slice:
+This lane is intentionally narrow in the current slice:
 
-- it is **manual-only**
-- the daemon does **not** trigger it yet
-- there is **no** `[WORKFLOW]` control flag
+- manual workflow actions remain the default/operator-facing path
+- the experimental Elixir daemon can trigger **one** workflow run per explicit `[WORKFLOW]` marker using `FORGELOOP_DAEMON_WORKFLOW_NAME` plus `FORGELOOP_DAEMON_WORKFLOW_ACTION`
+- `[WORKFLOW]` is consumed only after the managed run actually starts, and build/replan work still takes precedence over queued workflow requests
+- the public bash daemon still ignores `[WORKFLOW]`
 - it wraps a **configured workflow runner** rather than interpreting `workflow.dot` natively
 - concurrent use with build/tasks/daemon is unsupported in this slice
 - workflow status is currently limited to active-run metadata plus canonical `last-preflight.txt` / `last-run.txt` artifacts; richer outcome/history remains future work
@@ -103,7 +104,7 @@ The workflow lane is an execution seam, not the endpoint.
 
 Planned future work includes:
 
-- workflow-aware daemon scheduling without widening the current workflow-lane contract
+- broader workflow orchestration beyond the current one-shot Elixir-daemon `[WORKFLOW]` request
 - richer workflow outcome/history and checkpoint semantics on top of the current active-run + artifact view
 - OpenClaw monitoring/piloting of the loop and the babysitter beyond the current manual control surface
 - deciding whether native graph execution belongs inside Forgeloop or remains delegated to a workflow runner

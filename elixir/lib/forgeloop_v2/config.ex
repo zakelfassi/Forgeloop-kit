@@ -83,6 +83,8 @@ defmodule ForgeloopV2.Config do
     :workflow_dir,
     :workflow_search_dirs,
     :workflow_runner,
+    :daemon_workflow_name,
+    :daemon_workflow_action,
     :default_branch,
     :control_lock_timeout_ms,
     :babysitter_heartbeat_interval_ms,
@@ -148,6 +150,8 @@ defmodule ForgeloopV2.Config do
         workflow_dir: workflow_dir,
         workflow_search_dirs: workflow_search_dirs,
         workflow_runner: blank_to_nil(opts[:workflow_runner]) || env_value("FORGELOOP_WORKFLOW_RUNNER", shell_env),
+        daemon_workflow_name: optional_string(opts[:daemon_workflow_name], "FORGELOOP_DAEMON_WORKFLOW_NAME", shell_env),
+        daemon_workflow_action: daemon_workflow_action(opts[:daemon_workflow_action], shell_env),
         default_branch: opts[:default_branch] || env_value("FORGELOOP_DEFAULT_BRANCH", shell_env) || git_current_branch(repo_root) || "main",
         control_lock_timeout_ms: positive_int(opts[:control_lock_timeout_ms], "FORGELOOP_CONTROL_LOCK_TIMEOUT_MS", 2000, shell_env),
         babysitter_heartbeat_interval_ms:
@@ -218,6 +222,19 @@ defmodule ForgeloopV2.Config do
 
   defp workflow_root(repo_root, relative_path), do: Path.join(repo_root, relative_path)
 
+  defp daemon_workflow_action(explicit, shell_env) do
+    explicit
+    |> normalize_optional_value()
+    |> Kernel.||(env_value("FORGELOOP_DAEMON_WORKFLOW_ACTION", shell_env))
+    |> Kernel.||("preflight")
+  end
+
+  defp optional_string(explicit, env_name, shell_env) do
+    explicit
+    |> normalize_optional_value()
+    |> Kernel.||(env_value(env_name, shell_env))
+  end
+
   defp positive_int(explicit, env_name, default, shell_env) do
     value = explicit || env_value(env_name, shell_env) || default
 
@@ -277,6 +294,11 @@ defmodule ForgeloopV2.Config do
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp normalize_optional_value(nil), do: nil
+  defp normalize_optional_value(value) when is_atom(value), do: value |> Atom.to_string() |> normalize_optional_value()
+  defp normalize_optional_value(value) when is_binary(value), do: value |> String.trim() |> blank_to_nil()
+  defp normalize_optional_value(_value), do: nil
 
   defp env_value(name, shell_env) do
     (System.get_env(name) || Map.get(shell_env, name))

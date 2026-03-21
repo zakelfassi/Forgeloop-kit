@@ -73,6 +73,12 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["backlog"]["source"]["phase"] == "phase1"
     assert payload["data"]["control_flags"]["pause_requested?"] == false
     assert payload["data"]["control_flags"]["replan_requested?"] == false
+    assert payload["data"]["control_flags"]["workflow_requested?"] == false
+    assert payload["data"]["control_flags"]["workflow_target"]["configured?"] == false
+    assert payload["data"]["control_flags"]["workflow_target"]["valid?"] == false
+    assert payload["data"]["control_flags"]["workflow_target"]["name"] == nil
+    assert payload["data"]["control_flags"]["workflow_target"]["action"] == "preflight"
+    assert payload["data"]["control_flags"]["workflow_target"]["error"] == nil
     assert payload["data"]["tracker"]["counts"]["total"] == 2
     assert payload["data"]["tracker"]["counts"]["backlog"] == 1
     assert payload["data"]["tracker"]["counts"]["workflows"] == 1
@@ -129,6 +135,60 @@ defmodule ForgeloopV2.ServiceTest do
     assert backlog_payload["data"]["source"]["canonical?"] == true
     assert backlog_payload["data"]["source"]["phase"] == "phase1"
     assert length(backlog_payload["data"]["items"]) == 2
+  end
+
+  test "service overview exposes daemon workflow request visibility" do
+    repo = create_repo_fixture!(plan_content: "# done\n", requests: "[WORKFLOW]\n")
+    layout = create_ui_layout!(repo.repo_root)
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        daemon_workflow_name: "alpha",
+        daemon_workflow_action: "run"
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    payload = get_json!(base_url <> "/api/overview")
+
+    assert payload["ok"] == true
+    assert payload["data"]["control_flags"]["workflow_requested?"] == true
+    assert payload["data"]["control_flags"]["workflow_target"]["configured?"] == true
+    assert payload["data"]["control_flags"]["workflow_target"]["valid?"] == true
+    assert payload["data"]["control_flags"]["workflow_target"]["name"] == "alpha"
+    assert payload["data"]["control_flags"]["workflow_target"]["action"] == "run"
+    assert payload["data"]["control_flags"]["workflow_target"]["mode"] == "workflow-run"
+    assert payload["data"]["control_flags"]["workflow_target"]["error"] == nil
+  end
+
+  test "service overview marks invalid daemon workflow requests explicitly" do
+    repo = create_repo_fixture!(plan_content: "# done\n", requests: "[WORKFLOW]\n")
+    layout = create_ui_layout!(repo.repo_root)
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        daemon_workflow_name: "alpha",
+        daemon_workflow_action: "launch"
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    payload = get_json!(base_url <> "/api/overview")
+
+    assert payload["ok"] == true
+    assert payload["data"]["control_flags"]["workflow_requested?"] == true
+    assert payload["data"]["control_flags"]["workflow_target"]["configured?"] == true
+    assert payload["data"]["control_flags"]["workflow_target"]["valid?"] == false
+    assert payload["data"]["control_flags"]["workflow_target"]["name"] == "alpha"
+    assert payload["data"]["control_flags"]["workflow_target"]["action"] == "launch"
+    assert payload["data"]["control_flags"]["workflow_target"]["mode"] == nil
+    assert payload["data"]["control_flags"]["workflow_target"]["error"] == "invalid_daemon_workflow_action"
   end
 
   test "service tracker endpoint exposes repo-local projected issues" do

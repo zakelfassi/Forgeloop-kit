@@ -348,7 +348,8 @@ defmodule ForgeloopV2.Loop do
         |> Keyword.put_new(:runtime_surface, surface)
         |> Keyword.put_new(:runtime_mode, runtime_mode)
       
-      requested_action = Keyword.get(opts, :requested_action, default_requested_action(run_spec, config))
+      requested_action =
+        Keyword.get(opts, :requested_action, RunSpec.requested_action(run_spec, config.failure_escalation_action))
       branch = Keyword.get(opts, :branch, config.default_branch)
       prior_status = RuntimeStateStore.status(config)
       unanswered_question_ids = ControlFiles.unanswered_question_ids(config)
@@ -426,9 +427,6 @@ defmodule ForgeloopV2.Loop do
 
   defp default_surface(%RunSpec{lane: :workflow}, opts), do: Keyword.get(opts, :surface, "workflow")
   defp default_surface(_spec, opts), do: Keyword.get(opts, :surface, "loop")
-
-  defp default_requested_action(%RunSpec{lane: :workflow}, _config), do: "review"
-  defp default_requested_action(_spec, config), do: config.failure_escalation_action
 
   defp started_reason(%RunSpec{lane: :checklist, action: :plan}), do: "Planning run started"
   defp started_reason(%RunSpec{lane: :checklist, action: :build}), do: "Build run started"
@@ -522,6 +520,7 @@ defmodule ForgeloopV2.Daemon do
     Events,
     FailureTracker,
     Orchestrator,
+    RunSpec,
     RuntimeLifecycle,
     RuntimeStateStore,
     Worktree
@@ -623,7 +622,11 @@ defmodule ForgeloopV2.Daemon do
             "runtime_status" => context.runtime_status,
             "pause_requested" => context.pause_requested?,
             "replan_requested" => context.replan_requested?,
-            "needs_build" => context.needs_build?
+            "needs_build" => context.needs_build?,
+            "workflow_requested" => context.workflow_requested?,
+            "workflow_name" => workflow_name(context.workflow_run_spec),
+            "workflow_mode" => workflow_mode(context.workflow_run_spec),
+            "workflow_request_error" => format_workflow_request_error(context.workflow_request_error)
           })
 
         apply_decision(state, decision, context)
@@ -710,73 +713,86 @@ defmodule ForgeloopV2.Daemon do
 
   defp apply_decision(
          %State{} = state,
-         %Orchestrator.Decision{action: mode, consume_replan?: consume_replan?},
+         %Orchestrator.Decision{action: :workflow_error, error: error},
+         _context
+       ) do
+    result = normalize_managed_start_failure(state.config, workflow_request_identity(state.config), error)
+
+    maybe_schedule(
+      %State{state | last_action: :workflow_error, last_result: result},
+      state.interval_ms
+    )
+  end
+
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: action, run_spec: %RunSpec{} = run_spec, consume_flag: consume_flag},
          _context
        )
-       when mode in [:plan, :build] do
+       when action in [:plan, :build, :workflow] do
     task =
       Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-        run_checklist_via_babysitter(state, mode, consume_replan?)
+        run_managed_via_babysitter(state, run_spec, consume_flag)
       end)
 
     %State{
       state
       | current_task_ref: task.ref,
-        current_task_kind: mode,
+        current_task_kind: current_task_kind(run_spec),
         running?: true,
-        last_action: mode
+        last_action: decision_last_action(action, run_spec)
     }
   end
 
-  defp run_checklist_via_babysitter(%State{} = state, mode, consume_replan?) do
+  defp run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag) do
     case ensure_managed_run_available(state.config) do
       :ok ->
-        do_run_checklist_via_babysitter(state, mode, consume_replan?)
+        do_run_managed_via_babysitter(state, run_spec, consume_flag)
 
       {:error, {:managed_run_active, payload}} ->
         {:stopped, {:managed_run_active, payload}}
 
       {:error, reason} ->
-        normalize_managed_start_failure(state.config, mode, reason)
+        normalize_managed_start_failure(state.config, run_spec, reason)
     end
   end
 
-  defp do_run_checklist_via_babysitter(%State{} = state, mode, consume_replan?) do
+  defp do_run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag) do
     try do
       case Babysitter.start_link(
              config: state.config,
-             mode: mode,
+             run_spec: run_spec,
              branch: state.config.default_branch,
              runtime_surface: "daemon",
-             driver: state.driver,
+             driver: driver_for_run_spec(state.driver, run_spec),
              driver_opts: state.driver_opts,
              name: nil
            ) do
         {:ok, pid} ->
           case Babysitter.start_run(pid) do
             :ok ->
-              case maybe_consume_replan_after_start(state.config, pid, consume_replan?) do
+              case maybe_consume_flag_after_start(state.config, consume_flag) do
                 :ok ->
                   case Babysitter.await_result(pid, stop?: true) do
-                    {:error, :babysitter_exited} = error -> normalize_managed_start_failure(state.config, mode, error)
+                    {:error, :babysitter_exited} = error -> normalize_managed_start_failure(state.config, run_spec, error)
                     result -> result
                   end
 
                 {:error, reason} ->
                   _ = stop_babysitter(pid)
-                  normalize_managed_start_failure(state.config, mode, reason)
+                  normalize_managed_start_failure(state.config, run_spec, reason)
               end
 
             {:error, reason} ->
               stop_babysitter(pid)
-              normalize_managed_start_failure(state.config, mode, reason)
+              normalize_managed_start_failure(state.config, run_spec, reason)
           end
 
         {:error, reason} ->
-          normalize_managed_start_failure(state.config, mode, reason)
+          normalize_managed_start_failure(state.config, run_spec, reason)
       end
     catch
-      :exit, reason -> normalize_managed_start_failure(state.config, mode, {:babysitter_exit, reason})
+      :exit, reason -> normalize_managed_start_failure(state.config, run_spec, {:babysitter_exit, reason})
     end
   end
 
@@ -789,20 +805,21 @@ defmodule ForgeloopV2.Daemon do
     end
   end
 
-  defp maybe_consume_replan_after_start(_config, _pid, false), do: :ok
-  defp maybe_consume_replan_after_start(config, _pid, true), do: ControlFiles.consume_flag(config, "REPLAN")
+  defp maybe_consume_flag_after_start(_config, nil), do: :ok
+  defp maybe_consume_flag_after_start(config, flag), do: ControlFiles.consume_flag(config, flag)
 
-  defp normalize_managed_start_failure(config, mode, reason) do
-    summary = managed_start_failure_summary(mode, reason)
-    evidence_file = write_managed_start_error(config, mode, summary, reason)
+  defp normalize_managed_start_failure(config, run_descriptor, reason) do
+    summary = managed_start_failure_summary(run_descriptor, reason)
+    evidence_file = write_managed_start_error(config, run_descriptor, summary, reason)
+    runtime_mode = managed_runtime_mode(run_descriptor)
 
     case FailureTracker.handle(config, %{
-           kind: Atom.to_string(mode),
+           kind: runtime_mode,
            summary: summary,
            evidence_file: evidence_file,
-           requested_action: config.failure_escalation_action,
+           requested_action: managed_requested_action(run_descriptor, config),
            surface: "daemon",
-           mode: Atom.to_string(mode),
+           mode: runtime_mode,
            branch: config.default_branch
          }) do
       {:retry, count} -> {:retry, count}
@@ -811,14 +828,17 @@ defmodule ForgeloopV2.Daemon do
     end
   end
 
-  defp managed_start_failure_summary(mode, reason) do
-    "Managed daemon #{mode} run failed before loop start: #{format_managed_start_reason(reason)}"
-  end
+  defp managed_start_failure_summary(%RunSpec{} = run_spec, reason),
+    do:
+      "Managed daemon #{RunSpec.runtime_mode(run_spec)} run failed before loop start: #{format_managed_start_reason(reason)}"
+
+  defp managed_start_failure_summary({:workflow_request, _action, _workflow_name}, reason),
+    do: "Managed daemon workflow request failed before loop start: #{format_managed_start_reason(reason)}"
 
   defp format_managed_start_reason(reason), do: inspect(reason)
 
-  defp write_managed_start_error(%Config{} = config, mode, summary, reason) do
-    path = managed_start_error_file(config, mode)
+  defp write_managed_start_error(%Config{} = config, run_descriptor, summary, reason) do
+    path = managed_start_error_file(config, run_descriptor)
     body = [summary, "", inspect(reason), ""] |> Enum.join("\n")
 
     case ControlLock.with_lock(config, path, :runtime, [timeout_ms: config.control_lock_timeout_ms], fn ->
@@ -829,8 +849,24 @@ defmodule ForgeloopV2.Daemon do
     end
   end
 
-  defp managed_start_error_file(%Config{} = config, mode) do
-    Path.join([config.v2_state_dir, "babysitter", "daemon-#{mode}-start-error-last.txt"])
+  defp managed_start_error_file(%Config{} = config, %RunSpec{lane: :checklist, action: action}) do
+    Path.join([config.v2_state_dir, "babysitter", "daemon-#{action}-start-error-last.txt"])
+  end
+
+  defp managed_start_error_file(%Config{} = config, %RunSpec{lane: :workflow, action: action, workflow_name: workflow_name}) do
+    Path.join([
+      config.v2_state_dir,
+      "babysitter",
+      "daemon-workflow-#{action}-#{sanitize_file_segment(workflow_name, "workflow")}-start-error-last.txt"
+    ])
+  end
+
+  defp managed_start_error_file(%Config{} = config, {:workflow_request, action, workflow_name}) do
+    Path.join([
+      config.v2_state_dir,
+      "babysitter",
+      "daemon-workflow-#{sanitize_file_segment(action, "invalid-action")}-#{sanitize_file_segment(workflow_name, "workflow")}-start-error-last.txt"
+    ])
   end
 
   defp stop_babysitter(pid) do
@@ -863,4 +899,64 @@ defmodule ForgeloopV2.Daemon do
         })
     end
   end
+
+  defp decision_last_action(:workflow, %RunSpec{action: action, workflow_name: workflow_name}),
+    do: {:workflow, action, workflow_name}
+
+  defp decision_last_action(action, _run_spec), do: action
+
+  defp current_task_kind(%RunSpec{lane: :workflow} = run_spec), do: RunSpec.runtime_mode(run_spec)
+  defp current_task_kind(%RunSpec{action: action}), do: action
+
+  defp managed_runtime_mode(%RunSpec{} = run_spec), do: RunSpec.runtime_mode(run_spec)
+
+  defp managed_runtime_mode({:workflow_request, action, _workflow_name}) when is_binary(action) do
+    case String.downcase(String.trim(action)) do
+      "preflight" -> "workflow-preflight"
+      "run" -> "workflow-run"
+      _ -> "workflow"
+    end
+  end
+
+  defp managed_runtime_mode({:workflow_request, action, _workflow_name}) when is_atom(action) do
+    managed_runtime_mode({:workflow_request, Atom.to_string(action), nil})
+  end
+
+  defp managed_requested_action(%RunSpec{} = run_spec, %Config{} = config) do
+    RunSpec.requested_action(run_spec, config.failure_escalation_action)
+  end
+
+  defp managed_requested_action({:workflow_request, _action, _workflow_name}, _config), do: "review"
+
+  defp workflow_request_identity(%Config{} = config) do
+    {:workflow_request, config.daemon_workflow_action, config.daemon_workflow_name}
+  end
+
+  defp workflow_name(%RunSpec{workflow_name: workflow_name}), do: workflow_name
+  defp workflow_name(_), do: nil
+
+  defp workflow_mode(%RunSpec{} = run_spec), do: RunSpec.runtime_mode(run_spec)
+  defp workflow_mode(_), do: nil
+
+  defp format_workflow_request_error(nil), do: nil
+  defp format_workflow_request_error(reason), do: inspect(reason)
+
+  defp sanitize_file_segment(nil, fallback), do: fallback
+
+  defp sanitize_file_segment(value, fallback) do
+    value
+    |> to_string()
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9_-]+/, "-")
+    |> String.trim("-")
+    |> case do
+      "" -> fallback
+      sanitized -> sanitized
+    end
+  end
+
+  defp driver_for_run_spec(ForgeloopV2.WorkDrivers.Noop, %RunSpec{lane: :workflow}),
+    do: ForgeloopV2.WorkDrivers.ShellLoop
+
+  defp driver_for_run_spec(driver, _run_spec), do: driver
 end

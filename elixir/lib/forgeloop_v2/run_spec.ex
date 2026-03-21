@@ -47,6 +47,10 @@ defmodule ForgeloopV2.RunSpec do
   @spec action_string(t()) :: String.t()
   def action_string(%__MODULE__{action: action}), do: Atom.to_string(action)
 
+  @spec requested_action(t(), String.t()) :: String.t()
+  def requested_action(%__MODULE__{lane: :workflow}, _checklist_default_action), do: "review"
+  def requested_action(%__MODULE__{lane: :checklist}, checklist_default_action), do: checklist_default_action
+
   @spec same_instance?(t(), t()) :: boolean()
   def same_instance?(%__MODULE__{} = left, %__MODULE__{} = right) do
     left.lane == right.lane and left.action == right.action and left.workflow_name == right.workflow_name

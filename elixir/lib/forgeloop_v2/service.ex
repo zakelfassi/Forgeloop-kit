@@ -34,7 +34,8 @@ defmodule ForgeloopV2.ControlPlane do
     Tracker,
     WorkflowCatalog,
     WorkflowService,
-    Worktree
+    Worktree,
+    Orchestrator
   }
 
   alias ForgeloopV2.ControlPlane.State
@@ -478,10 +479,22 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   defp read_control_flags(config) do
+    workflow_request = Orchestrator.workflow_request(config)
+    workflow_run_spec = workflow_request.run_spec
+
     {:ok,
      %{
        pause_requested?: ControlFiles.has_flag?(config, "PAUSE"),
-       replan_requested?: ControlFiles.has_flag?(config, "REPLAN")
+       replan_requested?: ControlFiles.has_flag?(config, "REPLAN"),
+       workflow_requested?: workflow_request.requested?,
+       workflow_target: %{
+         configured?: is_binary(config.daemon_workflow_name) and config.daemon_workflow_name != "",
+         valid?: match?(%RunSpec{}, workflow_run_spec),
+         name: config.daemon_workflow_name,
+         action: config.daemon_workflow_action,
+         mode: if(match?(%RunSpec{}, workflow_run_spec), do: RunSpec.runtime_mode(workflow_run_spec), else: nil),
+         error: workflow_request_error_code(workflow_request.error)
+       }
      }}
   end
 
@@ -743,6 +756,12 @@ defmodule ForgeloopV2.ControlPlane do
   defp workflow_name_from_run_spec(nil), do: nil
   defp workflow_name_from_run_spec(%RunSpec{} = run_spec), do: run_spec.workflow_name
 
+  defp workflow_request_error_code(nil), do: nil
+  defp workflow_request_error_code(:missing_daemon_workflow_name), do: "missing_daemon_workflow_name"
+  defp workflow_request_error_code({:invalid_daemon_workflow_action, _value}), do: "invalid_daemon_workflow_action"
+  defp workflow_request_error_code({:invalid_workflow_name, _workflow_name}), do: "invalid_workflow_name"
+  defp workflow_request_error_code(reason), do: inspect(reason)
+
   defp default_driver(config) do
     if config.shell_driver_enabled do
       ForgeloopV2.WorkDrivers.ShellLoop
@@ -808,8 +827,18 @@ defmodule ForgeloopV2.ServiceJSON do
     }
   end
 
-  def control_flags(%{pause_requested?: pause_requested?, replan_requested?: replan_requested?}) do
-    %{pause_requested?: pause_requested?, replan_requested?: replan_requested?}
+  def control_flags(%{
+        pause_requested?: pause_requested?,
+        replan_requested?: replan_requested?,
+        workflow_requested?: workflow_requested?,
+        workflow_target: workflow_target
+      }) do
+    %{
+      pause_requested?: pause_requested?,
+      replan_requested?: replan_requested?,
+      workflow_requested?: workflow_requested?,
+      workflow_target: workflow_target
+    }
   end
 
   def tracker_overview(%TrackerOverview{} = overview) do

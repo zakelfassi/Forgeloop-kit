@@ -18,6 +18,26 @@ defmodule ForgeloopV2.DaemonTest do
   sleep 30
   """
 
+  @workflow_runner """
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ "${1:-}" != "run" ]]; then
+    echo "unexpected:$*" >&2
+    exit 2
+  fi
+  shift
+  mode=run
+  if [[ "${1:-}" == "--preflight" ]]; then
+    mode=preflight
+    shift
+  fi
+  workflow="${1:-}"
+  echo "ok:${mode}:${workflow}"
+  echo "surface=${FORGELOOP_RUNTIME_SURFACE:-}"
+  echo "runtime_mode=${FORGELOOP_RUNTIME_MODE:-}"
+  echo "workflow=${FORGELOOP_WORKFLOW_NAME:-}"
+  """
+
   test "blocker escalation reuses the tick blocker snapshot" do
     repo =
       create_repo_fixture!(
@@ -195,6 +215,50 @@ defmodule ForgeloopV2.DaemonTest do
     assert "worktree_cleaned" in event_types
   end
 
+  test "daemon can schedule one configured workflow request through the managed worktree path" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+
+    runner =
+      write_executable!(Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"), @workflow_runner)
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow fixture"])
+
+    config =
+      config_for!(repo.repo_root,
+        daemon_workflow_name: "alpha",
+        daemon_workflow_action: "preflight",
+        workflow_runner: runner
+      )
+
+    File.write!(config.requests_file, "[WORKFLOW]\n")
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.ShellLoop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end, 4_000)
+
+    assert Daemon.snapshot(pid).last_action == {:workflow, :preflight, "alpha"}
+    assert File.read!(config.requests_file) == ""
+
+    artifact = Path.join([config.runtime_dir, "workflows", "alpha", "last-preflight.txt"])
+    assert File.read!(artifact) =~ "ok:preflight:alpha"
+    assert File.read!(artifact) =~ "surface=daemon"
+    assert File.read!(artifact) =~ "runtime_mode=workflow-preflight"
+    assert File.read!(artifact) =~ "workflow=alpha"
+    assert Enum.empty?(Path.wildcard(Path.join(PathPolicy.workspace_root(config), "*")))
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.surface == "daemon"
+    assert state.mode == "workflow-preflight"
+  end
+
   test "daemon does not tear down an already-running managed babysitter" do
     repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
     config = config_for!(repo.repo_root, shell_driver_enabled: true, babysitter_shutdown_grace_ms: 50)
@@ -257,5 +321,79 @@ defmodule ForgeloopV2.DaemonTest do
 
     last_result = Daemon.snapshot(pid).last_result
     assert match?({:stopped, {:escalated, 1}}, last_result)
+  end
+
+  test "managed daemon workflow start failure preserves workflow request until a run really starts" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+
+    runner =
+      write_executable!(Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"), @workflow_runner)
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow fixture"])
+
+    config =
+      config_for!(repo.repo_root,
+        daemon_workflow_name: "alpha",
+        daemon_workflow_action: "preflight",
+        workflow_runner: runner,
+        failure_escalate_after: 1
+      )
+
+    File.write!(config.requests_file, "[WORKFLOW]\n")
+    File.write!(Path.join(repo.repo_root, "dirty.txt"), "uncommitted\n")
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.ShellLoop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.status == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+    assert File.read!(config.requests_file) =~ "[WORKFLOW]"
+
+    assert [_evidence_file] =
+             Path.wildcard(Path.join([config.v2_state_dir, "babysitter", "daemon-workflow-*-start-error-last.txt"]))
+
+    assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
+  end
+
+  test "invalid daemon workflow config fails closed without consuming the request marker" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n", requests: "[WORKFLOW]\n")
+
+    config =
+      config_for!(repo.repo_root,
+        daemon_workflow_name: "alpha",
+        daemon_workflow_action: "launch",
+        failure_escalate_after: 1
+      )
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.status == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+    assert File.read!(config.requests_file) =~ "[WORKFLOW]"
+
+    assert [_evidence_file] =
+             Path.wildcard(Path.join([config.v2_state_dir, "babysitter", "daemon-workflow-*-start-error-last.txt"]))
+
+    assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
+    assert Daemon.snapshot(pid).last_action == :workflow_error
   end
 end

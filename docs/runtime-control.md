@@ -16,17 +16,18 @@ It supports these flags in `REQUESTS.md`:
 
 - `[PAUSE]` — pause the daemon until the flag is removed
 - `[REPLAN]` — run a planning pass before continuing build work
+- `[WORKFLOW]` — Elixir daemon only: run one configured workflow target via `FORGELOOP_DAEMON_WORKFLOW_NAME` and `FORGELOOP_DAEMON_WORKFLOW_ACTION`
 
 These flags are treated as standalone marker lines in `REQUESTS.md`, and add/clear operations are idempotent on the Elixir control plane.
 - `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`, if configured
 - `[INGEST_LOGS]` — run log ingestion using `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`
 
 There is **no** daemon-side `[KNOWLEDGE_SYNC]` flag.
-There is also **no** daemon-side `[WORKFLOW]` flag in this slice; workflow runs are manual-only.
+The public bash daemon still ignores `[WORKFLOW]` in this slice; bounded workflow scheduling is currently an Elixir-daemon-only path.
 
-## Manual workflow lane (experimental)
+## Workflow lane (experimental)
 
-Forgeloop now has an experimental manual workflow lane:
+Forgeloop now has an experimental workflow lane:
 
 ```bash
 ./forgeloop.sh workflow list
@@ -34,7 +35,7 @@ Forgeloop now has an experimental manual workflow lane:
 ./forgeloop.sh workflow run <name> [runner args...]
 ```
 
-In this first slice it is manual-only, backed by a configured workflow runner, not daemon-scheduled, and still bound to the same runtime-state + escalation contract as the other lanes. Elixir can now read workflow catalogs plus the latest workflow artifacts through a read-only control-plane seam.
+It is still backed by a configured workflow runner and still bound to the same runtime-state + escalation contract as the other lanes. Manual `./forgeloop.sh workflow ...` actions and manual service/HUD/OpenClaw workflow actions already run through the managed babysitter/worktree path, and the experimental Elixir daemon can now honor one explicit `[WORKFLOW]` marker by launching a single configured `preflight` or `run` target through that same managed path. The marker is consumed only after the managed run actually starts, and checklist work still takes precedence over workflow requests.
 
 See `docs/workflows.md` for the detailed workflow-lane contract and compatibility notes.
 
@@ -134,7 +135,7 @@ This worktree layer is a repo-internal hygiene boundary, **not** the primary sec
 Important current limits:
 
 - the public bash daemon (`./forgeloop.sh daemon`) does **not** schedule babysitter runs yet
-- the workflow lane is still manual-only and is not daemon-scheduled through this path yet
+- bounded `[WORKFLOW]` scheduling currently exists only on the Elixir daemon path (`mix forgeloop_v2.daemon --repo ..`), not on the public bash wrapper
 - the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
 
 ## Loopback JSON control-plane service (experimental Elixir v2)
@@ -169,12 +170,13 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
 - the same service/HUD/OpenClaw plane now also exposes a read-only repo-local tracker projection for canonical backlog items + workflow packs without mutating external trackers yet
 - manual workflow `preflight` / `run` actions now flow through the same babysitter/worktree/runtime-state path as other managed runs instead of bypassing it
+- `/api/overview` now exposes whether `[WORKFLOW]` is queued plus the configured daemon workflow target so the HUD/OpenClaw seam can show the one-shot daemon request clearly
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:
 
 - bash-daemon / wrapper convergence onto the babysitter path
-- workflow-aware daemon scheduling / richer workflow history beyond the current active-run + artifact view
+- richer workflow history / broader workflow orchestration beyond the current one-shot `[WORKFLOW]` request + active-run/artifact view
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 
 ## Proof suite

@@ -167,6 +167,11 @@ function renderControls(snapshot) {
   const activeRun = babysitter.active_run || {};
   const pauseRequested = Boolean(flags["pause_requested?"]);
   const replanRequested = Boolean(flags["replan_requested?"]);
+  const workflowRequested = Boolean(flags["workflow_requested?"]);
+  const workflowTarget = flags.workflow_target || {};
+  const workflowTargetValid = workflowTarget["valid?"] !== false;
+  const workflowTargetLabel = workflowTarget.name ? `${workflowTarget.action || "preflight"} ${workflowTarget.name}` : "unconfigured";
+  const workflowTargetStatus = workflowRequested ? (workflowTargetValid ? "workflow queued" : "workflow invalid") : "workflow clear";
   const running = Boolean(babysitter["running?"]);
   const runtimeSurface = babysitter.runtime_surface || activeRun.runtime_surface || "—";
 
@@ -176,10 +181,12 @@ function renderControls(snapshot) {
       <div class="badges">
         ${badge(pauseRequested ? "pause requested" : "pause clear", pauseRequested ? "warn" : "good")}
         ${badge(replanRequested ? "replan queued" : "replan clear", replanRequested ? "purple" : "info")}
+        ${badge(workflowTargetStatus, workflowRequested ? (workflowTargetValid ? "pink" : "bad") : "info")}
         ${badge(running ? "run active" : "idle", running ? "warn" : "good")}
         ${badge(runtimeSurface === "—" ? "surface idle" : `surface ${runtimeSurface}`, "info")}
       </div>
       <p class="subtle-copy">UI actions update the canonical files first. Clearing pause does not write <code>recovered</code>; that still happens on the next daemon or loop cycle.</p>
+      <p class="subtle-copy">Elixir daemon workflow request: <code>[WORKFLOW]</code> → <code>${escapeHtml(workflowTargetLabel)}</code>${workflowTarget.error ? ` (${escapeHtml(workflowTarget.error)})` : ""}. The public bash daemon still ignores this marker.</p>
     </div>
     <div class="control-grid">
       <div class="control-card">

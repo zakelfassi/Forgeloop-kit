@@ -35,8 +35,8 @@ Format:
     - worktree-aware babysitter/supervisor integration for manual workflow actions
     - OpenClaw/plugin workflow control seam work
   - Deferred after this slice:
-    - daemon-integrated workflow scheduling
     - richer workflow outcome/history beyond the current active-run + artifact view
+    - broader workflow orchestration beyond the current one-shot daemon request
     - native graph execution
 
 - [x] Add repo-safe mutation helpers for questions and control flags, including file-level locking for parse-modify-write operations
@@ -116,7 +116,28 @@ Format:
     - `mix forgeloop_v2.babysit` now reuses `Babysitter.await_result/2`, and Elixir docs/site copy now distinguish the managed Elixir daemon path from the still-bash `./forgeloop.sh daemon` wrapper.
   - Deferred after this slice:
     - bash daemon / wrapper convergence onto the babysitter path
-    - workflow-aware daemon scheduling / richer workflow history beyond the current active-run + artifact view
+    - richer workflow history / broader workflow orchestration beyond the current active-run + artifact view
+
+- [x] Add bounded Elixir-daemon workflow scheduling on the managed control plane
+  - Acceptance:
+    - `mix forgeloop_v2.daemon --repo ..` can honor one explicit `[WORKFLOW]` marker by launching a single configured workflow target through the same babysitter/disposable-worktree/runtime-state path.
+    - The daemon consumes `[WORKFLOW]` only after the managed workflow run actually starts.
+    - Invalid daemon workflow config fails closed when `[WORKFLOW]` is present and preserves the request marker for human review.
+    - Public docs stay explicit that `./forgeloop.sh daemon` still follows the bash path in this slice.
+  - REQUIRED TESTS:
+    - `elixir/test/forgeloop_v2/orchestrator_test.exs`
+    - `elixir/test/forgeloop_v2/daemon_test.exs`
+    - `elixir/test/forgeloop_v2/control_files_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+    - full shell/eval/Elixir gates stay green
+  - Shipped behavior:
+    - `ForgeloopV2.Orchestrator` now recognizes `[WORKFLOW]` plus `FORGELOOP_DAEMON_WORKFLOW_NAME` / `FORGELOOP_DAEMON_WORKFLOW_ACTION` as a bounded Elixir-daemon-only workflow request after pause/recover/blocker/replan/build decisions.
+    - `ForgeloopV2.Daemon` now launches that request through the same temporary babysitter/worktree path used by other managed runs, consuming `[WORKFLOW]` only after start succeeds.
+    - Workflow request/config errors now fail closed through the existing failure tracker/escalation chain and write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-workflow-*-start-error-last.txt`.
+    - `/api/overview`, the HUD, and the OpenClaw seam now expose whether `[WORKFLOW]` is queued plus the configured daemon workflow target.
+  - Deferred after this slice:
+    - bash daemon / wrapper convergence onto the managed workflow path
+    - richer workflow history / broader workflow orchestration beyond the current one-shot daemon request
 
 - [x] Route manual workflow-pack actions through the managed control plane
   - Acceptance:
@@ -134,7 +155,7 @@ Format:
     - `ForgeloopV2.RunSpec` now models checklist vs workflow managed runs, and `Loop` / `Babysitter` / `ShellLoop` route workflow `preflight` / `run` actions through the same disposable-worktree runtime path as other managed runs.
     - `mix forgeloop_v2.workflow --repo ..` and `./forgeloop.sh workflow preflight|run` now converge on that managed control-plane path while keeping canonical workflow artifacts at repo root.
     - The loopback service now exposes workflow start endpoints plus active workflow status, and the static HUD + OpenClaw seam can trigger managed workflow actions over the same file-first control plane.
-    - README/docs/site copy now describe workflow status/control as managed control-plane behavior while keeping daemon workflow scheduling, richer workflow history, and native graph execution deferred.
+    - README/docs/site copy now describe workflow status/control as managed control-plane behavior while keeping richer workflow history, broader workflow orchestration, and native graph execution deferred.
 
 - [x] Add an embedded Elixir service mode with a control-plane GenServer and loopback-only HTTP API
   - Acceptance:
