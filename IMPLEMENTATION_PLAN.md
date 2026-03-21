@@ -18,7 +18,7 @@ Format:
 
 ## Next Up
 
-- [ ] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
+- [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
     - Workflow runs write Forgeloop runtime state and evidence files, and repeated failures escalate through the existing artifact chain.
@@ -29,13 +29,15 @@ Format:
     - `elixir/test/forgeloop_v2/workflow_catalog_test.exs`
     - `elixir/test/forgeloop_v2/workflow_test.exs`
     - existing install output + shell/eval gates stay green
+  - Follow-on shipped in the same track:
+    - read-only Elixir workflow visibility service over workflow catalogs + latest preflight/run artifacts
   - Deferred after this slice:
-    - service/UI workflow surfaces
+    - embedded service/API workflow surfaces
     - worktree-aware babysitter/supervisor integration
     - native graph execution
     - OpenClaw/plugin seam work
 
-- [ ] Add repo-safe mutation helpers for questions and control flags, including file-level locking for parse-modify-write operations
+- [x] Add repo-safe mutation helpers for questions and control flags, including file-level locking for parse-modify-write operations
   - Acceptance:
     - Answering or resolving a question updates only the targeted question section.
     - Adding/clearing `[PAUSE]` and `[REPLAN]` remains idempotent.
@@ -45,6 +47,10 @@ Format:
     - conflicting-answer returns conflict error
     - lock-timeout/error paths leave source files unchanged
     - existing escalation tests stay green
+  - Shipped behavior:
+    - section-level question answer/resolve with optimistic concurrency tokens
+    - locked idempotent `[PAUSE]` / `[REPLAN]` mutation helpers
+    - question/flag edits do not themselves write `recovered`
 
 ## Backlog
 
@@ -145,8 +151,8 @@ Format:
     - update `README.md` and `index.html` in the same slice when public behavior changes
   - Suggested naming:
     - `workflow-slice-01: add workflow pack lane`
-    - `workflow-slice-02: expose workflow catalog`
-    - `workflow-slice-03: add workflow service/ui surfaces`
+      - `workflow-slice-02: add read-only workflow visibility service`
+      - `workflow-slice-03: add workflow service/ui surfaces`
 
 ## Skill Opportunities
 

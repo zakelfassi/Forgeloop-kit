@@ -10,6 +10,16 @@ defmodule ForgeloopV2.WorkflowCatalog.Entry do
     :scripts_dir,
     :runner_kind
   ]
+
+  @type t :: %__MODULE__{
+          name: String.t(),
+          root: Path.t(),
+          graph_file: Path.t(),
+          config_file: Path.t(),
+          prompts_dir: Path.t() | nil,
+          scripts_dir: Path.t() | nil,
+          runner_kind: atom() | nil
+        }
 end
 
 defmodule ForgeloopV2.WorkflowCatalog do
@@ -72,7 +82,7 @@ defmodule ForgeloopV2.WorkflowCatalog do
   defp entry_from_search_dir(search_dir, name) do
     package_root = package_root(search_dir, name)
 
-    if runnable_package?(package_root) do
+    if valid_name?(name) and runnable_package?(package_root) do
       {:ok, entry_from_package_root(package_root, name)}
     else
       :missing

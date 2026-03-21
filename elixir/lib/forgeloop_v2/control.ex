@@ -1,7 +1,8 @@
 defmodule ForgeloopV2.ControlFiles do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, Coordination}
+  alias ForgeloopV2.{Config, ControlLock, Coordination}
+  alias ForgeloopV2.Coordination.Question
 
   @spec ensure(Config.t()) :: :ok | {:error, term()}
   def ensure(%Config{} = config) do
@@ -19,45 +20,93 @@ defmodule ForgeloopV2.ControlFiles do
     marker = marker(flag)
 
     case File.read(config.requests_file) do
-      {:ok, body} -> String.contains?(body, marker)
+      {:ok, body} -> has_marker?(body, marker)
       _ -> false
     end
   end
 
   @spec append_flag(Config.t(), atom() | binary()) :: :ok | {:error, term()}
-  def append_flag(%Config{} = config, flag) do
-    with :ok <- ensure(config) do
-      marker = marker(flag)
+  def append_flag(%Config{} = config, flag), do: append_flag(config, flag, [])
 
-      if has_flag?(config, flag) do
-        :ok
-      else
-        File.write(config.requests_file, "\n#{marker}\n", [:append])
-      end
+  @spec append_flag(Config.t(), atom() | binary(), keyword()) :: :ok | {:error, term()}
+  def append_flag(%Config{} = config, flag, opts) do
+    with :ok <- ensure(config),
+         {:ok, result} <-
+           ControlLock.with_lock(config, config.requests_file, :repo, lock_opts(config, opts), fn ->
+             with {:ok, body} <- read_file_for_update(config.requests_file) do
+               marker = marker(flag)
+
+               if has_marker?(body, marker) do
+               :ok
+             else
+                 ControlLock.atomic_write(config, config.requests_file, :repo, append_marker(body, marker))
+               end
+             end
+           end) do
+      result
     end
   end
 
   @spec append_pause_flag(Config.t()) :: :ok | {:error, term()}
-  def append_pause_flag(%Config{} = config), do: append_flag(config, "PAUSE")
+  def append_pause_flag(%Config{} = config), do: append_pause_flag(config, [])
 
-  @spec consume_flag(Config.t(), atom() | binary()) :: :ok
-  def consume_flag(%Config{} = config, flag) do
-    marker = marker(flag)
+  @spec append_pause_flag(Config.t(), keyword()) :: :ok | {:error, term()}
+  def append_pause_flag(%Config{} = config, opts), do: append_flag(config, "PAUSE", opts)
 
-    case File.read(config.requests_file) do
-      {:ok, body} ->
-        updated =
-          body
-          |> String.replace("\n#{marker}\n", "\n")
-          |> String.replace("#{marker}\n", "")
-          |> String.replace("\n#{marker}", "\n")
-          |> String.replace(marker, "")
+  @spec consume_flag(Config.t(), atom() | binary()) :: :ok | {:error, term()}
+  def consume_flag(%Config{} = config, flag), do: consume_flag(config, flag, [])
 
-        File.write!(config.requests_file, updated)
-        :ok
+  @spec consume_flag(Config.t(), atom() | binary(), keyword()) :: :ok | {:error, term()}
+  def consume_flag(%Config{} = config, flag, opts) do
+    with :ok <- ensure(config),
+         {:ok, result} <-
+           ControlLock.with_lock(config, config.requests_file, :repo, lock_opts(config, opts), fn ->
+             with {:ok, body} <- read_file_for_update(config.requests_file) do
+               updated = remove_marker_lines(body, marker(flag))
 
-      _ ->
-        :ok
+               if updated == body do
+               :ok
+             else
+                 ControlLock.atomic_write(config, config.requests_file, :repo, updated)
+               end
+             end
+           end) do
+      result
+    end
+  end
+
+  @spec answer_question(Config.t(), String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def answer_question(%Config{} = config, question_id, answer, opts \\ []) do
+    expected_revision = Keyword.get(opts, :expected_revision)
+
+    if is_nil(expected_revision) do
+      {:error, {:missing_expected_revision, question_id}}
+    else
+      mutate_question(config, question_id, :answer, Keyword.put(opts, :answer, answer))
+    end
+  end
+
+  @spec resolve_question(Config.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def resolve_question(%Config{} = config, question_id, opts \\ []) do
+    expected_revision = Keyword.get(opts, :expected_revision)
+
+    if is_nil(expected_revision) do
+      {:error, {:missing_expected_revision, question_id}}
+    else
+      mutate_question(config, question_id, :resolve, opts)
+    end
+  end
+
+  @spec append_question_section(Config.t(), String.t(), keyword()) :: :ok | {:error, term()}
+  def append_question_section(%Config{} = config, rendered_section, opts \\ []) when is_binary(rendered_section) do
+    with :ok <- ensure(config),
+         {:ok, result} <-
+           ControlLock.with_lock(config, config.questions_file, :repo, lock_opts(config, opts), fn ->
+             with {:ok, body} <- read_file_for_update(config.questions_file) do
+               ControlLock.atomic_write(config, config.questions_file, :repo, append_section(body, rendered_section))
+             end
+           end) do
+      result
     end
   end
 
@@ -65,6 +114,59 @@ defmodule ForgeloopV2.ControlFiles do
   def unanswered_question_ids(%Config{} = config) do
     Coordination.unanswered_question_ids(config)
   end
+
+  defp mutate_question(%Config{} = config, question_id, action, opts) do
+    with :ok <- ensure(config),
+         {:ok, result} <-
+           ControlLock.with_lock(config, config.questions_file, :repo, lock_opts(config, opts), fn ->
+             with {:ok, body} <- read_file_for_update(config.questions_file),
+                  {:ok, %Question{} = question} <- normalize_question_lookup(Coordination.find_question(body, question_id), question_id),
+                  {:ok, rewritten_section} <- Coordination.rewrite_question(question, action, answer: Keyword.get(opts, :answer)) do
+               cond do
+                 question_already_matches?(question, action, Keyword.get(opts, :answer)) ->
+                   {:ok, %{question: question, changed?: false}}
+
+                 rewritten_section == question.raw_section ->
+                   {:ok, %{question: question, changed?: false}}
+
+                 question.revision != Keyword.fetch!(opts, :expected_revision) ->
+                   {:error, {:question_conflict, question_id, question.revision}}
+
+                 true ->
+                   updated_body = replace_section(body, question.section_range, rewritten_section)
+
+                   with :ok <- ControlLock.atomic_write(config, config.questions_file, :repo, updated_body),
+                        {:ok, updated_question} <- normalize_question_lookup(Coordination.find_question(updated_body, question_id), question_id) do
+                     {:ok, %{question: updated_question, changed?: true}}
+                   end
+               end
+             end
+           end) do
+      result
+    end
+  end
+
+  defp normalize_question_lookup({:ok, question}, _question_id), do: {:ok, question}
+  defp normalize_question_lookup(:missing, question_id), do: {:error, {:question_not_found, question_id}}
+  defp normalize_question_lookup({:error, reason}, _question_id), do: {:error, reason}
+
+  defp replace_section(body, {start_idx, end_idx}, rewritten_section) do
+    prefix = binary_part(body, 0, start_idx)
+    suffix = binary_part(body, end_idx, byte_size(body) - end_idx)
+    prefix <> rewritten_section <> suffix
+  end
+
+  defp question_already_matches?(%Question{} = question, :answer, answer) do
+    question.status_kind == :answered and normalize_answer(question.answer) == normalize_answer(answer)
+  end
+
+  defp question_already_matches?(%Question{} = question, :resolve, answer) do
+    question.status_kind == :resolved and
+      (is_nil(answer) or normalize_answer(question.answer) == normalize_answer(answer))
+  end
+
+  defp normalize_answer(nil), do: nil
+  defp normalize_answer(answer), do: answer |> to_string() |> String.trim() |> blank_to_nil()
 
   defp touch(path) do
     File.mkdir_p!(Path.dirname(path))
@@ -74,6 +176,45 @@ defmodule ForgeloopV2.ControlFiles do
       false -> File.write(path, "")
     end
   end
+
+  defp read_file_for_update(path) do
+    case File.read(path) do
+      {:ok, body} -> {:ok, body}
+      {:error, :enoent} -> {:ok, ""}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp has_marker?(body, marker) do
+    Regex.match?(marker_regex(marker), body)
+  end
+
+  defp append_marker("", marker), do: marker <> "\n"
+
+  defp append_marker(body, marker) do
+    if String.ends_with?(body, "\n") do
+      body <> marker <> "\n"
+    else
+      body <> "\n" <> marker <> "\n"
+    end
+  end
+
+  defp remove_marker_lines(body, marker) do
+    Regex.replace(marker_line_regex(marker), body, "")
+  end
+
+  defp append_section("", rendered_section), do: String.trim_leading(rendered_section, "\n")
+  defp append_section(body, rendered_section), do: body <> rendered_section
+
+  defp marker_regex(marker), do: ~r/^[ \t]*#{Regex.escape(marker)}[ \t]*\r?$/m
+  defp marker_line_regex(marker), do: ~r/^[ \t]*#{Regex.escape(marker)}[ \t]*(?:\r?\n|\z)/m
+
+  defp lock_opts(%Config{} = config, opts) do
+    [timeout_ms: Keyword.get(opts, :lock_timeout_ms, Keyword.get(opts, :timeout_ms, config.control_lock_timeout_ms))]
+  end
+
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 
   defp marker(flag) when is_atom(flag), do: marker(Atom.to_string(flag))
   defp marker(flag), do: "[#{flag |> to_string() |> String.upcase()}]"
@@ -132,7 +273,7 @@ defmodule ForgeloopV2.Escalation do
     ]
     |> Enum.join("\n")
 
-    File.write(config.questions_file, body, [:append])
+    ControlFiles.append_question_section(config, body)
   end
 
   defp append_escalation(config, attrs) do

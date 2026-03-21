@@ -62,8 +62,12 @@ defmodule ForgeloopV2.CoordinationTest do
              suggested_command: "gh pr create --fill",
              escalation_log: "ESCALATIONS.md",
              evidence: "logs/build.log",
-             answer: nil
+             answer: nil,
+             section_range: {_, _},
+             revision: revision
            } = Enum.at(questions, 0)
+
+    assert is_binary(revision)
 
     assert %Coordination.Question{status_kind: :answered, answer: "Yes."} = Enum.at(questions, 1)
     assert %Coordination.Question{status_kind: :resolved, answer: "Done."} = Enum.at(questions, 2)
@@ -167,6 +171,18 @@ defmodule ForgeloopV2.CoordinationTest do
     assert entry.evidence == "logs/error.txt"
     assert entry.host == "builder-1"
     assert entry.draft =~ "paused itself"
+  end
+
+  test "find_question detects duplicate ids" do
+    body = """
+    ## Q-1
+    **Question**: First?
+
+    ## Q-1
+    **Question**: Duplicate?
+    """
+
+    assert {:error, {:duplicate_question_id, "Q-1"}} = Coordination.find_question(body, "Q-1")
   end
 
   test "missing coordination files return missing while unanswered ids stay fail-open" do

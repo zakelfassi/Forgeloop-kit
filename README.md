@@ -106,7 +106,7 @@ Forgeloop now has three execution lanes:
 2. **Tasks lane** — `prd.json` with `./forgeloop.sh tasks`
 3. **Workflow lane (experimental)** — native Forgeloop workflow packs with `./forgeloop.sh workflow ...`
 
-The workflow lane is intentionally narrow in this slice: manual-only, runner-backed, and still mapped onto the same runtime-state + escalation contract.
+The workflow lane is intentionally narrow in this slice: manual-only, runner-backed, and still mapped onto the same runtime-state + escalation contract. Elixir now also exposes a read-only visibility seam for workflow catalogs and latest workflow artifacts.
 
 See `docs/workflows.md` for the detailed workflow-pack contract and checkpoint cadence.
 
@@ -164,7 +164,7 @@ Current scope:
 - repeated-failure and blocker tracking
 - a small GenServer daemon baseline
 - initial provider failover tests
-- runtime transition validation, metadata-first workspace safety, and local event history
+- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, and a read-only workflow visibility seam over workflow catalogs + latest workflow artifacts
 
 When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
 

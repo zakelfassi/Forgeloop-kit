@@ -1169,6 +1169,7 @@ flowchart LR
           <div class="callout" style="margin-top: 14px">
             <b>Daemon mode:</b> Optionally run <code>./forgeloop.sh daemon 300</code> to poll on an interval and run loops automatically.
             Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, and <code>[INGEST_LOGS]</code>.
+            Elixir control-plane groundwork now treats <code>[PAUSE]</code>/<code>[REPLAN]</code> as locked, idempotent marker edits and keeps question answers from faking recovery.
             When verify/CI/push keeps failing, Forgeloop pauses and drafts the handoff instead of free-spinning.
           </div>
 
@@ -1378,7 +1379,7 @@ flowchart LR
             <div class="card" style="grid-column: span 4">
               <h3>Workflow Lane (experimental)</h3>
               <p>
-                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract.
+                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog and latest workflow outputs through a read-only control-plane seam; the UI still comes later.
               </p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#lane-workflow">Copy</button>
@@ -1433,7 +1434,7 @@ flowchart LR
                   <td>Tracking</td>
                   <td>STATUS.md</td>
                   <td>progress.txt</td>
-                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt</td>
+                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt (and Elixir read-side visibility)</td>
                 </tr>
               </tbody>
             </table>

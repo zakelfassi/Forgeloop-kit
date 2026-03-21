@@ -54,6 +54,8 @@ Runner state is exposed through:
 
 That means repeated workflow failures still pause and escalate instead of spinning.
 
+Elixir now exposes a **read-only visibility seam** over this lane: it can read the workflow catalog plus the latest `last-preflight.txt` / `last-run.txt` artifacts through the control plane. HTTP/UI surfaces are still future work.
+
 ## Current limitations
 
 This lane is intentionally narrow in the first slice:
@@ -88,7 +90,7 @@ Do not mix these in one checkpoint commit:
 ### Suggested naming
 
 - `workflow-slice-01: add workflow pack lane`
-- `workflow-slice-02: expose workflow catalog`
+- `workflow-slice-02: add read-only workflow visibility service`
 - `workflow-slice-03: add workflow service/ui surfaces`
 
 ## Future direction
@@ -97,7 +99,7 @@ The workflow lane is an execution seam, not the endpoint.
 
 Planned future work includes:
 
-- exposing workflow catalogs in the local service/UI
+- embedding this read-only workflow visibility seam into the local service/UI
 - worktree-aware babysitter supervision for workflow runs
 - OpenClaw monitoring/piloting of the loop and the babysitter
 - deciding whether native graph execution belongs inside Forgeloop or remains delegated to a workflow runner

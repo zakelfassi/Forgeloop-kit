@@ -6,6 +6,7 @@ defmodule ForgeloopV2.WorkflowCatalogTest do
     create_workflow_package!(repo.repo_root, "alpha", prompts?: true, scripts?: true)
     create_workflow_package!(repo.repo_root, "zeta")
     create_workflow_package!(repo.repo_root, "incomplete", config?: false)
+    create_workflow_package!(repo.repo_root, "bad name")
     config = config_for!(repo.repo_root)
 
     assert Enum.map(WorkflowCatalog.list(config), & &1.name) == ["alpha", "zeta"]

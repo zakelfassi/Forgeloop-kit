@@ -37,11 +37,13 @@ Architecturally, that lane is intentionally narrow:
 - it leaves native graph execution deferred until the workflow-pack lane is proven
 - it keeps the workflow lane focused on native Forgeloop workflow packs rather than alternate product identities
 
+Read-only Elixir visibility groundwork for workflow catalogs and latest workflow artifacts is now in place; HTTP/UI surfaces, babysitter supervision, and plugin integrations remain future work.
+
 See `docs/workflows.md` for the detailed operator contract.
 
 ## Next Planned Slice
 
-After the parser/read-path groundwork and repo-safe mutation helpers, the next runtime-isolation slice is:
+With parser/read-path groundwork and repo-safe mutation helpers now in place, the next runtime-isolation slice is:
 
 1. sandboxed self-hosting via disposable git worktrees
 2. a bounded babysitter/supervisor operating mode above the child loop

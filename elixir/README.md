@@ -19,7 +19,8 @@ Current scope:
 - noop/shell work drivers
 - a small GenServer daemon
 - provider auth/rate-limit failover unit coverage
-- workflow package catalog discovery for the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
+- locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` so pause/replan flags and question answers can be updated safely without faking runtime recovery
+- workflow package catalog discovery plus a read-only visibility service for latest workflow preflight/run artifacts in the manual/external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
 
 The next planned slice is **not implemented yet**: disposable git worktrees for sandboxed self-hosting, a babysitter/supervisor mode above child runs, native graph execution beyond the current external workflow runner path, and a future integration seam for external plugin surfaces such as OpenClaw.
 

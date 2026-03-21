@@ -17,6 +17,7 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - Bash is still the public acceptance anchor.
 - Elixir parity is measured on operator-visible artifacts and transitions first, not on internal implementation shape.
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
+- Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` plus a read-only workflow visibility seam over bash-written workflow artifacts; that groundwork helps future service/UI work but is not yet a full parity contract on its own.
 
 ## Planned next parity targets
 

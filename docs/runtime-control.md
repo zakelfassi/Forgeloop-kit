@@ -16,6 +16,8 @@ It supports these flags in `REQUESTS.md`:
 
 - `[PAUSE]` — pause the daemon until the flag is removed
 - `[REPLAN]` — run a planning pass before continuing build work
+
+These flags are treated as standalone marker lines in `REQUESTS.md`, and add/clear operations are idempotent on the Elixir control plane.
 - `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`, if configured
 - `[INGEST_LOGS]` — run log ingestion using `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`
 
@@ -32,7 +34,7 @@ Forgeloop now has an experimental manual workflow lane:
 ./forgeloop.sh workflow run <name> [runner args...]
 ```
 
-In this first slice it is manual-only, backed by a configured workflow runner, not daemon-scheduled, and still bound to the same runtime-state + escalation contract as the other lanes.
+In this first slice it is manual-only, backed by a configured workflow runner, not daemon-scheduled, and still bound to the same runtime-state + escalation contract as the other lanes. Elixir can now read workflow catalogs plus the latest workflow artifacts through a read-only control-plane seam.
 
 See `docs/workflows.md` for the detailed workflow-lane contract and compatibility notes.
 
@@ -46,6 +48,8 @@ When Forgeloop escalates:
 4. `.forgeloop/runtime-state.json` becomes `awaiting-human`
 
 This is the core fail-closed path for repeated failures and repeated unanswered blockers.
+
+Answering or resolving a question in `QUESTIONS.md` does not itself write `recovered`; recovery is still decided by the next daemon/loop cycle.
 
 ## Escalation modes
 
