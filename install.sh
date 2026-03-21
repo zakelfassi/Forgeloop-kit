@@ -524,7 +524,8 @@ case "$cmd" in
     exec "$REPO_DIR/forgeloop/bin/sync-skills.sh" "$@"
     ;;
   daemon)
-    exec "$REPO_DIR/forgeloop/bin/forgeloop-daemon.sh" "${2:-300}"
+    shift
+    exec "$REPO_DIR/forgeloop/bin/daemon.sh" "$@"
     ;;
   ask)
     shift

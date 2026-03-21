@@ -28,7 +28,7 @@ These are now present in Elixir v2, but they are still experimental extensions r
 - a loopback-only control-plane service + interactive static UI can expose the same repo-local state, including the phase-1 canonical backlog from `IMPLEMENTATION_PLAN.md`, without introducing a second source of truth
 - that same service/UI/OpenClaw plane can now project a read-only tracker view from canonical backlog items and workflow packs without mutating external trackers yet
 - manual workflow `preflight` / `run` actions can now flow through the same babysitter + disposable-worktree path exposed by the control plane instead of bypassing it
-- Elixir-daemon checklist `plan` / `build` actions now reuse that same babysitter + disposable-worktree substrate, while the public bash daemon remains the acceptance anchor
+- Elixir-daemon checklist `plan` / `build` actions now reuse that same babysitter + disposable-worktree substrate, and the public `./forgeloop.sh daemon` command now prefers that managed path while keeping the legacy bash daemon as an explicit fallback
 - the experimental Elixir daemon can now honor one explicit `[WORKFLOW]` request against a configured workflow target without bypassing that same managed path
 - the current OpenClaw seam is loopback-only and preserves the same control surfaces instead of bypassing them
 

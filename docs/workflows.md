@@ -65,7 +65,7 @@ This lane is intentionally narrow in the current slice:
 - manual workflow actions remain the default/operator-facing path
 - the experimental Elixir daemon can trigger **one** workflow run per explicit `[WORKFLOW]` marker using `FORGELOOP_DAEMON_WORKFLOW_NAME` plus `FORGELOOP_DAEMON_WORKFLOW_ACTION`
 - `[WORKFLOW]` is consumed only after the managed run actually starts, and build/replan work still takes precedence over queued workflow requests
-- the public bash daemon still ignores `[WORKFLOW]`
+- the public daemon honors `[WORKFLOW]` only when the managed backend is active; `FORGELOOP_DAEMON_RUNTIME=bash` keeps the legacy daemon path that ignores it
 - it wraps a **configured workflow runner** rather than interpreting `workflow.dot` natively
 - concurrent use with build/tasks/daemon is unsupported in this slice
 - workflow status is currently limited to active-run metadata plus canonical `last-preflight.txt` / `last-run.txt` artifacts; richer outcome/history remains future work

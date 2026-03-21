@@ -501,6 +501,7 @@ defmodule ForgeloopV2.Daemon.State do
     :running?,
     :last_result,
     :last_action,
+    :session_iteration_count,
     schedule?: true
   ]
 end
@@ -521,6 +522,7 @@ defmodule ForgeloopV2.Daemon do
     FailureTracker,
     Orchestrator,
     RunSpec,
+    DaemonStateStore,
     RuntimeLifecycle,
     RuntimeStateStore,
     Worktree
@@ -554,6 +556,7 @@ defmodule ForgeloopV2.Daemon do
           running?: false,
           last_result: nil,
           last_action: nil,
+          session_iteration_count: 0,
           schedule?: Keyword.get(opts, :schedule, true)
         }
 
@@ -577,7 +580,8 @@ defmodule ForgeloopV2.Daemon do
        running?: state.running?,
        current_task_kind: state.current_task_kind,
        last_result: state.last_result,
-       last_action: state.last_action
+       last_action: state.last_action,
+       session_iteration_count: state.session_iteration_count
      }, state}
   end
 
@@ -593,13 +597,11 @@ defmodule ForgeloopV2.Daemon do
 
   def handle_info({ref, result}, %State{current_task_ref: ref} = state) do
     Process.demonitor(ref, [:flush])
-    next_state = %State{state | current_task_ref: nil, current_task_kind: nil, running?: false, last_result: result}
-    {:noreply, maybe_schedule(next_state, next_state.interval_ms)}
+    {:noreply, finalize_task_result(state, result)}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %State{current_task_ref: ref} = state) do
-    next_state = %State{state | current_task_ref: nil, current_task_kind: nil, running?: false, last_result: {:error, reason}}
-    {:noreply, maybe_schedule(next_state, next_state.interval_ms)}
+    {:noreply, finalize_task_result(state, {:error, reason})}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
@@ -612,24 +614,32 @@ defmodule ForgeloopV2.Daemon do
 
     case ActiveRuntime.claim(state.config, "elixir") do
       :ok ->
-        context = Orchestrator.build_context(state.config)
-        decision = Orchestrator.decide(context)
+        case maybe_handle_iteration_caps(state) do
+          {:ok, capped_state} ->
+            capped_state
 
-        :ok =
-          Events.emit(state.config, :daemon_tick, %{
-            "action" => Atom.to_string(decision.action),
-            "reason" => decision.reason,
-            "runtime_status" => context.runtime_status,
-            "pause_requested" => context.pause_requested?,
-            "replan_requested" => context.replan_requested?,
-            "needs_build" => context.needs_build?,
-            "workflow_requested" => context.workflow_requested?,
-            "workflow_name" => workflow_name(context.workflow_run_spec),
-            "workflow_mode" => workflow_mode(context.workflow_run_spec),
-            "workflow_request_error" => format_workflow_request_error(context.workflow_request_error)
-          })
+          {:continue, next_state} ->
+            context = Orchestrator.build_context(state.config)
+            decision = Orchestrator.decide(context)
 
-        apply_decision(state, decision, context)
+            :ok =
+              Events.emit(state.config, :daemon_tick, %{
+                "action" => Atom.to_string(decision.action),
+                "reason" => decision.reason,
+                "runtime_status" => context.runtime_status,
+                "pause_requested" => context.pause_requested?,
+                "replan_requested" => context.replan_requested?,
+                "deploy_requested" => context.deploy_requested?,
+                "ingest_logs_requested" => context.ingest_logs_requested?,
+                "needs_build" => context.needs_build?,
+                "workflow_requested" => context.workflow_requested?,
+                "workflow_name" => workflow_name(context.workflow_run_spec),
+                "workflow_mode" => workflow_mode(context.workflow_run_spec),
+                "workflow_request_error" => format_workflow_request_error(context.workflow_request_error)
+              })
+
+            apply_decision(next_state, decision, context)
+        end
 
       {:error, reason} ->
         maybe_schedule(%State{state | last_action: :runtime_conflict, last_result: {:error, reason}}, state.interval_ms)
@@ -726,22 +736,31 @@ defmodule ForgeloopV2.Daemon do
 
   defp apply_decision(
          %State{} = state,
+         %Orchestrator.Decision{action: :deploy, consume_flag: consume_flag},
+         _context
+       ) do
+    spawn_task(state, :deploy, fn -> run_deploy_pipeline(state, consume_flag) end)
+  end
+
+  defp apply_decision(
+         %State{} = state,
+         %Orchestrator.Decision{action: :ingest_logs, consume_flag: consume_flag},
+         _context
+       ) do
+    spawn_task(state, :ingest_logs, fn -> run_ingest_logs_request(state, consume_flag) end)
+  end
+
+  defp apply_decision(
+         %State{} = state,
          %Orchestrator.Decision{action: action, run_spec: %RunSpec{} = run_spec, consume_flag: consume_flag},
          _context
        )
        when action in [:plan, :build, :workflow] do
-    task =
-      Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
-        run_managed_via_babysitter(state, run_spec, consume_flag)
-      end)
-
-    %State{
-      state
-      | current_task_ref: task.ref,
-        current_task_kind: current_task_kind(run_spec),
-        running?: true,
-        last_action: decision_last_action(action, run_spec)
-    }
+    spawn_task(state, current_task_kind(run_spec), fn ->
+      run_managed_via_babysitter(state, run_spec, consume_flag)
+    end,
+      decision_last_action(action, run_spec)
+    )
   end
 
   defp run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag) do
@@ -876,6 +895,391 @@ defmodule ForgeloopV2.Daemon do
       :exit, _reason -> :ok
     end
   end
+
+  defp spawn_task(state, task_kind, fun, last_action \\ nil)
+  defp spawn_task(%State{} = state, task_kind, fun, last_action) when is_function(fun, 0) do
+    task = Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fun)
+
+    last_action = if(is_nil(last_action), do: task_kind, else: last_action)
+
+    %State{
+      state
+      | current_task_ref: task.ref,
+        current_task_kind: task_kind,
+        running?: true,
+        last_action: last_action
+    }
+  end
+
+  defp finalize_task_result(%State{} = state, result) do
+    task_kind = state.current_task_kind
+
+    next_state =
+      %State{
+        state
+        | current_task_ref: nil,
+          current_task_kind: nil,
+          running?: false,
+          last_result: result
+      }
+      |> maybe_increment_build_counters(task_kind, result)
+      |> maybe_handle_stall(task_kind, result)
+
+    maybe_schedule(next_state, next_delay_ms(next_state.interval_ms, task_kind, result))
+  end
+
+  defp maybe_handle_iteration_caps(%State{} = state) do
+    today = today_string()
+
+    if iteration_cap_check_deferred?(state.config) do
+      {:continue, state}
+    else
+      with {:ok, daemon_state} <- DaemonStateStore.reset_daily_if_needed(state.config, today) do
+      session_hit? =
+        state.config.max_session_iterations > 0 and
+          state.session_iteration_count >= state.config.max_session_iterations
+
+      daily_count = Map.get(daemon_state, "daily_iteration_count", 0)
+
+      daily_hit? =
+        state.config.max_daily_iterations > 0 and daily_count >= state.config.max_daily_iterations
+
+      if session_hit? or daily_hit? do
+          summary =
+            "Iteration cap reached (session=#{state.session_iteration_count}/#{state.config.max_session_iterations}, daily=#{daily_count}/#{state.config.max_daily_iterations})"
+
+          {:ok, _} =
+            Escalation.escalate(state.config, %{
+              kind: "iteration-cap",
+              summary: summary,
+              requested_action: "review",
+              repeat_count: 0,
+              surface: "daemon",
+              mode: "daemon",
+              branch: state.config.default_branch
+            })
+
+          {:ok,
+           maybe_schedule(
+             %State{state | last_action: :iteration_cap_escalated, last_result: {:stopped, :iteration_cap}},
+             state.interval_ms
+           )}
+        else
+          {:continue, state}
+        end
+      end
+    end
+  end
+
+  defp maybe_increment_build_counters(%State{} = state, :build, result) do
+    if count_build_cycle?(result) do
+      _ = DaemonStateStore.increment_daily_iteration(state.config, today_string())
+      %State{state | session_iteration_count: state.session_iteration_count + 1}
+    else
+      state
+    end
+  end
+
+  defp maybe_increment_build_counters(%State{} = state, _task_kind, _result), do: state
+
+  defp iteration_cap_check_deferred?(%Config{} = config) do
+    ControlFiles.has_flag?(config, "PAUSE") or RuntimeStateStore.status(config) in ["paused", "awaiting-human"]
+  end
+
+  defp maybe_handle_stall(%State{} = state, :build, {:ok, _payload}) do
+    cond do
+      state.config.max_stall_cycles <= 0 ->
+        state
+
+      true ->
+        case current_head_hash(state.config.repo_root) do
+          {:ok, head_hash} ->
+            case DaemonStateStore.record_stall_head(state.config, head_hash) do
+              {:ok, %{count: count}} when count >= state.config.max_stall_cycles ->
+                summary = "No new commits for #{count} consecutive build cycles — likely stuck"
+
+                {:ok, _} =
+                  Escalation.escalate(state.config, %{
+                    kind: "stall",
+                    summary: summary,
+                    requested_action: "review",
+                    repeat_count: count,
+                    surface: "daemon",
+                    mode: "daemon",
+                    branch: state.config.default_branch
+                  })
+
+                %State{state | last_action: :stall_escalated}
+
+              _ ->
+                state
+            end
+
+          {:error, reason} ->
+            _ =
+              Events.emit(state.config, :daemon_stall_check_failed, %{
+                "reason" => inspect(reason),
+                "surface" => "daemon"
+              })
+
+            state
+        end
+    end
+  end
+
+  defp maybe_handle_stall(%State{} = state, _task_kind, _result), do: state
+
+  defp count_build_cycle?({:ok, _payload}), do: true
+  defp count_build_cycle?({:retry, _count}), do: true
+  defp count_build_cycle?({:stopped, _reason}), do: true
+  defp count_build_cycle?(_result), do: false
+
+  defp next_delay_ms(_interval_ms, task_kind, {:ok, _payload}) when task_kind in [:plan, :deploy, :ingest_logs], do: 0
+  defp next_delay_ms(interval_ms, _task_kind, _result), do: interval_ms
+
+  defp run_deploy_pipeline(%State{} = state, consume_flag) do
+    with :ok <- consume_flag_before_action(state.config, consume_flag) do
+      do_run_deploy_pipeline(state)
+    end
+  end
+
+  defp do_run_deploy_pipeline(%State{} = state) do
+    config = state.config
+
+    if blank?(config.deploy_cmd) do
+      _ =
+        Events.emit(config, :daemon_deploy_completed, %{
+          "surface" => "daemon",
+          "requested_action" => "deploy",
+          "skipped" => true,
+          "reason" => "FORGELOOP_DEPLOY_CMD not configured"
+        })
+
+      {:ok, %{mode: :deploy, skipped?: true}}
+    else
+      :ok =
+        Events.emit(config, :daemon_deploy_started, %{
+          "surface" => "daemon",
+          "requested_action" => "deploy"
+        })
+
+      {:ok, _} =
+        RuntimeLifecycle.transition(config, :loop_started, :daemon, %{
+          surface: "daemon",
+          mode: "deploy",
+          reason: "Running deploy pipeline",
+          requested_action: "deploy",
+          branch: config.default_branch
+        })
+
+      with :ok <- run_deploy_stage(config, "pre", "Deploy pre-check command", config.deploy_pre_cmd),
+           :ok <- run_deploy_stage(config, "deploy", "Deploy command", config.deploy_cmd),
+           :ok <- maybe_wait_after_deploy(config),
+           :ok <- run_deploy_stage(config, "smoke", "Deploy smoke command", config.deploy_smoke_cmd),
+           :ok <- maybe_post_deploy_ingest(config) do
+        :ok = FailureTracker.clear(config)
+
+        {:ok, _} =
+          RuntimeStateStore.write(config, %{
+            status: "recovered",
+            transition: "deploy-completed",
+            surface: "daemon",
+            mode: "daemon",
+            reason: "Deploy pipeline completed successfully",
+            requested_action: "deploy",
+            branch: config.default_branch
+          })
+
+        :ok =
+          Events.emit(config, :daemon_deploy_completed, %{
+            "surface" => "daemon",
+            "requested_action" => "deploy",
+            "skipped" => false
+          })
+
+        {:ok, %{mode: :deploy}}
+      else
+        {:retry, _count} = retry ->
+          emit_deploy_failure_event(config, retry)
+          retry
+
+        {:stopped, _reason} = stopped ->
+          emit_deploy_failure_event(config, stopped)
+          stopped
+
+        {:error, reason} = error ->
+          emit_deploy_failure_event(config, reason)
+          error
+      end
+    end
+  end
+
+  defp run_ingest_logs_request(%State{} = state, consume_flag) do
+    with :ok <- consume_flag_before_action(state.config, consume_flag) do
+      do_run_ingest_logs(state.config, emit_events?: true)
+    end
+  end
+
+  defp do_run_ingest_logs(%Config{} = config, opts) do
+    emit_events? = Keyword.get(opts, :emit_events?, false)
+    ingest_script = Path.join(config.forgeloop_root, "bin/ingest-logs.sh")
+
+    cond do
+      not File.exists?(ingest_script) ->
+        maybe_emit_ingest_event(config, :daemon_ingest_logs_completed, true, "ingest script not available", emit_events?)
+        {:ok, %{mode: :ingest_logs, skipped?: true}}
+
+      blank?(config.ingest_logs_cmd) and blank?(config.ingest_logs_file) ->
+        maybe_emit_ingest_event(config, :daemon_ingest_logs_completed, true, "no log source configured", emit_events?)
+        {:ok, %{mode: :ingest_logs, skipped?: true}}
+
+      true ->
+        maybe_emit_ingest_event(config, :daemon_ingest_logs_started, false, nil, emit_events?)
+
+        case System.cmd(ingest_script, ingest_args(config), cd: config.repo_root, stderr_to_stdout: true) do
+          {_output, 0} ->
+            maybe_emit_ingest_event(config, :daemon_ingest_logs_completed, false, nil, emit_events?)
+            {:ok, %{mode: :ingest_logs}}
+
+          {output, status} ->
+            maybe_emit_ingest_event(
+              config,
+              :daemon_ingest_logs_failed,
+              false,
+              "status=#{status}: #{String.trim(output)}",
+              emit_events?
+            )
+
+            {:error, {:ingest_logs_failed, status}}
+        end
+    end
+  end
+
+  defp maybe_post_deploy_ingest(%Config{post_deploy_ingest_logs: true} = config) do
+    case do_run_ingest_logs(config, emit_events?: false) do
+      {:ok, _payload} -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
+
+  defp maybe_post_deploy_ingest(%Config{}), do: :ok
+
+  defp maybe_wait_after_deploy(%Config{post_deploy_ingest_logs: true, post_deploy_observe_seconds: seconds})
+       when is_integer(seconds) and seconds > 0 do
+    Process.sleep(seconds * 1_000)
+    :ok
+  end
+
+  defp maybe_wait_after_deploy(_config), do: :ok
+
+  defp run_deploy_stage(%Config{} = _config, _stage_id, _label, command) when command in [nil, ""], do: :ok
+
+  defp run_deploy_stage(%Config{} = config, stage_id, label, command) do
+    deploy_dir = Path.join(config.runtime_dir, "deploy")
+    File.mkdir_p!(deploy_dir)
+    output_path = Path.join(deploy_dir, "#{stage_id}-last.txt")
+
+    case shell_command(command, config.repo_root) do
+      {output, 0} ->
+        File.write!(output_path, output)
+        :ok
+
+      {output, _status} ->
+        File.write!(output_path, output)
+
+        FailureTracker.handle(config, %{
+          kind: "deploy",
+          summary: "#{label} failed: #{command}",
+          evidence_file: output_path,
+          requested_action: "review",
+          surface: "daemon",
+          mode: "daemon",
+          branch: config.default_branch
+        })
+    end
+  end
+
+  defp consume_flag_before_action(_config, nil), do: :ok
+  defp consume_flag_before_action(config, flag), do: ControlFiles.consume_flag(config, flag)
+
+  defp emit_deploy_failure_event(%Config{} = config, reason) do
+    :ok =
+      Events.emit(config, :daemon_deploy_failed, %{
+        "surface" => "daemon",
+        "requested_action" => "deploy",
+        "reason" => inspect(reason)
+      })
+  end
+
+  defp maybe_emit_ingest_event(_config, _event, _skipped?, _reason, false), do: :ok
+
+  defp maybe_emit_ingest_event(%Config{} = config, event, skipped?, reason, true) do
+    :ok =
+      Events.emit(config, event, %{
+        "surface" => "daemon",
+        "requested_action" => "ingest_logs",
+        "skipped" => skipped?,
+        "reason" => reason
+      })
+  end
+
+  defp ingest_args(%Config{} = config) do
+    args = ["--requests", requests_file_arg(config)]
+
+    args =
+      cond do
+        not blank?(config.ingest_logs_cmd) -> args ++ ["--cmd", config.ingest_logs_cmd, "--source", "daemon"]
+        true -> args ++ ["--file", config.ingest_logs_file, "--source", "daemon"]
+      end
+
+    if is_integer(config.ingest_logs_tail) and config.ingest_logs_tail > 0 do
+      args ++ ["--tail", Integer.to_string(config.ingest_logs_tail)]
+    else
+      args
+    end
+  end
+
+  defp requests_file_arg(%Config{} = config) do
+    case Path.type(config.requests_file) do
+      :relative -> config.requests_file
+      :absolute -> repo_relative_path(config.requests_file, config.repo_root, Path.basename(config.requests_file))
+      _ -> Path.basename(config.requests_file)
+    end
+  end
+
+  defp repo_relative_path(path, repo_root, fallback) do
+    relative = Path.relative_to(path, repo_root)
+
+    if relative == path or String.starts_with?(relative, "../") do
+      fallback
+    else
+      relative
+    end
+  end
+
+  defp shell_command(command, repo_root) do
+    shell = System.find_executable("bash") || "/bin/bash"
+    System.cmd(shell, ["-lc", command], cd: repo_root, stderr_to_stdout: true)
+  end
+
+  defp current_head_hash(repo_root) do
+    case System.cmd("git", ["-C", repo_root, "rev-parse", "HEAD"], stderr_to_stdout: true) do
+      {output, 0} -> {:ok, String.trim(output)}
+      {output, status} -> {:error, {:git_rev_parse_failed, status, String.trim(output)}}
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  defp today_string do
+    NaiveDateTime.local_now()
+    |> NaiveDateTime.to_date()
+    |> Date.to_iso8601()
+  end
+
+  defp blank?(value) when value in [nil, ""], do: true
+  defp blank?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank?(_value), do: false
 
   defp maybe_schedule(%State{schedule?: false} = state, _delay), do: %State{state | timer_ref: nil}
 

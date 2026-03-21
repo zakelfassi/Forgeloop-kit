@@ -115,7 +115,7 @@ defmodule ForgeloopV2.ControlFilesTest do
     assert File.read!(config.questions_file) == after_first
   end
 
-  test "pause, replan, and workflow flags add and clear idempotently" do
+  test "pause, replan, deploy, ingest, and workflow flags add and clear idempotently" do
     repo = create_repo_fixture!(requests: "notes\n")
     config = config_for!(repo.repo_root)
 
@@ -123,24 +123,36 @@ defmodule ForgeloopV2.ControlFilesTest do
     assert :ok = ControlFiles.append_flag(config, "PAUSE")
     assert :ok = ControlFiles.append_flag(config, "REPLAN")
     assert :ok = ControlFiles.append_flag(config, :replan)
+    assert :ok = ControlFiles.append_flag(config, "DEPLOY")
+    assert :ok = ControlFiles.append_flag(config, :deploy)
+    assert :ok = ControlFiles.append_flag(config, "INGEST_LOGS")
+    assert :ok = ControlFiles.append_flag(config, :ingest_logs)
     assert :ok = ControlFiles.append_flag(config, "WORKFLOW")
     assert :ok = ControlFiles.append_flag(config, :workflow)
     assert ControlFiles.has_flag?(config, "PAUSE")
     assert ControlFiles.has_flag?(config, "REPLAN")
+    assert ControlFiles.has_flag?(config, "DEPLOY")
+    assert ControlFiles.has_flag?(config, "INGEST_LOGS")
     assert ControlFiles.has_flag?(config, "WORKFLOW")
 
     body = File.read!(config.requests_file)
     assert length(Regex.scan(~r/^\[PAUSE\]$/m, body)) == 1
     assert length(Regex.scan(~r/^\[REPLAN\]$/m, body)) == 1
+    assert length(Regex.scan(~r/^\[DEPLOY\]$/m, body)) == 1
+    assert length(Regex.scan(~r/^\[INGEST_LOGS\]$/m, body)) == 1
     assert length(Regex.scan(~r/^\[WORKFLOW\]$/m, body)) == 1
 
     File.write!(config.requests_file, body <> "[PAUSE]\n")
     assert :ok = ControlFiles.consume_flag(config, "PAUSE")
     assert :ok = ControlFiles.consume_flag(config, "PAUSE")
     assert :ok = ControlFiles.consume_flag(config, "REPLAN")
+    assert :ok = ControlFiles.consume_flag(config, "DEPLOY")
+    assert :ok = ControlFiles.consume_flag(config, "INGEST_LOGS")
     assert :ok = ControlFiles.consume_flag(config, "WORKFLOW")
     refute ControlFiles.has_flag?(config, "PAUSE")
     refute ControlFiles.has_flag?(config, "REPLAN")
+    refute ControlFiles.has_flag?(config, "DEPLOY")
+    refute ControlFiles.has_flag?(config, "INGEST_LOGS")
     refute ControlFiles.has_flag?(config, "WORKFLOW")
   end
 

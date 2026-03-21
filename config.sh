@@ -34,10 +34,21 @@ export FORGELOOP_CHANGELOG_FILE="${FORGELOOP_CHANGELOG_FILE:-CHANGELOG.md}"
 export FORGELOOP_ESCALATIONS_FILE="${FORGELOOP_ESCALATIONS_FILE:-ESCALATIONS.md}"
 
 # Workflow lane (experimental native workflow-pack lane)
-# Leave FORGELOOP_WORKFLOWS_DIR empty to auto-detect the canonical workflows root, then a legacy fallback root.
+# Leave FORGELOOP_WORKFLOWS_DIR empty to auto-detect the canonical workflows root.
 export FORGELOOP_WORKFLOWS_DIR="${FORGELOOP_WORKFLOWS_DIR:-}"
-# Leave FORGELOOP_WORKFLOW_RUNNER empty to auto-detect the preferred workflow runner, then a legacy fallback runner.
+# Leave FORGELOOP_WORKFLOW_RUNNER empty to auto-detect the preferred workflow runner.
 export FORGELOOP_WORKFLOW_RUNNER="${FORGELOOP_WORKFLOW_RUNNER:-}"
+
+# Public daemon runtime selection.
+# auto   = prefer the managed Elixir daemon and fall back to legacy bash only when Elixir prerequisites are missing
+# elixir = require the managed Elixir daemon
+# bash   = force the legacy bash daemon implementation
+export FORGELOOP_DAEMON_RUNTIME="${FORGELOOP_DAEMON_RUNTIME:-auto}"
+# Public daemon poll interval in seconds (also used by the Elixir daemon when no CLI override is passed)
+export FORGELOOP_DAEMON_INTERVAL_SECONDS="${FORGELOOP_DAEMON_INTERVAL_SECONDS:-300}"
+# Optional bounded daemon workflow request target (used when [WORKFLOW] is present)
+export FORGELOOP_DAEMON_WORKFLOW_NAME="${FORGELOOP_DAEMON_WORKFLOW_NAME:-}"
+export FORGELOOP_DAEMON_WORKFLOW_ACTION="${FORGELOOP_DAEMON_WORKFLOW_ACTION:-preflight}"
 
 # Optional: command to run after Codex review auto-fixes (e.g. "pnpm test:ci", "npm test", "pytest -q")
 export FORGELOOP_TEST_CMD="${FORGELOOP_TEST_CMD:-}"

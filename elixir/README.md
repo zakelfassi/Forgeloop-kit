@@ -26,7 +26,7 @@ Current scope:
 - a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and interactive controls for pause/clear-pause/replan/question answer-resolve/manual plan-build runs plus workflow `preflight` / `run`, all still backed by the same canonical files and babysitter path
 - a repo-local OpenClaw workspace plugin seam at `../.openclaw/extensions/forgeloop/` that talks to the same loopback service, uses `surface: "openclaw"` for manual runs, and can trigger managed workflow actions over that same control plane
 
-The next integration slice is still ahead of us: bash-daemon / wrapper convergence onto the babysitter path, stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, richer workflow outcome/history projection, and broader workflow orchestration on top of the current OpenClaw/UI/service seams.
+The next integration slice is still ahead of us: stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, richer workflow outcome/history projection, and broader workflow orchestration on top of the current OpenClaw/UI/service seams.
 
 Still intentionally deferred:
 

@@ -575,7 +575,7 @@ end
 defmodule ForgeloopV2.BlockerDetector do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, ControlFiles, Events}
+  alias ForgeloopV2.{Config, ControlFiles, DaemonStateStore, Events}
 
   @spec check(Config.t()) ::
           {:clear, %{count: 0}}
@@ -586,21 +586,27 @@ defmodule ForgeloopV2.BlockerDetector do
 
     case ids do
       [] ->
-        save_state(config, %{"blocked_iteration_count" => 0, "last_blocker_hash" => ""})
+        {:ok, _} = DaemonStateStore.patch(config, %{"blocked_iteration_count" => 0, "last_blocker_hash" => ""})
         {:clear, %{count: 0}}
 
       ids ->
         hash = hash_ids(ids)
-        state = read_state(config)
 
-        count =
-          if Map.get(state, "last_blocker_hash", "") == hash do
-            Map.get(state, "blocked_iteration_count", 0) + 1
-          else
-            1
-          end
+        {:ok, state} =
+          DaemonStateStore.update(config, fn state ->
+            count =
+              if Map.get(state, "last_blocker_hash", "") == hash do
+                Map.get(state, "blocked_iteration_count", 0) + 1
+              else
+                1
+              end
 
-        save_state(config, %{"blocked_iteration_count" => count, "last_blocker_hash" => hash})
+            state
+            |> Map.put("blocked_iteration_count", count)
+            |> Map.put("last_blocker_hash", hash)
+          end)
+
+        count = Map.get(state, "blocked_iteration_count", 0)
 
         if count >= config.max_blocked_iterations do
           :ok =
@@ -623,26 +629,6 @@ defmodule ForgeloopV2.BlockerDetector do
         end
     end
   end
-
-  defp read_state(config) do
-    case File.read(state_path(config)) do
-      {:ok, body} ->
-        case Jason.decode(body) do
-          {:ok, payload} when is_map(payload) -> payload
-          _ -> %{}
-        end
-
-      _ ->
-        %{}
-    end
-  end
-
-  defp save_state(config, payload) do
-    File.mkdir_p!(config.v2_state_dir)
-    File.write!(state_path(config), Jason.encode!(payload, pretty: true) <> "\n")
-  end
-
-  defp state_path(config), do: Path.join(config.v2_state_dir, "daemon-state.json")
 
   defp hash_ids(ids) do
     :crypto.hash(:sha256, Enum.join(Enum.sort(ids), "\n"))

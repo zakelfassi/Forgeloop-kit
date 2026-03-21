@@ -486,6 +486,8 @@ defmodule ForgeloopV2.ControlPlane do
      %{
        pause_requested?: ControlFiles.has_flag?(config, "PAUSE"),
        replan_requested?: ControlFiles.has_flag?(config, "REPLAN"),
+       deploy_requested?: ControlFiles.has_flag?(config, "DEPLOY"),
+       ingest_logs_requested?: ControlFiles.has_flag?(config, "INGEST_LOGS"),
        workflow_requested?: workflow_request.requested?,
        workflow_target: %{
          configured?: is_binary(config.daemon_workflow_name) and config.daemon_workflow_name != "",
@@ -830,12 +832,16 @@ defmodule ForgeloopV2.ServiceJSON do
   def control_flags(%{
         pause_requested?: pause_requested?,
         replan_requested?: replan_requested?,
+        deploy_requested?: deploy_requested?,
+        ingest_logs_requested?: ingest_logs_requested?,
         workflow_requested?: workflow_requested?,
         workflow_target: workflow_target
       }) do
     %{
       pause_requested?: pause_requested?,
       replan_requested?: replan_requested?,
+      deploy_requested?: deploy_requested?,
+      ingest_logs_requested?: ingest_logs_requested?,
       workflow_requested?: workflow_requested?,
       workflow_target: workflow_target
     }

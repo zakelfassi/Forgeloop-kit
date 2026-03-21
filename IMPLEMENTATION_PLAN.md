@@ -72,7 +72,6 @@ Format:
     - `ForgeloopV2.Babysitter` runs a single child loop in that checkout, writes heartbeat metadata under `.forgeloop/v2/babysitter`, and can stop/pause canonically
     - `ShellLoop` can execute from a disposable checkout while keeping runtime/control artifacts pointed at canonical repo-root files
   - Deferred after this slice:
-    - bash daemon / wrapper convergence onto the babysitter path
     - stronger worktree-aware ownership semantics if active-runtime claims ever widen
 
 - [x] Define a bounded OpenClaw plugin seam on top of the loopback control plane
@@ -99,6 +98,24 @@ Format:
     - replay/tail ordering test
     - existing event tests stay green
 
+- [x] Converge the public daemon launcher onto the managed Elixir daemon path with explicit legacy fallback
+  - Acceptance:
+    - `./forgeloop.sh daemon [interval]` routes through a committed public launcher that prefers the managed Elixir daemon path and keeps `FORGELOOP_DAEMON_RUNTIME=bash` as an explicit rollback.
+    - Public daemon behavior preserves deploy/log-ingest requests, iteration caps, stall escalation, and canonical repo-root artifacts.
+    - Repo-root and vendored layouts both keep working through the converged public command.
+    - README/docs/site copy stay explicit about backend selection and the remaining legacy-bash fallback.
+  - REQUIRED TESTS:
+    - `tests/daemon-entrypoint-layouts.test.sh`
+    - `evals/scenarios/daemon-paused-flag.sh`
+    - `elixir/test/forgeloop_v2/daemon_test.exs`
+    - `elixir/test/forgeloop_v2/orchestrator_test.exs`
+    - `elixir/test/forgeloop_v2/control_files_test.exs`
+    - full shell/eval/Elixir gates stay green
+  - Shipped behavior:
+    - `bin/daemon.sh` is now the committed public launcher used by `./forgeloop.sh daemon`, with `FORGELOOP_DAEMON_RUNTIME=auto|elixir|bash` backend selection and preserved lock/log ergonomics.
+    - `ForgeloopV2.Daemon` now covers daemon-side deploy/log-ingest actions, session/daily iteration caps, and stall escalation while keeping canonical repo-root artifacts authoritative.
+    - Public daemon proof surfaces now exercise the converged launcher rather than the legacy bash daemon directly.
+
 - [x] Route Elixir daemon checklist work through the managed babysitter by default
   - Acceptance:
     - `mix forgeloop_v2.daemon --repo ..` routes checklist `plan` / `build` work through the same babysitter/disposable-worktree/runtime-state path as other managed runs.
@@ -115,7 +132,6 @@ Format:
     - Managed start failures now write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-*-start-error-last.txt` and flow through `FailureTracker.handle/2` with daemon surface/mode semantics.
     - `mix forgeloop_v2.babysit` now reuses `Babysitter.await_result/2`, and Elixir docs/site copy now distinguish the managed Elixir daemon path from the still-bash `./forgeloop.sh daemon` wrapper.
   - Deferred after this slice:
-    - bash daemon / wrapper convergence onto the babysitter path
     - richer workflow history / broader workflow orchestration beyond the current active-run + artifact view
 
 - [x] Add bounded Elixir-daemon workflow scheduling on the managed control plane
@@ -136,7 +152,6 @@ Format:
     - Workflow request/config errors now fail closed through the existing failure tracker/escalation chain and write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-workflow-*-start-error-last.txt`.
     - `/api/overview`, the HUD, and the OpenClaw seam now expose whether `[WORKFLOW]` is queued plus the configured daemon workflow target.
   - Deferred after this slice:
-    - bash daemon / wrapper convergence onto the managed workflow path
     - richer workflow history / broader workflow orchestration beyond the current one-shot daemon request
 
 - [x] Route manual workflow-pack actions through the managed control plane

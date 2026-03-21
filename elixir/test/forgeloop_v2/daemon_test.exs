@@ -396,4 +396,112 @@ defmodule ForgeloopV2.DaemonTest do
     assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
     assert Daemon.snapshot(pid).last_action == :workflow_error
   end
+
+  test "deploy requests run before pending build work and consume the flag" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    order_file = Path.join(repo.repo_root, "deploy-order.txt")
+
+    config =
+      config_for!(repo.repo_root,
+        deploy_pre_cmd: "printf 'pre\\n' >> '#{order_file}'",
+        deploy_cmd: "printf 'deploy\\n' >> '#{order_file}'",
+        deploy_smoke_cmd: "printf 'smoke\\n' >> '#{order_file}'"
+      )
+
+    File.write!(config.requests_file, "[DEPLOY]\n")
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        driver_opts: [build: {:ok, %{mode: :build}}],
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :deploy
+    assert File.read!(order_file) == "pre\ndeploy\nsmoke\n"
+    assert File.read!(config.requests_file) == ""
+    assert RuntimeStateStore.status(config) == "recovered"
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+    assert Daemon.snapshot(pid).last_action == :build
+  end
+
+  test "ingest-log requests consume the marker without escalating when no source is configured" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n", requests: "[INGEST_LOGS]\n")
+    config = config_for!(repo.repo_root)
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :ingest_logs
+    assert File.read!(config.requests_file) == ""
+    assert match?({:ok, %{mode: :ingest_logs, skipped?: true}}, Daemon.snapshot(pid).last_result)
+  end
+
+  test "session iteration caps escalate once, then honor pause on later ticks" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root, max_session_iterations: 1)
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        driver_opts: [build: {:ok, %{mode: :build}}],
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+    assert Daemon.snapshot(pid).session_iteration_count == 1
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :iteration_cap_escalated
+    assert RuntimeStateStore.status(config) == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :paused
+    assert RuntimeStateStore.status(config) == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+  end
+
+  test "stall detection escalates when HEAD does not change across successful build cycles" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root, max_stall_cycles: 1)
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        driver_opts: [build: {:ok, %{mode: :build}}],
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+    refute File.read!(config.requests_file) =~ "[PAUSE]"
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :stall_escalated
+    assert RuntimeStateStore.status(config) == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+  end
 end

@@ -4,11 +4,13 @@ defmodule ForgeloopV2.OrchestratorTest do
   alias ForgeloopV2.Orchestrator.{Context, Decision}
   alias ForgeloopV2.RunSpec
 
-  test "decides pause, recover, escalate, plan, build, workflow, workflow-error, and idle branches" do
+  test "decides pause, recover, escalate, plan, deploy, ingest, build, workflow, workflow-error, and idle branches" do
     assert %Decision{action: :pause} =
              Orchestrator.decide(%Context{
                pause_requested?: true,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "idle",
                unanswered_question_ids: [],
@@ -20,6 +22,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "paused",
                unanswered_question_ids: [],
@@ -31,6 +35,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "awaiting-human",
                unanswered_question_ids: [],
@@ -42,6 +48,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "idle",
                unanswered_question_ids: ["Q-1"],
@@ -53,6 +61,36 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: true,
+               deploy_requested?: true,
+               ingest_logs_requested?: true,
+               needs_build?: true,
+               runtime_status: "idle",
+               unanswered_question_ids: [],
+               blocker_result: {:clear, %{count: 0}},
+               workflow_requested?: true,
+               workflow_run_spec: %RunSpec{lane: :workflow, action: :preflight, workflow_name: "alpha"}
+             })
+
+    assert %Decision{action: :deploy, consume_flag: "DEPLOY"} =
+             Orchestrator.decide(%Context{
+               pause_requested?: false,
+               replan_requested?: false,
+               deploy_requested?: true,
+               ingest_logs_requested?: true,
+               needs_build?: true,
+               runtime_status: "idle",
+               unanswered_question_ids: [],
+               blocker_result: {:clear, %{count: 0}},
+               workflow_requested?: true,
+               workflow_run_spec: %RunSpec{lane: :workflow, action: :preflight, workflow_name: "alpha"}
+             })
+
+    assert %Decision{action: :ingest_logs, consume_flag: "INGEST_LOGS"} =
+             Orchestrator.decide(%Context{
+               pause_requested?: false,
+               replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: true,
                needs_build?: true,
                runtime_status: "idle",
                unanswered_question_ids: [],
@@ -65,6 +103,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: true,
                runtime_status: "idle",
                unanswered_question_ids: [],
@@ -81,6 +121,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "idle",
                unanswered_question_ids: [],
@@ -94,6 +136,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "idle",
                unanswered_question_ids: [],
@@ -107,6 +151,8 @@ defmodule ForgeloopV2.OrchestratorTest do
              Orchestrator.decide(%Context{
                pause_requested?: false,
                replan_requested?: false,
+               deploy_requested?: false,
+               ingest_logs_requested?: false,
                needs_build?: false,
                runtime_status: "awaiting-human",
                unanswered_question_ids: ["Q-1"],

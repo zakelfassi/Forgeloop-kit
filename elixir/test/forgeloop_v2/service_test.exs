@@ -73,6 +73,8 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["backlog"]["source"]["phase"] == "phase1"
     assert payload["data"]["control_flags"]["pause_requested?"] == false
     assert payload["data"]["control_flags"]["replan_requested?"] == false
+    assert payload["data"]["control_flags"]["deploy_requested?"] == false
+    assert payload["data"]["control_flags"]["ingest_logs_requested?"] == false
     assert payload["data"]["control_flags"]["workflow_requested?"] == false
     assert payload["data"]["control_flags"]["workflow_target"]["configured?"] == false
     assert payload["data"]["control_flags"]["workflow_target"]["valid?"] == false

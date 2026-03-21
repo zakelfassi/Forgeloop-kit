@@ -13,6 +13,7 @@ defmodule ForgeloopV2.TestSupport do
         ControlPlane,
         Babysitter,
         Daemon,
+        DaemonStateStore,
         Escalation,
         Events,
         FailureTracker,

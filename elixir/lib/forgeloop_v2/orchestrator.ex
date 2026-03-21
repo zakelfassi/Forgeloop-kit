@@ -4,6 +4,8 @@ defmodule ForgeloopV2.Orchestrator.Context do
   defstruct [
     :pause_requested?,
     :replan_requested?,
+    :deploy_requested?,
+    :ingest_logs_requested?,
     :needs_build?,
     :runtime_status,
     :unanswered_question_ids,
@@ -42,6 +44,8 @@ defmodule ForgeloopV2.Orchestrator do
     %Context{
       pause_requested?: ControlFiles.has_flag?(config, "PAUSE"),
       replan_requested?: ControlFiles.has_flag?(config, "REPLAN"),
+      deploy_requested?: ControlFiles.has_flag?(config, "DEPLOY"),
+      ingest_logs_requested?: ControlFiles.has_flag?(config, "INGEST_LOGS"),
       needs_build?: needs_build?(config),
       runtime_status: RuntimeStateStore.status(config),
       unanswered_question_ids: ControlFiles.unanswered_question_ids(config),
@@ -73,6 +77,12 @@ defmodule ForgeloopV2.Orchestrator do
           run_spec: checklist!(:plan),
           consume_flag: "REPLAN"
         }
+
+      context.deploy_requested? ->
+        %Decision{action: :deploy, reason: "Deploy requested via REQUESTS.md", consume_flag: "DEPLOY"}
+
+      context.ingest_logs_requested? ->
+        %Decision{action: :ingest_logs, reason: "Log ingest requested via REQUESTS.md", consume_flag: "INGEST_LOGS"}
 
       context.needs_build? ->
         %Decision{

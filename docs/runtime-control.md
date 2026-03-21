@@ -10,20 +10,20 @@ When Forgeloop hits the same failure or blocker repeatedly, it should stop the l
 
 ## Supported daemon control flags
 
-The daemon is **interval-based** (`./forgeloop.sh daemon 300` polls every 300 seconds by default).
+The daemon is **interval-based** (`./forgeloop.sh daemon 300` polls every 300 seconds by default). The public launcher now prefers the managed Elixir daemon backend and keeps `FORGELOOP_DAEMON_RUNTIME=bash` as an explicit legacy fallback.
 
 It supports these flags in `REQUESTS.md`:
 
 - `[PAUSE]` — pause the daemon until the flag is removed
 - `[REPLAN]` — run a planning pass before continuing build work
-- `[WORKFLOW]` — Elixir daemon only: run one configured workflow target via `FORGELOOP_DAEMON_WORKFLOW_NAME` and `FORGELOOP_DAEMON_WORKFLOW_ACTION`
+- `[WORKFLOW]` — managed daemon path: run one configured workflow target via `FORGELOOP_DAEMON_WORKFLOW_NAME` and `FORGELOOP_DAEMON_WORKFLOW_ACTION`
 
 These flags are treated as standalone marker lines in `REQUESTS.md`, and add/clear operations are idempotent on the Elixir control plane.
 - `[DEPLOY]` — run `FORGELOOP_DEPLOY_CMD`, if configured
 - `[INGEST_LOGS]` — run log ingestion using `FORGELOOP_INGEST_LOGS_CMD` or `FORGELOOP_INGEST_LOGS_FILE`
 
 There is **no** daemon-side `[KNOWLEDGE_SYNC]` flag.
-The public bash daemon still ignores `[WORKFLOW]` in this slice; bounded workflow scheduling is currently an Elixir-daemon-only path.
+If you force `FORGELOOP_DAEMON_RUNTIME=bash`, the legacy bash daemon still ignores `[WORKFLOW]` and uses its older long-lived shell loop implementation.
 
 ## Workflow lane (experimental)
 
@@ -134,8 +134,8 @@ This worktree layer is a repo-internal hygiene boundary, **not** the primary sec
 
 Important current limits:
 
-- the public bash daemon (`./forgeloop.sh daemon`) does **not** schedule babysitter runs yet
-- bounded `[WORKFLOW]` scheduling currently exists only on the Elixir daemon path (`mix forgeloop_v2.daemon --repo ..`), not on the public bash wrapper
+- the public daemon launcher now prefers the managed Elixir backend, but `FORGELOOP_DAEMON_RUNTIME=bash` still drops back to the legacy bash daemon implementation and its older shell loop
+- bounded `[WORKFLOW]` scheduling only works when that managed daemon backend is active
 - the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
 
 ## Loopback JSON control-plane service (experimental Elixir v2)
@@ -175,7 +175,6 @@ Operator mutations still go through the same helpers and runtime-state transitio
 
 Still intentionally deferred here:
 
-- bash-daemon / wrapper convergence onto the babysitter path
 - richer workflow history / broader workflow orchestration beyond the current one-shot `[WORKFLOW]` request + active-run/artifact view
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 

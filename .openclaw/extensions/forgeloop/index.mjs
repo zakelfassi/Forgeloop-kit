@@ -41,6 +41,8 @@ function buildOverviewTool(api) {
       const flags = data.control_flags || {};
       const workflowTarget = flags.workflow_target || {};
       const workflowFlag = boolFlag(flags["workflow_requested?"] ?? flags.workflow_requested);
+      const deployFlag = boolFlag(flags["deploy_requested?"] ?? flags.deploy_requested);
+      const ingestFlag = boolFlag(flags["ingest_logs_requested?"] ?? flags.ingest_logs_requested);
       const workflowTargetValidity = workflowTarget["valid?"] === false ? `invalid:${workflowTarget.error || "config"}` : "valid";
       const workflowTargetLabel = workflowTarget.name ? `${workflowTarget.action || "preflight"} ${workflowTarget.name}` : "unconfigured";
 
@@ -50,7 +52,7 @@ function buildOverviewTool(api) {
         `Forgeloop overview (${serviceBaseUrl(api)})`,
         `Runtime: ${runtime.status || "unknown"} / ${runtime.mode || "unknown"} via ${runtime.surface || "unknown"} on ${runtime.branch || "unknown"}`,
         `Backlog: ${pendingCount(backlog.items)} pending items from ${backlogLabel} (needs_build=${Boolean(backlog["needs_build?"] ?? backlog.needs_build)})`,
-        `Flags: pause=${boolFlag(flags["pause_requested?"] ?? flags.pause_requested)} replan=${boolFlag(flags["replan_requested?"] ?? flags.replan_requested)} workflow=${workflowFlag} (${workflowTargetLabel}; ${workflowTargetValidity})`,
+        `Flags: pause=${boolFlag(flags["pause_requested?"] ?? flags.pause_requested)} replan=${boolFlag(flags["replan_requested?"] ?? flags.replan_requested)} deploy=${deployFlag} ingest=${ingestFlag} workflow=${workflowFlag} (${workflowTargetLabel}; ${workflowTargetValidity})`,
         `Questions: ${questions.length} total, ${questions.filter((item) => item.status_kind === "awaiting_response").length} awaiting response`,
         `Escalations: ${escalations.length}`,
         `Tracker: ${trackerIssues.length} projected repo-local issues`,

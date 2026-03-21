@@ -14,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$ROOT_DIR/install.sh" "$tmp_repo" --force >/dev/null
+"$ROOT_DIR/install.sh" "$tmp_repo" --force --wrapper >/dev/null
 printf '\n[PAUSE]\n' >> "$tmp_repo/REQUESTS.md"
 
 state_file="$tmp_repo/.forgeloop-test/runtime-state.json"
@@ -50,9 +50,10 @@ PY
 (
   cd "$tmp_repo"
   PATH="$shim_dir:$PATH" \
+  FORGELOOP_DAEMON_RUNTIME=elixir \
   FORGELOOP_RUNTIME_DIR="$tmp_repo/.forgeloop-test" \
   FORGELOOP_DAEMON_LOCK_FILE="$tmp_repo/.forgeloop-test/daemon.lock" \
-  "$tmp_repo/forgeloop/bin/forgeloop-daemon.sh" 1
+  ./forgeloop.sh daemon 1
 ) >/dev/null 2>&1 &
 daemon_pid=$!
 

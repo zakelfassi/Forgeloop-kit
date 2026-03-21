@@ -167,6 +167,8 @@ function renderControls(snapshot) {
   const activeRun = babysitter.active_run || {};
   const pauseRequested = Boolean(flags["pause_requested?"]);
   const replanRequested = Boolean(flags["replan_requested?"]);
+  const deployRequested = Boolean(flags["deploy_requested?"]);
+  const ingestLogsRequested = Boolean(flags["ingest_logs_requested?"]);
   const workflowRequested = Boolean(flags["workflow_requested?"]);
   const workflowTarget = flags.workflow_target || {};
   const workflowTargetValid = workflowTarget["valid?"] !== false;
@@ -181,12 +183,14 @@ function renderControls(snapshot) {
       <div class="badges">
         ${badge(pauseRequested ? "pause requested" : "pause clear", pauseRequested ? "warn" : "good")}
         ${badge(replanRequested ? "replan queued" : "replan clear", replanRequested ? "purple" : "info")}
+        ${badge(deployRequested ? "deploy queued" : "deploy clear", deployRequested ? "warn" : "info")}
+        ${badge(ingestLogsRequested ? "ingest queued" : "ingest clear", ingestLogsRequested ? "purple" : "info")}
         ${badge(workflowTargetStatus, workflowRequested ? (workflowTargetValid ? "pink" : "bad") : "info")}
         ${badge(running ? "run active" : "idle", running ? "warn" : "good")}
         ${badge(runtimeSurface === "—" ? "surface idle" : `surface ${runtimeSurface}`, "info")}
       </div>
       <p class="subtle-copy">UI actions update the canonical files first. Clearing pause does not write <code>recovered</code>; that still happens on the next daemon or loop cycle.</p>
-      <p class="subtle-copy">Elixir daemon workflow request: <code>[WORKFLOW]</code> → <code>${escapeHtml(workflowTargetLabel)}</code>${workflowTarget.error ? ` (${escapeHtml(workflowTarget.error)})` : ""}. The public bash daemon still ignores this marker.</p>
+      <p class="subtle-copy">Daemon workflow request: <code>[WORKFLOW]</code> → <code>${escapeHtml(workflowTargetLabel)}</code>${workflowTarget.error ? ` (${escapeHtml(workflowTarget.error)})` : ""}. The managed public daemon honors this marker; <code>FORGELOOP_DAEMON_RUNTIME=bash</code> keeps the legacy bash path.</p>
     </div>
     <div class="control-grid">
       <div class="control-card">
