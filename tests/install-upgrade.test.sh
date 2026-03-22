@@ -28,4 +28,14 @@ if ! grep -q "# upgrade marker" "$target_repo/AGENTS.md"; then
     exit 1
 fi
 
+if [ ! -L "$target_repo/CLAUDE.md" ]; then
+    echo "FAIL: upgraded target CLAUDE.md is not a symlink" >&2
+    exit 1
+fi
+
+if [ "$(readlink "$target_repo/CLAUDE.md")" != "AGENTS.md" ]; then
+    echo "FAIL: upgraded target CLAUDE.md points to $(readlink "$target_repo/CLAUDE.md")" >&2
+    exit 1
+fi
+
 echo "ok: install upgrade"

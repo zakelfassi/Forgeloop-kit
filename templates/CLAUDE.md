@@ -1,6 +1,10 @@
-# Project Operational Guide (Claude)
+# Template note: CLAUDE.md aliases AGENTS.md
 
-Claude Code uses this file as project instructions.
+Installed repos should use a repo-root symlink:
 
-Start by reading `AGENTS.md`, `specs/`, and `docs/`.
+```text
+CLAUDE.md -> AGENTS.md
+```
 
+The canonical project instructions live in `AGENTS.md`.
+Keep `CLAUDE.md` as an alias so Claude-facing tooling reads the same instructions without drift.

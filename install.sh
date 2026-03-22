@@ -189,6 +189,41 @@ prompt_conflict() {
     done
 }
 
+prompt_symlink_conflict() {
+    local dest="$1"
+    local target="$2"
+
+    if ! is_interactive; then
+        echo "skip"
+        return
+    fi
+
+    while true; do
+        echo ""
+        echo "  $dest already exists. What would you like to do?"
+        echo "    [s]kip      - Keep existing file/symlink (default)"
+        echo "    [o]verwrite - Replace with symlink to $target"
+        printf "  > "
+
+        read -r choice </dev/tty
+        choice="${choice:-s}"
+
+        case "$choice" in
+            s|S|skip)
+                echo "skip"
+                return
+                ;;
+            o|O|overwrite)
+                echo "overwrite"
+                return
+                ;;
+            *)
+                echo "  Invalid choice. Please enter s or o."
+                ;;
+        esac
+    done
+}
+
 merge_file() {
     local src="$1"
     local dest="$2"
@@ -205,6 +240,41 @@ merge_file() {
         echo "$separator"
         cat "$src"
     } >> "$dest"
+}
+
+is_known_claude_alias_stub() {
+    local path="$1"
+
+    [ -f "$path" ] || return 1
+
+    if diff -q "$path" - >/dev/null 2>&1 <<'EOF'
+# Project Operational Guide (Claude)
+
+Claude Code uses this file as project instructions.
+
+Start by reading `AGENTS.md`, `specs/`, and `docs/`.
+EOF
+    then
+        return 0
+    fi
+
+    if diff -q "$path" - >/dev/null 2>&1 <<'EOF'
+# Template note: CLAUDE.md aliases AGENTS.md
+
+Installed repos should use a repo-root symlink:
+
+```text
+CLAUDE.md -> AGENTS.md
+```
+
+The canonical project instructions live in `AGENTS.md`.
+Keep `CLAUDE.md` as an alias so Claude-facing tooling reads the same instructions without drift.
+EOF
+    then
+        return 0
+    fi
+
+    return 1
 }
 
 install_file() {
@@ -245,6 +315,55 @@ install_file() {
     mkdir -p "$(dirname "$dest")"
     cp "$src" "$dest"
     echo "write: $dest"
+}
+
+install_symlink() {
+    local target="$1"
+    local dest="$2"
+
+    if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$target" ]; then
+        echo "skip: $dest (symlink ok)"
+        return 0
+    fi
+
+    if [ -f "$dest" ] && is_known_claude_alias_stub "$dest"; then
+        mkdir -p "$(dirname "$dest")"
+        rm -f "$dest"
+        ln -s "$target" "$dest"
+        echo "link: $dest -> $target (migrated)"
+        return 0
+    fi
+
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        if [ "$FORCE" = "true" ]; then
+            mkdir -p "$(dirname "$dest")"
+            rm -f "$dest"
+            ln -s "$target" "$dest"
+            echo "link: $dest -> $target (overwritten)"
+            return 0
+        fi
+
+        local action
+        action="$(prompt_symlink_conflict "$dest" "$target")"
+
+        case "$action" in
+            skip)
+                echo "skip: $dest (exists)"
+                return 0
+                ;;
+            overwrite)
+                mkdir -p "$(dirname "$dest")"
+                rm -f "$dest"
+                ln -s "$target" "$dest"
+                echo "link: $dest -> $target (overwritten)"
+                return 0
+                ;;
+        esac
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+    ln -s "$target" "$dest"
+    echo "link: $dest -> $target"
 }
 
 ensure_gitignore() {
@@ -583,7 +702,7 @@ main() {
 
     # Root coordination files
     install_file "$DEST_KIT_DIR/templates/AGENTS.md" "$TARGET_REPO_DIR/AGENTS.md"
-    install_file "$DEST_KIT_DIR/templates/CLAUDE.md" "$TARGET_REPO_DIR/CLAUDE.md"
+    install_symlink "AGENTS.md" "$TARGET_REPO_DIR/CLAUDE.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_plan.md" "$TARGET_REPO_DIR/PROMPT_plan.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_plan_work.md" "$TARGET_REPO_DIR/PROMPT_plan_work.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_build.md" "$TARGET_REPO_DIR/PROMPT_build.md"
