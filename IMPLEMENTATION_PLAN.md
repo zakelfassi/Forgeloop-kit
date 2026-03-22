@@ -435,6 +435,21 @@ Format:
     - `ForgeloopV2.ServiceOwnership` now derives one additive ownership/start-gate read model from raw runtime-owner + babysitter state, including ready/recoverable/blocked/error summaries and stable start-gate detail.
     - `/api/overview` now embeds that shared `ownership` payload, and blocked start surfaces now include additive `error.ownership` context without changing stable reason codes.
     - The HUD and OpenClaw seam now prefer that shared ownership/start-gate view for operator messaging, while docs/site copy describe it as additive service hardening rather than a new control plane.
+- [x] Add a one-command self-hosting proof harness for the real HUD/service path
+  - Acceptance:
+    - The repo exposes one public manual command for the V2-alpha self-host proof in both repo-root and installed-wrapper layouts.
+    - The proof uses the real loopback service, HUD, and `agent-browser`, not a JSON-only simulation.
+    - The proof stays bounded/manual-first, preserves fail-closed ownership behavior, and does not silently join default CI or `evals`.
+    - Managed UI `plan` proof runs stay viable even when the source checkout is dirty.
+  - REQUIRED TESTS:
+    - `tests/self-host-proof-entrypoint.test.sh`
+    - `tests/install-output.test.sh`
+    - `tests/manual/hud-contract.agent-browser.sh`
+  - Shipped behavior:
+    - `bin/self-host-proof.sh` now provides the public launcher, and installed wrappers expose the same behavior at `./forgeloop.sh self-host-proof`.
+    - The launcher now snapshots the current repo into a disposable proof repo when git is available, overlays the current working tree into an isolated proof commit, and then launches the real loopback service/HUD against that clean snapshot.
+    - `tests/manual/hud-contract.agent-browser.sh` now proves bounded pause / clear-pause / replan / one-off `plan` behavior over the real HUD, checks durable API/event outcomes, and retains screenshot/log artifacts for release review.
+    - The static HUD now exposes stable control button ids so browser-driven proofing stays selector-safe across rerenders.
 - [x] Clarify public release tracks for the V2 launch path
   - Acceptance:
     - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 alpha / development track.

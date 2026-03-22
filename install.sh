@@ -553,6 +553,7 @@ Usage:
   ./forgeloop.sh review
   ./forgeloop.sh serve [--host 127.0.0.1] [--port 4010]
   ./forgeloop.sh evals
+  ./forgeloop.sh self-host-proof
   ./forgeloop.sh upgrade --from <path-to-kit> [--force] [--skills] [--batch|--interactive]
   ./forgeloop.sh sync-skills [--claude] [--codex] [--claude-global] [--codex-global] [--amp] [--all] [--include-project] [--project-prefix <prefix>]
   ./forgeloop.sh daemon [interval_seconds]
@@ -633,6 +634,10 @@ case "$cmd" in
   evals)
     shift
     exec bash "$REPO_DIR/forgeloop/evals/run.sh" "$@"
+    ;;
+  self-host-proof)
+    shift
+    exec "$REPO_DIR/forgeloop/bin/self-host-proof.sh" "$@"
     ;;
   upgrade)
     shift
@@ -757,16 +762,18 @@ main() {
     echo "Done."
     echo "Next (in the target repo):"
     echo "  cd \"$TARGET_REPO_DIR\""
-    if [ "$WRAPPER" = "true" ]; then
+      if [ "$WRAPPER" = "true" ]; then
         echo "  ./forgeloop.sh serve"
         echo "  ./forgeloop.sh evals"
+        echo "  ./forgeloop.sh self-host-proof"
         echo "  ./forgeloop.sh kickoff \"<one paragraph project brief>\""
         echo "  ./forgeloop.sh plan 1"
         echo "  ./forgeloop.sh build 5"
         echo "  ./forgeloop.sh workflow list"
-    else
+      else
         echo "  (cd ./forgeloop/elixir && mix forgeloop_v2.serve --repo ..)"
         echo "  bash ./forgeloop/evals/run.sh"
+        echo "  ./forgeloop/bin/self-host-proof.sh"
         echo "  ./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\""
         echo "  ./forgeloop/bin/loop.sh plan 1"
         echo "  ./forgeloop/bin/loop.sh 5"

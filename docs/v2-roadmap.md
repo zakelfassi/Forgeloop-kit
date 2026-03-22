@@ -23,6 +23,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
 - a versioned loopback contract descriptor at `/api/schema` plus additive top-level `api` metadata on JSON and SSE envelopes, so the HUD and OpenClaw can follow one explicit service-owned schema while keeping older-service fallbacks where intended
 - an additive service-owned `ownership` start-gate read model plus additive `error.ownership` context on blocked starts, so live conflicts, reclaimable claims, stale cleanup, and malformed metadata stay explicit across the HUD and OpenClaw seam
 - a static repo-local operator UI with replayable SSE-backed live updates, interactive control mutations, and no Node asset pipeline
+- a one-command manual `./forgeloop.sh self-host-proof` harness for the real loopback service + HUD path, using `agent-browser` plus a disposable proof-repo snapshot when git is available instead of mutating the live checkout
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including a shared service-owned coordination read model for HUD/OpenClaw, a bounded operator brief/timeline, one-window bounded playbooks/recommendations, and conservative optional one-action apply
 
 ## Coexistence Rule
@@ -78,6 +79,8 @@ The required local gates for each milestone are:
 bash tests/run.sh
 bash evals/run.sh
 cd elixir && mix test
+# manual V2 alpha release proof
+./forgeloop.sh self-host-proof
 ```
 
 ## Explicit Deferrals

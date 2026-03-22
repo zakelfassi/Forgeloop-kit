@@ -1340,7 +1340,27 @@ function controlButton(action, label, options) {
   if (["run-plan", "run-build", "workflow-preflight", "workflow-run"].includes(action)) classes.push("primary");
 
   const workflowNameAttr = opts.workflowName ? ` data-workflow-name="${escapeHtml(opts.workflowName)}"` : "";
-  return `<button class="${classes.join(" ")}" data-action="${escapeHtml(action)}"${workflowNameAttr} ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  const idAttr = controlButtonId(action, opts);
+  return `<button class="${classes.join(" ")}"${idAttr} data-action="${escapeHtml(action)}"${workflowNameAttr} ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+}
+
+function controlButtonId(action, options) {
+  const opts = options || {};
+
+  if (opts.workflowName) {
+    const workflowAction = action === "workflow-preflight" ? "preflight" : action === "workflow-run" ? "run" : action;
+    return ` id="workflow-${sanitizeButtonIdSegment(opts.workflowName)}-${sanitizeButtonIdSegment(workflowAction)}"`;
+  }
+
+  return ` id="control-${sanitizeButtonIdSegment(action)}"`;
+}
+
+function sanitizeButtonIdSegment(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unknown";
 }
 
 function metric(label, value) {

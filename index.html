@@ -1073,17 +1073,22 @@
             <div class="panel" id="proof">
               <h3>Prove it fails closed</h3>
               <p>
-                Run the safe-autonomy proof suite before you trust the runtime in a repo.
+                Run the safe-autonomy proof suite before you trust the runtime in a repo. On the current v2 alpha track,
+                there is also a separate manual HUD/service proof.
               </p>
               <div class="code">
                 <button class="copy" data-copy="#cmd-evals">Copy</button>
                 <pre id="cmd-evals">./forgeloop.sh evals</pre>
               </div>
+              <div class="code" style="margin-top: 12px">
+                <button class="copy" data-copy="#cmd-self-host-proof">Copy</button>
+                <pre id="cmd-self-host-proof">./forgeloop.sh self-host-proof</pre>
+              </div>
               <div class="chiprow" role="list" style="margin-top: 12px">
                 <span class="chip" role="listitem"><span class="tag"></span><span>daemon pause</span></span>
                 <span class="chip blue" role="listitem"><span class="tag"></span><span>failure escalation</span></span>
                 <span class="chip pink" role="listitem"><span class="tag"></span><span>runtime state</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>auth failover</span></span>
+                <span class="chip" role="listitem"><span class="tag"></span><span>HUD self-host proof</span></span>
               </div>
             </div>
 
@@ -1129,6 +1134,7 @@
 ./install.sh "$REPO" --wrapper
 cd "$REPO"
 ./forgeloop.sh evals
+# Optional V2 alpha release proof: ./forgeloop.sh self-host-proof
 # Fresh repo path: ./forgeloop.sh kickoff "&lt;one paragraph project brief&gt;"
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
@@ -1185,7 +1191,9 @@ flowchart LR
               <h4>Install + prove</h4>
               <p>
                 Install Forgeloop into the repo, then run <code>./forgeloop.sh evals</code> so you know the control plane,
-                runtime state, and escalation path work in this layout.
+                runtime state, and escalation path work in this layout. On <code>main</code>, add the optional
+                <code>./forgeloop.sh self-host-proof</code> pass to drive the real HUD/service path through
+                <code>agent-browser</code>.
               </p>
             </div>
             <div class="step" style="position: relative">

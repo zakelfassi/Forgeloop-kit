@@ -203,6 +203,14 @@ That suite is curated to demonstrate:
 - auth failover
 - entrypoint portability
 
+For the current `main` / v2 alpha track, there is also a separate manual release proof for the real loopback service + HUD path:
+
+```bash
+./forgeloop.sh self-host-proof
+```
+
+That proof is intentionally outside default CI and `evals`. When git is available it snapshots the current repo into a disposable proof repo, launches the real loopback service + HUD, drives bounded pause / clear-pause / replan / one-off `plan` actions through `agent-browser`, and keeps the proof-local control/runtime artifacts isolated from the canonical repo-root files.
+
 ## Experimental Elixir parity layer
 
 The repo now also contains an experimental `elixir/` foundation that preserves the same operator-facing artifacts and `.forgeloop/runtime-state.json` contract for the phase-1 safety nucleus.

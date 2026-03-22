@@ -25,6 +25,14 @@ Current proof coverage includes:
 - LLM auth failover
 - entrypoint portability across layouts
 
+For the current `main` / v2 alpha track, the real loopback service + HUD path is proven separately with:
+
+```bash
+./forgeloop.sh self-host-proof
+```
+
+That browser-driven proof is manual and release-oriented on purpose; it is not part of default `evals` or CI.
+
 For the broader regression suite, run:
 
 ```bash

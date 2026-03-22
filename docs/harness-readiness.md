@@ -19,6 +19,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 
 - `tests/run.sh` is the default shell test gate.
 - `evals/run.sh` is the scenario harness for runtime-state and pause/escalation behavior.
+- `./forgeloop.sh self-host-proof` is the manual v2-alpha HUD/service proof for bounded self-hosting checks.
 - `docs/runtime-control.md` defines the loop stop/escalation rules.
 - `ESCALATIONS.md`, `QUESTIONS.md`, and `REQUESTS.md` form the human handoff surface.
 - `.forgeloop/runtime-state.json` is the machine-readable runtime state surface.
@@ -30,6 +31,5 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - Keep open PRs short-lived and rewrite stacked draft history into focused successors.
 - Keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows.
 - Add daemon-integrated babysitter child-run recovery and watchdog checks.
-- Add HTTP/SSE smoke tests for the loopback service and future static UI.
+- Keep the new loopback self-host proof stable across clean and dirty source checkouts.
 - Add integration-surface smoke tests for future plugin seams such as OpenClaw.
-

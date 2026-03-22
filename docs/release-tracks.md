@@ -45,6 +45,7 @@ Choose **`main`** if you want to evaluate or contribute to:
 - the Elixir control-plane service and operator HUD
 - managed babysitter/worktree execution
 - explicit ownership/start-gate visibility across the service, HUD, and OpenClaw seam
+- the manual `./forgeloop.sh self-host-proof` release proof for the real HUD/service path
 - the OpenClaw integration seam
 - replayable event streams and coordination advisory surfaces
 - the experimental workflow-pack lane and managed daemon workflow request path
@@ -63,6 +64,7 @@ Typical flow inside an installed repo:
 ```bash
 ./forgeloop.sh upgrade --from /path/to/Forgeloop-kit --force
 ./forgeloop.sh evals
+./forgeloop.sh self-host-proof
 bash forgeloop/tests/run.sh
 ```
 

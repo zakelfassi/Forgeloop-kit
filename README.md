@@ -68,6 +68,14 @@ The eval suite is curated around the safe-autonomy story:
 
 See `evals/README.md` for the public proof surface.
 
+On the current `main` / v2 alpha track, there is also a separate **manual release proof** for the real loopback service + HUD path:
+
+```bash
+./forgeloop.sh self-host-proof
+```
+
+That proof is intentionally outside default CI and `evals`: it snapshots the current repo into a disposable proof repo when git is available, drives the real HUD with `agent-browser`, and checks bounded pause / clear-pause / replan / one-off `plan` behavior without mutating your canonical repo-root control files.
+
 ## Quickstart
 
 In the target repo:
@@ -75,6 +83,7 @@ In the target repo:
 ```bash
 ./forgeloop.sh serve
 ./forgeloop.sh evals
+./forgeloop.sh self-host-proof                  # Optional V2 alpha release proof
 ./forgeloop.sh kickoff "<one paragraph project brief>"   # Fresh repo path
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
@@ -97,6 +106,7 @@ Forgeloop now ships a loopback-only operator UI on top of the same file-backed c
 
 ```bash
 ./forgeloop.sh serve
+./forgeloop.sh self-host-proof
 ```
 
 It is intentionally small and additive in this slice:
@@ -104,6 +114,7 @@ It is intentionally small and additive in this slice:
 - served directly by the Elixir control-plane service
 - live-updating via SSE
 - interactive for pause, clear-pause, replan, question answer/resolve, and one-off `plan` / `build` runs
+- a one-command manual self-host proof that drives the real HUD with `agent-browser` and bounded UI actions through a disposable proof repo snapshot when git is available on the v2 alpha track
 - the first operator surface referenced by new escalation drafts
 - phase-1 backlog reads resolve from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`)
 - no Phoenix, database, or Node asset pipeline
@@ -188,6 +199,7 @@ Typical stable → main evaluation path inside an installed repo:
 ```bash
 ./forgeloop.sh upgrade --from /path/to/Forgeloop-kit --force
 ./forgeloop.sh evals
+./forgeloop.sh self-host-proof
 bash forgeloop/tests/run.sh
 ```
 

@@ -18,6 +18,7 @@ Useful commands:
 ```bash
 ./forgeloop.sh kickoff "<one paragraph project brief>"
 ./forgeloop.sh evals
+./forgeloop.sh self-host-proof
 ./forgeloop.sh workflow list
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
