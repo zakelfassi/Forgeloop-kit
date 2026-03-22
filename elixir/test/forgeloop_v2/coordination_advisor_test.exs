@@ -12,6 +12,13 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
       babysitter: %{running?: false},
       events: [
         %{
+          "event_id" => "evt-1",
+          "event_code" => "daemon_tick",
+          "occurred_at" => "2026-03-21T00:59:00Z",
+          "action" => "build",
+          "reason" => "Backlog still needs work."
+        },
+        %{
           "event_id" => "evt-2",
           "event_code" => "operator_action",
           "occurred_at" => "2026-03-21T01:00:00Z",
@@ -32,7 +39,7 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
       ],
       events_meta: %{
         "latest_event_id" => "evt-3",
-        "returned_count" => 3,
+        "returned_count" => 4,
         "limit" => 9,
         "cursor_found?" => true,
         "truncated?" => false
@@ -44,9 +51,19 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
     assert result.status == "actionable"
     assert result.event_source == "events_api"
     assert result.cursor.next_after == "evt-3"
-    assert result.summary.fetched_events == 3
-    assert result.summary.unique_events == 2
+    assert result.summary.fetched_events == 4
+    assert result.summary.unique_events == 3
     assert result.summary.duplicate_events == 1
+    assert result.brief =~ "Actionable: Queue the next rebuild pass"
+
+    assert Enum.map(result.timeline, & &1.kind) == [
+             "daemon_decision",
+             "operator_action",
+             "operator_action"
+           ]
+
+    assert List.first(result.timeline).title == "Daemon decided Build"
+    assert List.last(result.timeline).related_playbook_ids == ["post_clear_pause_rebuild"]
     assert result.summary.recommendations == 1
     assert result.summary.playbooks.total == 1
     assert result.summary.playbooks.actionable == 1
@@ -88,6 +105,9 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
 
     assert result.status == "blocked"
     assert result.selected_playbook_id == "human_answer_recovery"
+    assert result.brief =~ "Blocked: Resume after human answers land"
+    assert hd(result.timeline).kind == "operator_action"
+    assert hd(result.timeline).related_playbook_ids == ["human_answer_recovery"]
     assert hd(result.playbooks).status == "blocked"
     assert hd(result.playbooks).recommended_action == "clear_pause"
     assert "unanswered_questions_remain" in hd(result.playbooks).blocked_by
@@ -124,6 +144,9 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
              )
 
     assert result.status == "observe"
+    assert result.brief =~ "Observe: Stabilize after a failure signal"
+    assert hd(result.timeline).kind == "failure_signal"
+    assert hd(result.timeline).title == "Managed run failed"
     assert hd(result.playbooks).status == "observe"
     assert hd(result.playbooks).recommended_action == nil
     assert hd(result.playbooks).steps |> hd() |> Map.fetch!(:kind) == "manual"
@@ -153,6 +176,8 @@ defmodule ForgeloopV2.CoordinationAdvisorTest do
              )
 
     assert result.status == "idle"
+    assert result.brief =~ "Partial context"
+    assert result.timeline == []
     assert result.cursor.next_after == "evt-9"
     assert result.cursor.reset_required == true
     assert result.recommendations == []

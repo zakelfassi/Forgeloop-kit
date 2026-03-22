@@ -722,6 +722,13 @@ defmodule ForgeloopV2.ServiceTest do
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
     :ok =
+      Events.emit(config, :daemon_tick, %{
+        "action" => "build",
+        "reason" => "Backlog still needs work.",
+        "recorded_at" => "2026-03-21T10:09:00Z"
+      })
+
+    :ok =
       Events.emit(config, :operator_action, %{
         "action" => "clear_pause",
         "recorded_at" => "2026-03-21T10:10:00Z"
@@ -733,6 +740,14 @@ defmodule ForgeloopV2.ServiceTest do
     assert coordination_payload["data"]["status"] == "actionable"
     assert coordination_payload["data"]["event_source"] == "events_api"
     assert coordination_payload["data"]["summary"]["recommendations"] == 1
+    assert coordination_payload["data"]["brief"] =~ "Actionable: Queue the next rebuild pass"
+
+    assert Enum.map(coordination_payload["data"]["timeline"], & &1["event_code"]) == [
+             "daemon_tick",
+             "operator_action"
+           ]
+
+    assert Enum.at(coordination_payload["data"]["timeline"], 0)["title"] == "Daemon decided Build"
 
     assert coordination_payload["data"]["playbooks"] |> Enum.at(0) |> Map.fetch!("id") ==
              "post_clear_pause_rebuild"
@@ -742,6 +757,12 @@ defmodule ForgeloopV2.ServiceTest do
     overview_payload = get_json!(base_url <> "/api/overview?limit=5")
     assert overview_payload["ok"] == true
     assert overview_payload["data"]["coordination"]["status"] == "actionable"
+
+    assert overview_payload["data"]["coordination"]["brief"] ==
+             coordination_payload["data"]["brief"]
+
+    assert overview_payload["data"]["coordination"]["timeline"] ==
+             coordination_payload["data"]["timeline"]
 
     assert overview_payload["data"]["coordination"]["cursor"]["next_after"] ==
              overview_payload["data"]["events_meta"]["latest_event_id"]

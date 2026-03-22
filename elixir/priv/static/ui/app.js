@@ -352,9 +352,11 @@ function renderCoordination(coordination) {
 
   const warnings = Array.isArray(coordination.warnings) ? coordination.warnings : [];
   const playbooks = Array.isArray(coordination.playbooks) ? coordination.playbooks : [];
+  const timeline = Array.isArray(coordination.timeline) ? coordination.timeline : [];
   const counts = coordination.summary && coordination.summary.playbooks ? coordination.summary.playbooks : {};
   const cursor = coordination.cursor || {};
   const statusClass = coordinationStatusClass(coordination.status);
+  const brief = coordination.brief || "Coordination is idle for the current bounded event window.";
   const summaryCard = `
     <article class="list-card">
       <div class="list-meta">
@@ -373,55 +375,92 @@ function renderCoordination(coordination) {
       ${warnings.length ? `<div class="badges">${warnings.map((warning) => badge(warning.replaceAll("_", " "), "warn")).join("")}</div>` : ""}
     </article>
   `;
+  const briefCard = `
+    <article class="list-card coordination-brief">
+      <div class="list-meta">
+        ${badge("operator brief", "purple")}
+        ${badge(`${timeline.length} recent`, timeline.length ? "info" : "warn")}
+      </div>
+      <h3>Shared operator brief</h3>
+      <p>${escapeHtml(brief)}</p>
+    </article>
+  `;
+  const timelineCard = `
+    <article class="list-card coordination-timeline">
+      <div class="panel-head compact-head">
+        <div>
+          <h3>Recent coordination window</h3>
+          <p class="subtle-copy">Derived from the same bounded event window used for playbooks, warnings, and OpenClaw safety checks.</p>
+        </div>
+      </div>
+      ${timeline.length ? `<div class="stack">${timeline.map((entry) => `
+        <article class="coordination-timeline-item">
+          <div class="list-meta">
+            ${badge((entry.kind || "event").replaceAll("_", " "), coordinationTimelineKindClass(entry.kind))}
+            ${entry.surface ? badge(entry.surface, "info") : ""}
+            ${(Array.isArray(entry.related_playbook_ids) ? entry.related_playbook_ids : []).map((playbookId) => badge(playbookId, "purple")).join("")}
+          </div>
+          <strong>${escapeHtml(entry.title || entry.event_code || "Coordination event")}</strong>
+          <p class="subtle-copy">${escapeHtml(entry.detail || "No additional detail was recorded for this coordination event.")}</p>
+          <span class="event-time">${escapeHtml(entry.occurred_at || "unknown")}</span>
+        </article>
+      `).join("")}</div>` : `<p>No coordination-relevant events were retained in the current bounded window.</p>`}
+    </article>
+  `;
 
   if (!playbooks.length) {
     refs.coordinationBody.className = "stack empty";
-    refs.coordinationBody.innerHTML = `${summaryCard}<p>No playbooks are currently triggered for the latest bounded event window.</p>`;
+    refs.coordinationBody.innerHTML = `${summaryCard}${briefCard}${timelineCard}<p>No playbooks are currently triggered for the latest bounded event window.</p>`;
     return;
   }
 
   refs.coordinationBody.className = "stack";
-  refs.coordinationBody.innerHTML = summaryCard + playbooks.map((playbook) => {
-    const evidence = Array.isArray(playbook.evidence) ? playbook.evidence : [];
-    const steps = Array.isArray(playbook.steps) ? playbook.steps : [];
-    const blockedBy = Array.isArray(playbook.blocked_by) ? playbook.blocked_by : [];
+  refs.coordinationBody.innerHTML = [
+    summaryCard,
+    briefCard,
+    timelineCard,
+    ...playbooks.map((playbook) => {
+      const evidence = Array.isArray(playbook.evidence) ? playbook.evidence : [];
+      const steps = Array.isArray(playbook.steps) ? playbook.steps : [];
+      const blockedBy = Array.isArray(playbook.blocked_by) ? playbook.blocked_by : [];
 
-    return `
-      <article class="list-card coordination-card">
-        <div class="panel-head compact-head">
-          <div>
-            <h3>${escapeHtml(playbook.title || playbook.id || "Playbook")}</h3>
-            <p class="subtle-copy">${escapeHtml(playbook.goal || playbook.reason || "")}</p>
+      return `
+        <article class="list-card coordination-card">
+          <div class="panel-head compact-head">
+            <div>
+              <h3>${escapeHtml(playbook.title || playbook.id || "Playbook")}</h3>
+              <p class="subtle-copy">${escapeHtml(playbook.goal || playbook.reason || "")}</p>
+            </div>
+            <div class="badges">
+              ${badge(playbook.status || "idle", coordinationStatusClass(playbook.status))}
+              ${playbook.recommended_action ? badge(`recommend ${playbook.recommended_action}`, playbook.apply_eligible ? "good" : "warn") : badge("manual review", "info")}
+            </div>
           </div>
-          <div class="badges">
-            ${badge(playbook.status || "idle", coordinationStatusClass(playbook.status))}
-            ${playbook.recommended_action ? badge(`recommend ${playbook.recommended_action}`, playbook.apply_eligible ? "good" : "warn") : badge("manual review", "info")}
+          <p>${escapeHtml(playbook.reason || "No coordination reason available.")}</p>
+          ${blockedBy.length ? `<div class="badges">${blockedBy.map((reason) => badge(reason.replaceAll("_", " "), "bad")).join("")}</div>` : ""}
+          ${evidence.length ? `<div class="stack">${evidence.map((item) => `
+            <div class="coordination-evidence">
+              <strong>${escapeHtml(item.event_code || "event")}</strong>
+              <span class="subtle">${escapeHtml(item.occurred_at || "unknown")}</span>
+              ${item.action ? `<span class="subtle">action=${escapeHtml(item.action)}</span>` : ""}
+            </div>
+          `).join("")}</div>` : ""}
+          <div class="stack">
+            ${steps.map((step) => `
+              <article class="coordination-step">
+                <div class="list-meta">
+                  ${badge(step.kind || "step", step.kind === "control_action" ? "purple" : "info")}
+                  ${step.action ? badge(step.action, step.apply_eligible ? "good" : "warn") : ""}
+                </div>
+                <strong>${escapeHtml(step.title || "Step")}</strong>
+                <p class="subtle-copy">${escapeHtml(step.detail || "")}</p>
+              </article>
+            `).join("")}
           </div>
-        </div>
-        <p>${escapeHtml(playbook.reason || "No coordination reason available.")}</p>
-        ${blockedBy.length ? `<div class="badges">${blockedBy.map((reason) => badge(reason.replaceAll("_", " "), "bad")).join("")}</div>` : ""}
-        ${evidence.length ? `<div class="stack">${evidence.map((item) => `
-          <div class="coordination-evidence">
-            <strong>${escapeHtml(item.event_code || "event")}</strong>
-            <span class="subtle">${escapeHtml(item.occurred_at || "unknown")}</span>
-            ${item.action ? `<span class="subtle">action=${escapeHtml(item.action)}</span>` : ""}
-          </div>
-        `).join("")}</div>` : ""}
-        <div class="stack">
-          ${steps.map((step) => `
-            <article class="coordination-step">
-              <div class="list-meta">
-                ${badge(step.kind || "step", step.kind === "control_action" ? "purple" : "info")}
-                ${step.action ? badge(step.action, step.apply_eligible ? "good" : "warn") : ""}
-              </div>
-              <strong>${escapeHtml(step.title || "Step")}</strong>
-              <p class="subtle-copy">${escapeHtml(step.detail || "")}</p>
-            </article>
-          `).join("")}
-        </div>
-      </article>
-    `;
-  }).join("");
+        </article>
+      `;
+    })
+  ].join("");
 }
 
 function renderTracker(tracker) {
@@ -961,6 +1000,13 @@ function coordinationStatusClass(status) {
   if (status === "blocked") return "bad";
   if (status === "observe") return "warn";
   return "info";
+}
+
+function coordinationTimelineKindClass(kind) {
+  if (kind === "operator_action") return "purple";
+  if (kind === "daemon_decision") return "info";
+  if (kind === "failure_signal") return "bad";
+  return "warn";
 }
 
 function workflowOutcomeBadgeClass(outcome) {

@@ -421,7 +421,8 @@ h3 { font-size: 0.95rem; }
 }
 
 .coordination-evidence,
-.coordination-step {
+.coordination-step,
+.coordination-timeline-item {
   padding: 12px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.05);
@@ -435,9 +436,20 @@ h3 { font-size: 0.95rem; }
   align-items: center;
 }
 
-.coordination-step {
+.coordination-step,
+.coordination-timeline-item {
   display: grid;
   gap: 8px;
+}
+
+.coordination-brief p,
+.coordination-timeline p {
+  margin-top: 8px;
+}
+
+.coordination-timeline-item .event-time {
+  display: inline-flex;
+  width: fit-content;
 }
 
 .footer-note { margin-top: 20px; }

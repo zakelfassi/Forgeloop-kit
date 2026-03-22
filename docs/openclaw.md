@@ -50,7 +50,7 @@ The current seam registers four tools:
 
 These map directly onto the existing loopback JSON API:
 
-- overview/status snapshots plus the shared `/api/coordination` advisory, with dedicated recent-event tails from `/api/events`
+- overview/status snapshots plus the shared `/api/coordination` advisory, including a bounded operator brief/timeline, with dedicated recent-event tails from `/api/events`
 - pause / clear-pause / replan / manual plan-build / stop / workflow preflight-run
 - answer / resolve question
 - bounded event-window review over service-owned `/api/coordination?after=...` with caller-managed replay cursors and invocation-scoped playbooks
@@ -71,8 +71,8 @@ These map directly onto the existing loopback JSON API:
 
 - dry-run/recommend mode is the default
 - the caller supplies `after` and receives `next_after`; the plugin does not persist cursors
-- it prefers the shared service-owned coordination read model from `/api/coordination`, which is also embedded in `/api/overview` for the HUD
-- on older services that do not expose `/api/coordination`, it falls back to the prior local `/api/events` + `/api/overview` evaluation path for backward compatibility
+- it prefers the shared service-owned coordination read model from `/api/coordination`, which is also embedded in `/api/overview` for the HUD and now includes a bounded operator brief/timeline over the same event window
+- on older services that do not expose `/api/coordination`, it falls back to the prior local `/api/events` + `/api/overview` evaluation path for backward compatibility while still returning the same bounded brief/timeline shape
 - it now derives a small fixed set of operator playbooks (`human_answer_recovery`, `post_clear_pause_rebuild`, `failure_stabilization`) alongside the lower-level recommendations
 - an optional `playbookId` selector can scope one invocation to a single playbook without widening the mutation surface
 - it can apply **at most one** bounded action per invocation, and only from:

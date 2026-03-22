@@ -2,6 +2,7 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:4010";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
+const COORDINATION_TIMELINE_LIMIT = 6;
 const PLUGIN_ID = "forgeloop";
 const ALLOWED_ORCHESTRATION_ACTIONS = new Set(["pause", "clear_pause", "replan"]);
 const ORCHESTRATION_PLAYBOOK_IDS = new Set([
@@ -13,7 +14,21 @@ const FAILURE_EVENT_CODES = new Set([
   "loop_failed",
   "babysitter_failed",
   "daemon_deploy_failed",
-  "daemon_ingest_logs_failed"
+  "daemon_ingest_logs_failed",
+  "daemon_stall_check_failed",
+  "failure_recorded",
+  "failure_escalated",
+  "blocker_tracking",
+  "blocker_escalated"
+]);
+const COORDINATION_TIMELINE_EVENT_CODES = new Set([
+  "operator_action",
+  "daemon_tick",
+  "runtime_transition",
+  "pause_detected",
+  "recovery_started",
+  "loop_started",
+  "loop_completed"
 ]);
 const ORCHESTRATION_RULES = [
   {
@@ -212,6 +227,7 @@ function buildOverviewTool(api) {
         coordination
           ? `Coordination: ${coordination.status || "idle"} (${coordinationSummary?.total || 0} playbooks, ${coordination.summary?.recommendations || 0} recommendations)`
           : "Coordination: unavailable in this service snapshot",
+        coordination?.brief ? `Coordination brief: ${coordination.brief}` : null,
         ...workflows.map((workflow) => {
           const latest = workflow.history?.latest;
           const latestText = latest
@@ -352,6 +368,8 @@ function buildOrchestrationTool(api) {
         `Event source: ${result.event_source}`,
         `Coordination source: ${result.coordination_source}`,
         `Coordination status: ${result.status}`,
+        `Brief: ${result.brief || "none"}`,
+        `Timeline: ${Array.isArray(result.timeline) ? result.timeline.length : 0} recent coordination entries`,
         `Cursor: requested=${result.cursor.requested_after || "none"} next=${result.cursor.next_after || "none"}`,
         `Playbooks: ${result.summary.playbooks.total}${result.selected_playbook_id ? ` (selected=${result.selected_playbook_id})` : ""}`,
         `Recommendations: ${result.summary.recommendations}`,
@@ -361,7 +379,7 @@ function buildOrchestrationTool(api) {
         result.warnings.length ? `Warnings: ${result.warnings.join(", ")}` : "Warnings: none",
         "",
         JSON.stringify(result, null, 2)
-      ].join("\n");
+      ].filter(Boolean).join("\n");
 
       return textResult(text);
     },
@@ -465,6 +483,8 @@ async function executeServiceOrchestration(api, { mode, after, limit, playbookId
   result.selected_playbook_id = recheckedCoordination.selected_playbook_id ?? result.selected_playbook_id;
   result.cursor = recheckedCoordination.cursor || result.cursor;
   result.summary = recheckedCoordination.summary || result.summary;
+  result.brief = recheckedCoordination.brief || result.brief;
+  result.timeline = Array.isArray(recheckedCoordination.timeline) ? recheckedCoordination.timeline : [];
   result.recommendations = Array.isArray(recheckedCoordination.recommendations) ? recheckedCoordination.recommendations : [];
   result.playbooks = Array.isArray(recheckedCoordination.playbooks) ? recheckedCoordination.playbooks : [];
   result.warnings = dedupeWarnings([...(result.warnings || []), ...(recheckedCoordination.warnings || [])]);
@@ -567,8 +587,10 @@ function executeLocalOrchestration(api, { mode, after, limit, playbookId, overvi
       recommendations: recommendations.length,
       playbooks: summarizePlaybooks(playbooks)
     },
+    brief: buildCoordinationBrief(overview, allPlaybooks, warnings),
     recommendations,
     playbooks,
+    timeline: buildCoordinationTimeline(deduped.unique),
     applied: {
       attempted: false,
       action: null,
@@ -599,15 +621,26 @@ function executeLocalOrchestration(api, { mode, after, limit, playbookId, overvi
   return fetchOverview(api, limit)
     .then((freshOverviewPayload) => {
       const freshOverview = freshOverviewPayload?.data || {};
+      const freshAllRecommendations = evaluateRecommendations(deduped.unique, freshOverview);
+      const freshAllPlaybooks = buildPlaybooks(freshAllRecommendations);
+      const freshRecommendations = playbookId
+        ? freshAllRecommendations.filter((recommendation) => recommendation.playbook_id === playbookId)
+        : freshAllRecommendations;
+      const freshPlaybooks = playbookId
+        ? freshAllPlaybooks.filter((playbook) => playbook.id === playbookId)
+        : freshAllPlaybooks;
       const rechecked = recheckRecommendation(candidate, freshOverview);
       if (!rechecked.apply_eligible) {
         result.applied.result = "blocked";
         result.applied.action = candidate.action;
         result.applied.reason = rechecked.blocked_by[0] || "state_changed";
-        result.recommendations = replaceRecommendation(result.recommendations, rechecked);
-        result.playbooks = replacePlaybook(result.playbooks, buildPlaybook(rechecked));
+        result.recommendations = replaceRecommendation(freshRecommendations, rechecked);
+        result.playbooks = replacePlaybook(freshPlaybooks, buildPlaybook(rechecked));
         result.summary.playbooks = summarizePlaybooks(result.playbooks);
+        result.summary.recommendations = result.recommendations.length;
         result.status = coordinationStatusFromPlaybooks(result.playbooks);
+        result.brief = buildCoordinationBrief(freshOverview, freshAllPlaybooks, result.warnings);
+        result.timeline = buildCoordinationTimeline(deduped.unique);
         return result;
       }
 
@@ -652,8 +685,10 @@ function buildCoordinationResult(api, mode, coordination, coordinationSource) {
     selected_playbook_id: normalized.selected_playbook_id ?? null,
     cursor: normalized.cursor,
     summary: normalized.summary,
+    brief: normalized.brief,
     recommendations: normalized.recommendations,
     playbooks: normalized.playbooks,
+    timeline: normalized.timeline,
     applied: {
       attempted: false,
       action: null,
@@ -667,6 +702,7 @@ function buildCoordinationResult(api, mode, coordination, coordinationSource) {
 function normalizeCoordinationPayload(coordination) {
   const payload = coordination && typeof coordination === "object" ? coordination : {};
   const playbooks = Array.isArray(payload.playbooks) ? payload.playbooks : [];
+  const warnings = Array.isArray(payload.warnings) ? payload.warnings.slice() : [];
   const summaryPlaybooks = payload.summary && payload.summary.playbooks ? payload.summary.playbooks : summarizePlaybooks(playbooks);
   return {
     schema_version: Number(payload.schema_version || 1),
@@ -693,10 +729,199 @@ function normalizeCoordinationPayload(coordination) {
         observe: Number(summaryPlaybooks.observe || 0)
       }
     },
+    brief: normalizeCoordinationBrief(payload.brief, playbooks, warnings),
     recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
     playbooks,
-    warnings: Array.isArray(payload.warnings) ? payload.warnings.slice() : []
+    timeline: normalizeCoordinationTimeline(payload.timeline),
+    warnings
   };
+}
+
+function normalizeCoordinationBrief(brief, playbooks, warnings) {
+  if (typeof brief === "string" && brief.trim()) return brief.trim();
+  return fallbackCoordinationBrief(playbooks, warnings);
+}
+
+function fallbackCoordinationBrief(playbooks, warnings) {
+  const actionable = playbooks.find((playbook) => playbook.status === "actionable");
+  if (actionable) return `Actionable: ${actionable.title} — ${actionable.reason}`;
+  const blocked = playbooks.find((playbook) => playbook.status === "blocked");
+  if (blocked) return `Blocked: ${blocked.title} — ${blocked.reason}`;
+  const observe = playbooks.find((playbook) => playbook.status === "observe");
+  if (observe) return `Observe: ${observe.title} — ${observe.reason}`;
+  if ((warnings || []).includes("cursor_not_found_reset_required") || (warnings || []).includes("replay_truncated_reset_required")) {
+    return "Partial context: reset the coordination cursor before applying another action in this bounded window.";
+  }
+  return "Coordination is idle for the current bounded event window.";
+}
+
+function normalizeCoordinationTimeline(timeline) {
+  return (Array.isArray(timeline) ? timeline : []).map(normalizeCoordinationTimelineEntry).filter(Boolean);
+}
+
+function normalizeCoordinationTimelineEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const hasExplicitDetail = Object.prototype.hasOwnProperty.call(entry, "detail");
+  const normalized = {
+    event_id: normalizeCursor(entry.event_id),
+    event_code: entry.event_code || entry.event_type || "event",
+    event_action: normalizeCursor(entry.event_action ?? entry.action),
+    occurred_at: normalizeCursor(entry.occurred_at ?? entry.recorded_at),
+    surface: normalizeCursor(entry.surface),
+    kind: entry.kind || coordinationTimelineKind(entry),
+    title: entry.title || coordinationTimelineTitle(entry),
+    detail: hasExplicitDetail
+      ? (typeof entry.detail === "string" && entry.detail.trim() ? entry.detail.trim() : null)
+      : coordinationTimelineDetail(entry),
+    related_playbook_ids: (Array.isArray(entry.related_playbook_ids) ? entry.related_playbook_ids : [])
+      .map((id) => normalizeCursor(id))
+      .filter(Boolean)
+  };
+  return normalized;
+}
+
+function buildCoordinationTimeline(events) {
+  return (Array.isArray(events) ? events : [])
+    .filter(isCoordinationTimelineEvent)
+    .map((event) => normalizeCoordinationTimelineEntry({
+      event_id: normalizeCursor(event?.event_id),
+      event_code: eventCode(event),
+      event_action: normalizeCursor(event?.action),
+      occurred_at: eventTimestamp(event),
+      surface: coordinationSurface(event),
+      kind: coordinationTimelineKind(event),
+      title: coordinationTimelineTitle(event),
+      detail: coordinationTimelineDetail(event),
+      related_playbook_ids: relatedPlaybookIds(event)
+    }))
+    .filter(Boolean)
+    .slice(-COORDINATION_TIMELINE_LIMIT);
+}
+
+function isCoordinationTimelineEvent(event) {
+  const code = eventCode(event);
+  return COORDINATION_TIMELINE_EVENT_CODES.has(code) || FAILURE_EVENT_CODES.has(code);
+}
+
+function coordinationTimelineKind(event) {
+  const code = typeof event === "string" ? event : eventCode(event);
+  if (code === "operator_action") return "operator_action";
+  if (code === "daemon_tick") return "daemon_decision";
+  if (FAILURE_EVENT_CODES.has(code)) return "failure_signal";
+  return "runtime_transition";
+}
+
+function coordinationTimelineTitle(event) {
+  const code = eventCode(event);
+  if (code === "operator_action") return operatorTimelineTitle(event);
+  if (code === "daemon_tick") return daemonTimelineTitle(event);
+  if (["runtime_transition", "pause_detected", "recovery_started"].includes(code)) return runtimeTimelineTitle(event);
+  if (code === "loop_started") return "Managed run started";
+  if (code === "loop_completed") return "Managed run completed";
+  if (code === "loop_failed") return "Managed run failed";
+  if (code === "failure_recorded") return "Failure recorded for review";
+  if (code === "failure_escalated") return "Failure escalated for review";
+  if (code === "blocker_tracking") return "Blocker tracking advanced";
+  if (code === "blocker_escalated") return "Blocker escalated for review";
+  if (code === "babysitter_failed") return "Babysitter reported a failure";
+  if (code === "daemon_deploy_failed") return "Deploy request failed";
+  if (code === "daemon_ingest_logs_failed") return "Log ingest request failed";
+  if (code === "daemon_stall_check_failed") return "Daemon stall check failed";
+  return humanizeValue(code);
+}
+
+function operatorTimelineTitle(event) {
+  const action = normalizeCursor(event?.action) || "operator update";
+  if (action === "clear_pause") return "Operator cleared pause";
+  if (action === "pause") return "Operator requested pause";
+  if (action === "replan") return "Operator requested replan";
+  if (action === "answer_question") return "Operator answered a question";
+  if (action === "resolve_question") return "Operator resolved a question";
+  return `Operator ${humanizeValue(action)}`;
+}
+
+function daemonTimelineTitle(event) {
+  const action = normalizeCursor(event?.action) || "idle";
+  return `Daemon decided ${humanizeValue(action)}`;
+}
+
+function runtimeTimelineTitle(event) {
+  const code = eventCode(event);
+  const action = normalizeCursor(event?.action);
+  const status = normalizeCursor(event?.status);
+  const transition = normalizeCursor(event?.transition);
+  if (code === "pause_detected") return "Runtime entered paused state";
+  if (code === "recovery_started") return "Runtime started recovery";
+  if (action === "loop_started") return "Managed run started";
+  if (action === "loop_completed") return "Managed run completed";
+  if (action === "loop_failed") return "Managed run failed";
+  if (status === "paused") return "Runtime entered paused state";
+  if (["planning", "building"].includes(transition)) return `Runtime began ${transition}`;
+  if (status === "idle" && transition === "completed") return "Runtime returned to idle";
+  if (action) return humanizeValue(action);
+  if (status) return `Runtime is ${status}`;
+  return "Runtime updated";
+}
+
+function coordinationTimelineDetail(event) {
+  return event?.reason || event?.summary || coordinationContextDetail(event) || null;
+}
+
+function coordinationContextDetail(event) {
+  const parts = [
+    coordinationContextLabel("requested", event?.requested_action),
+    coordinationContextLabel("status", event?.status),
+    coordinationContextLabel("transition", event?.transition),
+    coordinationContextLabel("mode", event?.mode),
+    coordinationContextLabel("surface", coordinationSurface(event)),
+    coordinationContextLabel("branch", event?.branch)
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function coordinationContextLabel(label, value) {
+  const normalized = normalizeCursor(value == null ? null : String(value));
+  if (!normalized || normalized === "unknown") return null;
+  return `${label} ${normalized}`;
+}
+
+function coordinationSurface(event) {
+  return normalizeCursor(event?.surface) || (eventCode(event) === "daemon_tick" ? "daemon" : null);
+}
+
+function relatedPlaybookIds(event) {
+  return ORCHESTRATION_RULES.filter((rule) => rule.matches(event)).map((rule) => rule.playbookId);
+}
+
+function buildCoordinationBrief(overview, playbooks, warnings) {
+  const actionable = playbooks.find((playbook) => playbook.status === "actionable");
+  if (actionable) return `Actionable: ${actionable.title} — ${actionable.reason}`;
+  const blocked = playbooks.find((playbook) => playbook.status === "blocked");
+  if (blocked) return `Blocked: ${blocked.title} — ${blocked.reason}`;
+  const observe = playbooks.find((playbook) => playbook.status === "observe");
+  if (observe) return `Observe: ${observe.title} — ${observe.reason}`;
+  if ((warnings || []).includes("cursor_not_found_reset_required") || (warnings || []).includes("replay_truncated_reset_required")) {
+    return "Partial context: reset the coordination cursor before applying another action in this bounded window.";
+  }
+  if (pauseRequested(overview) && awaitingQuestionCount(overview) > 0) {
+    return `Pause is still requested while ${awaitingQuestionCount(overview)} question(s) await a human response.`;
+  }
+  if (pauseRequested(overview)) {
+    return "Pause is still requested; review the current state before clearing it manually.";
+  }
+  if (replanRequested(overview)) {
+    return "A bounded replan is already queued for the canonical backlog.";
+  }
+  if (needsBuild(overview)) {
+    return "Canonical backlog work still needs a build pass, but no coordination playbook is currently triggered.";
+  }
+  if (babysitterRunning(overview)) {
+    return "A babysitter-managed run is active; wait for it to settle before taking another coordination action.";
+  }
+  if (!["idle", "unknown"].includes(runtimeStatus(overview))) {
+    return `Runtime is ${runtimeStatus(overview)} with no additional coordination playbooks currently triggered.`;
+  }
+  return "Coordination is idle for the current bounded event window.";
 }
 
 async function fetchCoordination(api, { after, limit, playbookId }) {
@@ -1181,6 +1406,17 @@ function eventCode(event) {
 
 function eventTimestamp(event) {
   return event?.occurred_at || event?.recorded_at || null;
+}
+
+function humanizeValue(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function compact(object) {

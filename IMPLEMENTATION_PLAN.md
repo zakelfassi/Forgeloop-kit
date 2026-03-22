@@ -142,6 +142,25 @@ Format:
     - hidden plugin-side cursor persistence
     - long-lived `/api/stream`-driven OpenClaw loops beyond the current invocation-scoped advisory/apply seam
 
+- [x] Extend the shared coordination advisory with a bounded operator brief and recent timeline
+  - Acceptance:
+    - `/api/coordination` and `overview.coordination` expose a service-owned `brief` plus bounded `timeline` derived from the same canonical replay window as the existing playbooks/warnings.
+    - The HUD renders that brief/timeline read-only instead of deriving its own coordination history.
+    - The OpenClaw seam returns the same informational shape in both service-backed and old-service fallback modes without widening apply behavior.
+    - Canonical repo files, runtime state, and loopback control endpoints remain the only source of truth and mutation path.
+  - REQUIRED TESTS:
+    - `tests/openclaw-plugin.test.sh`
+    - `elixir/test/forgeloop_v2/coordination_advisor_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+  - Shipped behavior:
+    - `ForgeloopV2.CoordinationAdvisor` now derives a one-line operator brief plus a bounded recent coordination timeline from the same canonical event window, without adding persistence or autonomous daemon/plugin behavior.
+    - `/api/coordination`, `/api/overview`, and the HUD now expose/render that shared brief/timeline directly from the service payload.
+    - The OpenClaw plugin now normalizes the same brief/timeline in both service-backed and old-service fallback modes, while still capping apply at one bounded pause / clear-pause / replan action.
+  - Deferred after this slice:
+    - persisted coordination history or search beyond the bounded replay window
+    - hidden plugin-side cursor persistence
+    - daemon/plugin autonomous coordination execution
+
 - [x] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
     - JSONL remains the durable source of truth.

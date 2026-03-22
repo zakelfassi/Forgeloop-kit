@@ -1002,7 +1002,8 @@ defmodule ForgeloopV2.ServiceJSON do
     PlaybookCounts,
     Recommendation,
     Result,
-    Summary
+    Summary,
+    TimelineEntry
   }
 
   alias ForgeloopV2.PlanStore
@@ -1041,8 +1042,10 @@ defmodule ForgeloopV2.ServiceJSON do
       event_source: result.event_source,
       cursor: coordination_cursor(result.cursor),
       summary: coordination_summary(result.summary),
+      brief: result.brief,
       recommendations: Enum.map(result.recommendations, &coordination_recommendation/1),
       playbooks: Enum.map(result.playbooks, &coordination_playbook/1),
+      timeline: Enum.map(result.timeline, &coordination_timeline_entry/1),
       warnings: result.warnings
     }
   end
@@ -1152,6 +1155,20 @@ defmodule ForgeloopV2.ServiceJSON do
       apply_eligible: playbook.apply_eligible,
       blocked_by: playbook.blocked_by,
       steps: sanitize(playbook.steps)
+    }
+  end
+
+  defp coordination_timeline_entry(%TimelineEntry{} = entry) do
+    %{
+      event_id: entry.event_id,
+      event_code: entry.event_code,
+      event_action: entry.event_action,
+      occurred_at: entry.occurred_at,
+      surface: entry.surface,
+      kind: entry.kind,
+      title: entry.title,
+      detail: entry.detail,
+      related_playbook_ids: entry.related_playbook_ids
     }
   end
 

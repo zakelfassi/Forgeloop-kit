@@ -8,8 +8,10 @@ defmodule ForgeloopV2.CoordinationAdvisor.Result do
     :event_source,
     :cursor,
     :summary,
+    :brief,
     recommendations: [],
     playbooks: [],
+    timeline: [],
     warnings: []
   ]
 end
@@ -77,18 +79,57 @@ defmodule ForgeloopV2.CoordinationAdvisor.Playbook do
   ]
 end
 
+defmodule ForgeloopV2.CoordinationAdvisor.TimelineEntry do
+  @moduledoc false
+
+  defstruct [
+    :event_id,
+    :event_code,
+    :event_action,
+    :occurred_at,
+    :surface,
+    :kind,
+    :title,
+    :detail,
+    related_playbook_ids: []
+  ]
+end
+
 defmodule ForgeloopV2.CoordinationAdvisor do
   @moduledoc false
 
-  alias __MODULE__.{Cursor, Playbook, PlaybookCounts, Recommendation, Result, Summary}
+  alias __MODULE__.{
+    Cursor,
+    Playbook,
+    PlaybookCounts,
+    Recommendation,
+    Result,
+    Summary,
+    TimelineEntry
+  }
 
   @playbook_ids ["human_answer_recovery", "post_clear_pause_rebuild", "failure_stabilization"]
+  @timeline_limit 6
   @failure_event_codes MapSet.new([
                          "loop_failed",
                          "babysitter_failed",
                          "daemon_deploy_failed",
-                         "daemon_ingest_logs_failed"
+                         "daemon_ingest_logs_failed",
+                         "daemon_stall_check_failed",
+                         "failure_recorded",
+                         "failure_escalated",
+                         "blocker_tracking",
+                         "blocker_escalated"
                        ])
+  @timeline_event_codes MapSet.new([
+                          "operator_action",
+                          "daemon_tick",
+                          "runtime_transition",
+                          "pause_detected",
+                          "recovery_started",
+                          "loop_started",
+                          "loop_completed"
+                        ])
 
   @type snapshot :: map()
 
@@ -102,9 +143,12 @@ defmodule ForgeloopV2.CoordinationAdvisor do
       events = map_value(snapshot, :events, "events") || []
       meta = normalize_events_meta(map_value(snapshot, :events_meta, "events_meta"))
       deduped = dedupe_events(events)
-      recommendations = evaluate_recommendations(deduped.unique, snapshot, playbook_id)
-      playbooks = build_playbooks(recommendations)
+      all_recommendations = evaluate_recommendations(deduped.unique, snapshot, nil)
+      all_playbooks = build_playbooks(all_recommendations)
+      recommendations = maybe_filter_recommendations(all_recommendations, playbook_id)
+      playbooks = maybe_filter_playbooks(all_playbooks, playbook_id)
       cursor = build_cursor(meta, after_cursor, deduped.unique)
+      warnings = warnings_for(cursor, playbook_id, playbooks)
 
       {:ok,
        %Result{
@@ -121,9 +165,11 @@ defmodule ForgeloopV2.CoordinationAdvisor do
            recommendations: length(recommendations),
            playbooks: summarize_playbooks(playbooks)
          },
+         brief: coordination_brief(snapshot, all_playbooks, warnings),
          recommendations: recommendations,
          playbooks: playbooks,
-         warnings: warnings_for(cursor, playbook_id, playbooks)
+         timeline: coordination_timeline(deduped.unique),
+         warnings: warnings
        }}
     end
   end
@@ -355,6 +401,18 @@ defmodule ForgeloopV2.CoordinationAdvisor do
     }
   end
 
+  defp maybe_filter_recommendations(recommendations, nil), do: recommendations
+
+  defp maybe_filter_recommendations(recommendations, playbook_id) do
+    Enum.filter(recommendations, &(&1.playbook_id == playbook_id))
+  end
+
+  defp maybe_filter_playbooks(playbooks, nil), do: playbooks
+
+  defp maybe_filter_playbooks(playbooks, playbook_id) do
+    Enum.filter(playbooks, &(&1.id == playbook_id))
+  end
+
   defp coordination_status(playbooks) do
     cond do
       Enum.any?(playbooks, &(&1.status == "actionable")) -> "actionable"
@@ -362,6 +420,227 @@ defmodule ForgeloopV2.CoordinationAdvisor do
       Enum.any?(playbooks, &(&1.status == "observe")) -> "observe"
       true -> "idle"
     end
+  end
+
+  defp coordination_timeline(events) do
+    events
+    |> Enum.filter(&timeline_event?/1)
+    |> Enum.map(&timeline_entry/1)
+    |> Enum.take(-@timeline_limit)
+  end
+
+  defp timeline_event?(event) do
+    MapSet.member?(@timeline_event_codes, event_code(event)) or
+      MapSet.member?(@failure_event_codes, event_code(event))
+  end
+
+  defp timeline_entry(event) do
+    code = event_code(event)
+
+    %TimelineEntry{
+      event_id: normalize_cursor(map_value(event, :event_id, "event_id")),
+      event_code: code,
+      event_action: normalize_cursor(map_value(event, :action, "action")),
+      occurred_at: event_timestamp(event),
+      surface: timeline_surface(event),
+      kind: timeline_kind(code),
+      title: timeline_title(event),
+      detail: timeline_detail(event),
+      related_playbook_ids: related_playbook_ids(event)
+    }
+  end
+
+  defp timeline_kind("operator_action"), do: "operator_action"
+  defp timeline_kind("daemon_tick"), do: "daemon_decision"
+
+  defp timeline_kind(code) do
+    if MapSet.member?(@failure_event_codes, code) do
+      "failure_signal"
+    else
+      "runtime_transition"
+    end
+  end
+
+  defp timeline_title(event) do
+    case event_code(event) do
+      "operator_action" ->
+        operator_timeline_title(event)
+
+      "daemon_tick" ->
+        daemon_timeline_title(event)
+
+      code when code in ["runtime_transition", "pause_detected", "recovery_started"] ->
+        runtime_timeline_title(event)
+
+      "loop_started" ->
+        "Managed run started"
+
+      "loop_completed" ->
+        "Managed run completed"
+
+      "loop_failed" ->
+        "Managed run failed"
+
+      "failure_recorded" ->
+        "Failure recorded for review"
+
+      "failure_escalated" ->
+        "Failure escalated for review"
+
+      "blocker_tracking" ->
+        "Blocker tracking advanced"
+
+      "blocker_escalated" ->
+        "Blocker escalated for review"
+
+      "babysitter_failed" ->
+        "Babysitter reported a failure"
+
+      "daemon_deploy_failed" ->
+        "Deploy request failed"
+
+      "daemon_ingest_logs_failed" ->
+        "Log ingest request failed"
+
+      "daemon_stall_check_failed" ->
+        "Daemon stall check failed"
+
+      other ->
+        humanize_value(other)
+    end
+  end
+
+  defp operator_timeline_title(event) do
+    action = normalize_cursor(map_value(event, :action, "action")) || "operator update"
+
+    case action do
+      "clear_pause" -> "Operator cleared pause"
+      "pause" -> "Operator requested pause"
+      "replan" -> "Operator requested replan"
+      "answer_question" -> "Operator answered a question"
+      "resolve_question" -> "Operator resolved a question"
+      other -> "Operator #{humanize_value(other)}"
+    end
+  end
+
+  defp daemon_timeline_title(event) do
+    action = normalize_cursor(map_value(event, :action, "action")) || "idle"
+    "Daemon decided #{humanize_value(action)}"
+  end
+
+  defp runtime_timeline_title(event) do
+    code = event_code(event)
+    action = normalize_cursor(map_value(event, :action, "action"))
+    status = normalize_cursor(map_value(event, :status, "status"))
+    transition = normalize_cursor(map_value(event, :transition, "transition"))
+
+    cond do
+      code == "pause_detected" -> "Runtime entered paused state"
+      code == "recovery_started" -> "Runtime started recovery"
+      action == "loop_started" -> "Managed run started"
+      action == "loop_completed" -> "Managed run completed"
+      action == "loop_failed" -> "Managed run failed"
+      status == "paused" -> "Runtime entered paused state"
+      transition in ["planning", "building"] -> "Runtime began #{transition}"
+      status == "idle" and transition == "completed" -> "Runtime returned to idle"
+      not is_nil(action) -> humanize_value(action)
+      not is_nil(status) -> "Runtime is #{status}"
+      true -> "Runtime updated"
+    end
+  end
+
+  defp timeline_detail(event) do
+    map_value(event, :reason, "reason") ||
+      map_value(event, :summary, "summary") ||
+      timeline_context_detail(event)
+  end
+
+  defp timeline_context_detail(event) do
+    [
+      maybe_context_label("requested", map_value(event, :requested_action, "requested_action")),
+      maybe_context_label("status", map_value(event, :status, "status")),
+      maybe_context_label("transition", map_value(event, :transition, "transition")),
+      maybe_context_label("mode", map_value(event, :mode, "mode")),
+      maybe_context_label("surface", timeline_surface(event)),
+      maybe_context_label("branch", map_value(event, :branch, "branch"))
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      parts -> Enum.join(parts, " · ")
+    end
+  end
+
+  defp maybe_context_label(_label, nil), do: nil
+
+  defp maybe_context_label(label, value) do
+    normalized = normalize_cursor(to_string(value))
+
+    if is_nil(normalized) or normalized in ["unknown", ""] do
+      nil
+    else
+      "#{label} #{normalized}"
+    end
+  end
+
+  defp timeline_surface(event) do
+    normalize_cursor(map_value(event, :surface, "surface")) ||
+      if(event_code(event) == "daemon_tick", do: "daemon", else: nil)
+  end
+
+  defp related_playbook_ids(event) do
+    rules()
+    |> Enum.filter(&matches_rule?(&1.id, event))
+    |> Enum.map(& &1.playbook_id)
+    |> Enum.uniq()
+  end
+
+  defp coordination_brief(snapshot, playbooks, warnings) do
+    cond do
+      playbook = Enum.find(playbooks, &(&1.status == "actionable")) ->
+        "Actionable: #{playbook.title} — #{playbook.reason}"
+
+      playbook = Enum.find(playbooks, &(&1.status == "blocked")) ->
+        "Blocked: #{playbook.title} — #{playbook.reason}"
+
+      playbook = Enum.find(playbooks, &(&1.status == "observe")) ->
+        "Observe: #{playbook.title} — #{playbook.reason}"
+
+      "cursor_not_found_reset_required" in warnings or
+          "replay_truncated_reset_required" in warnings ->
+        "Partial context: reset the coordination cursor before applying another action in this bounded window."
+
+      pause_requested?(snapshot) and awaiting_question_count(snapshot) > 0 ->
+        "Pause is still requested while #{awaiting_question_count(snapshot)} question(s) await a human response."
+
+      pause_requested?(snapshot) ->
+        "Pause is still requested; review the current state before clearing it manually."
+
+      replan_requested?(snapshot) ->
+        "A bounded replan is already queued for the canonical backlog."
+
+      needs_build?(snapshot) ->
+        "Canonical backlog work still needs a build pass, but no coordination playbook is currently triggered."
+
+      babysitter_running?(snapshot) ->
+        "A babysitter-managed run is active; wait for it to settle before taking another coordination action."
+
+      runtime_status(snapshot) not in ["idle", "unknown"] ->
+        "Runtime is #{runtime_status(snapshot)} with no additional coordination playbooks currently triggered."
+
+      true ->
+        "Coordination is idle for the current bounded event window."
+    end
+  end
+
+  defp humanize_value(value) do
+    value
+    |> to_string()
+    |> String.replace("_", " ")
+    |> String.replace("-", " ")
+    |> String.trim()
+    |> String.split(" ", trim: true)
+    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   defp playbook_reason(_rule, recommendation, "actionable"), do: recommendation.reason

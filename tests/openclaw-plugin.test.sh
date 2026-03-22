@@ -54,6 +54,19 @@ globalThis.fetch = async (url, options = {}) => {
         events: [{ event_type: "daemon_tick" }],
         coordination: makeCoordination({
           status: "actionable",
+          brief: "Actionable: Queue the next rebuild pass — Pause was cleared while the backlog still needs a build and no replan is currently queued.",
+          timeline: [
+            {
+              event_id: "evt-1",
+              event_code: "daemon_tick",
+              occurred_at: "2026-03-21T00:00:01Z",
+              kind: "daemon_decision",
+              title: "Daemon decided Build",
+              detail: "Backlog still needs work.",
+              surface: "daemon",
+              related_playbook_ids: []
+            }
+          ],
           summary: { recommendations: 1, playbooks: { total: 1, actionable: 1, blocked: 0, observe: 0 } }
         }),
         workflows: {
@@ -104,6 +117,7 @@ assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPL
 assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
 assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active, failed=1, escalated=0, start_failed=0\)/);
 assert.match(overviewResult.content[0].text, /Coordination: actionable \(1 playbooks, 1 recommendations\)/);
+assert.match(overviewResult.content[0].text, /Coordination brief: Actionable: Queue the next rebuild pass/);
 assert.match(overviewResult.content[0].text, /Workflow alpha: run failed @ 2026-03-21T00:00:02Z/);
 assert.match(overviewResult.content[0].text, /Recent events: 2/);
 assert.match(overviewResult.content[0].text, /Event daemon_tick @ 2026-03-21T00:00:01Z/);
@@ -155,6 +169,30 @@ globalThis.fetch = async (url) => {
       data: makeCoordination({
         status: "actionable",
         cursor: { requested_after: "evt-0", next_after: "evt-3", cursor_found: true, truncated: false, reset_required: false },
+        brief: "Actionable: Queue the next rebuild pass — Pause was cleared while the backlog still needs a build and no replan is currently queued.",
+        timeline: [
+          {
+            event_id: "evt-1",
+            event_code: "daemon_tick",
+            occurred_at: "2026-03-21T01:00:00Z",
+            kind: "daemon_decision",
+            title: "Daemon decided Build",
+            detail: "Backlog still needs work.",
+            surface: "daemon",
+            related_playbook_ids: []
+          },
+          {
+            event_id: "evt-3",
+            event_code: "operator_action",
+            event_action: "clear_pause",
+            occurred_at: "2026-03-21T01:01:00Z",
+            kind: "operator_action",
+            title: "Operator cleared pause",
+            detail: null,
+            surface: "ui",
+            related_playbook_ids: ["post_clear_pause_rebuild"]
+          }
+        ],
         summary: {
           fetched_events: 3,
           unique_events: 2,
@@ -218,6 +256,9 @@ assert.equal(recommendPayload.coordination_source, "service");
 assert.equal(recommendPayload.status, "actionable");
 assert.equal(recommendPayload.event_source, "events_api");
 assert.equal(recommendPayload.cursor.next_after, "evt-3");
+assert.match(recommendPayload.brief, /^Actionable: Queue the next rebuild pass/);
+assert.equal(recommendPayload.timeline[0].kind, "daemon_decision");
+assert.equal(recommendPayload.timeline[1].related_playbook_ids[0], "post_clear_pause_rebuild");
 assert.equal(recommendPayload.summary.duplicate_events, 1);
 assert.equal(recommendPayload.summary.recommendations, 1);
 assert.deepEqual(recommendPayload.summary.playbooks, { total: 1, actionable: 1, blocked: 0, observe: 0 });
@@ -479,6 +520,8 @@ assert.ok(fallbackPayload.warnings.includes("events_api_unavailable"));
 assert.ok(fallbackPayload.warnings.includes("cursor_reset_required_after_fallback"));
 assert.equal(fallbackPayload.cursor.reset_required, true);
 assert.equal(fallbackPayload.cursor.next_after, "evt-base");
+assert.match(fallbackPayload.brief, /^Actionable: Stabilize after a failure signal|^Blocked: Stabilize after a failure signal|^Observe: Stabilize after a failure signal/);
+assert.equal(fallbackPayload.timeline[0].kind, "failure_signal");
 assert.equal(fallbackPayload.applied.result, "not_requested");
 assert.equal(fallbackPayload.playbooks[0].id, "failure_stabilization");
 assert.equal(fallbackPayload.playbooks[0].recommended_action, "pause");
@@ -503,6 +546,20 @@ globalThis.fetch = async (url, options = {}) => {
       data: makeCoordination({
         status: "actionable",
         selected_playbook_id: "post_clear_pause_rebuild",
+        brief: "Actionable: Queue the next rebuild pass — Pause was cleared while the backlog still needs a build and no replan is currently queued.",
+        timeline: [
+          {
+            event_id: "evt-clear",
+            event_code: "operator_action",
+            event_action: "clear_pause",
+            occurred_at: "2026-03-21T03:01:00Z",
+            kind: "operator_action",
+            title: "Operator cleared pause",
+            detail: null,
+            surface: "service",
+            related_playbook_ids: ["post_clear_pause_rebuild"]
+          }
+        ],
         cursor: { requested_after: "evt-prev", next_after: "evt-clear", cursor_found: true, truncated: false, reset_required: false },
         summary: {
           fetched_events: 2,
@@ -565,6 +622,8 @@ assert.equal(serviceCoordinationFetches, 2);
 assert.equal(serviceReplanCalls, 1);
 assert.equal(targetedApplyPayload.coordination_source, "service");
 assert.equal(targetedApplyPayload.selected_playbook_id, "post_clear_pause_rebuild");
+assert.match(targetedApplyPayload.brief, /^Actionable: Queue the next rebuild pass/);
+assert.equal(targetedApplyPayload.timeline[0].kind, "operator_action");
 assert.equal(targetedApplyPayload.applied.attempted, true);
 assert.equal(targetedApplyPayload.applied.action, "replan");
 assert.equal(targetedApplyPayload.applied.result, "applied");
@@ -817,6 +876,7 @@ function makeCoordination(overrides = {}) {
     status: "idle",
     selected_playbook_id: null,
     event_source: "events_api",
+    brief: "Coordination is idle for the current bounded event window.",
     cursor: {
       requested_after: null,
       next_after: null,
@@ -836,8 +896,9 @@ function makeCoordination(overrides = {}) {
     },
     recommendations: overrides.recommendations || [],
     playbooks: overrides.playbooks || [],
+    timeline: overrides.timeline || [],
     warnings: overrides.warnings || [],
-    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => !["cursor", "summary", "recommendations", "playbooks", "warnings"].includes(key)))
+    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => !["cursor", "summary", "recommendations", "playbooks", "timeline", "warnings"].includes(key)))
   };
 }
 
