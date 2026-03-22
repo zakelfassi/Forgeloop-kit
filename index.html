@@ -1442,7 +1442,7 @@ flowchart LR
               Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. The HUD/OpenClaw plane now also
               projects a read-only repo-local tracker view from backlog items + workflow packs, can trigger managed workflow
               <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, exposes canonical workflow artifacts plus a bounded history sidecar,
-              and now treats <code>.forgeloop/v2/events.log</code> as a first-class event surface through bounded <code>/api/events</code> replay/tails plus snapshot-bootstrap/live SSE, with OpenClaw able to review one caller-scoped event window and optionally apply one conservative control action,
+              and now treats <code>.forgeloop/v2/events.log</code> as a first-class event surface through bounded <code>/api/events</code> replay/tails plus snapshot-bootstrap/live SSE, with OpenClaw able to review one caller-scoped event window, derive invocation-scoped operator playbooks, and optionally apply one conservative control action,
               while tracker/<code>prd.json</code> unification remains a later slice and workflow metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
             </p>
           </div>

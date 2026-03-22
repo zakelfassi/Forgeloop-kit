@@ -4,6 +4,11 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
 const PLUGIN_ID = "forgeloop";
 const ALLOWED_ORCHESTRATION_ACTIONS = new Set(["pause", "clear_pause", "replan"]);
+const ORCHESTRATION_PLAYBOOK_IDS = new Set([
+  "human_answer_recovery",
+  "post_clear_pause_rebuild",
+  "failure_stabilization"
+]);
 const FAILURE_EVENT_CODES = new Set([
   "loop_failed",
   "babysitter_failed",
@@ -14,6 +19,30 @@ const ORCHESTRATION_RULES = [
   {
     id: "clear_pause_after_human_answer",
     action: "clear_pause",
+    playbookId: "human_answer_recovery",
+    playbookTitle: "Resume after human answers land",
+    playbookGoal: "Clear a stale pause once human answers have landed and no unanswered questions remain.",
+    observeBlockedReasons: ["pause_not_requested", "runtime_not_paused"],
+    controlStepTitle: "Clear the pause request",
+    controlStepDetail: "Clear pause so Forgeloop can resume normal operation after the human response is captured.",
+    manualSteps(recommendation) {
+      return [
+        {
+          kind: "manual",
+          title: "Verify unanswered questions are cleared",
+          detail: recommendation.blocked_by.includes("unanswered_questions_remain")
+            ? "Answer or resolve the remaining canonical questions before clearing pause."
+            : "Confirm QUESTIONS.md and the HUD show no remaining unanswered questions."
+        },
+        {
+          kind: "manual",
+          title: "Wait for active managed runs to settle",
+          detail: recommendation.blocked_by.includes("babysitter_running")
+            ? "A babysitter-managed run is still active. Let it finish or stop it before clearing pause."
+            : "If a managed run restarts immediately, verify its babysitter state before intervening again."
+        }
+      ];
+    },
     matches(event) {
       return eventCode(event) === "operator_action" && ["answer_question", "resolve_question"].includes(event?.action);
     },
@@ -32,6 +61,30 @@ const ORCHESTRATION_RULES = [
   {
     id: "replan_after_clear_pause",
     action: "replan",
+    playbookId: "post_clear_pause_rebuild",
+    playbookTitle: "Queue the next rebuild pass",
+    playbookGoal: "Request a new plan/build pass after pause is cleared when canonical backlog work is still pending.",
+    observeBlockedReasons: ["backlog_not_ready", "replan_already_requested"],
+    controlStepTitle: "Request replan",
+    controlStepDetail: "Queue one bounded replan so the managed control plane can pick up the next backlog pass.",
+    manualSteps(recommendation) {
+      return [
+        {
+          kind: "manual",
+          title: "Confirm the canonical backlog still needs a build",
+          detail: recommendation.blocked_by.includes("backlog_not_ready")
+            ? "IMPLEMENTATION_PLAN.md no longer signals pending phase-1 work, so observe instead of queuing another run."
+            : "Verify IMPLEMENTATION_PLAN.md still reflects work that should trigger a new build pass."
+        },
+        {
+          kind: "manual",
+          title: "Avoid overlapping managed runs",
+          detail: recommendation.blocked_by.includes("babysitter_running")
+            ? "A babysitter-managed run is already active. Let it finish before queuing another replan."
+            : "Keep the next run reviewable; do not stack multiple rebuild requests."
+        }
+      ];
+    },
     matches(event) {
       return eventCode(event) === "operator_action" && event?.action === "clear_pause";
     },
@@ -50,6 +103,28 @@ const ORCHESTRATION_RULES = [
   {
     id: "pause_after_failure_signal",
     action: "pause",
+    playbookId: "failure_stabilization",
+    playbookTitle: "Stabilize after a failure signal",
+    playbookGoal: "Pause the control plane after a fresh failure signal so the operator can review evidence before more work starts.",
+    observeBlockedReasons: ["pause_already_requested", "runtime_already_blocked"],
+    controlStepTitle: "Pause the control plane",
+    controlStepDetail: "Write one canonical pause request so the runtime stops advancing while the failure is reviewed.",
+    manualSteps(recommendation) {
+      return [
+        {
+          kind: "manual",
+          title: "Inspect failure evidence",
+          detail: `Review the latest failure artifacts and event trail for ${recommendation.event_code || "the failure signal"} before resuming.`
+        },
+        {
+          kind: "manual",
+          title: "Avoid interrupting an active babysitter run",
+          detail: recommendation.blocked_by.includes("babysitter_running")
+            ? "A babysitter-managed run is still active. Stop or let it settle before pausing again."
+            : "If a managed run is already stopping, wait for it to finish before taking more action."
+        }
+      ];
+    },
     matches(event) {
       return FAILURE_EVENT_CODES.has(eventCode(event));
     },
@@ -237,7 +312,11 @@ function buildOrchestrationTool(api) {
       properties: {
         after: { type: "string" },
         limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
-        mode: { type: "string", enum: ["recommend", "apply"], default: "recommend" }
+        mode: { type: "string", enum: ["recommend", "apply"], default: "recommend" },
+        playbookId: {
+          type: "string",
+          enum: ["human_answer_recovery", "post_clear_pause_rebuild", "failure_stabilization"]
+        }
       }
     },
     async execute(_id, params = {}) {
@@ -248,6 +327,10 @@ function buildOrchestrationTool(api) {
 
       const after = normalizeCursor(params.after);
       const limit = normalizeLimit(params.limit, normalizeLimit(pluginConfig(api).orchestrationDefaultLimit, DEFAULT_LIMIT));
+      const playbookId = normalizePlaybookId(
+        params.playbookId,
+        Object.prototype.hasOwnProperty.call(params || {}, "playbookId")
+      );
       const overviewPayload = await fetchOverview(api, limit);
       const overview = overviewPayload?.data || {};
       const eventsWindow = await fetchEventsWindow(api, {
@@ -260,6 +343,7 @@ function buildOrchestrationTool(api) {
         mode,
         after,
         limit,
+        playbookId,
         overview,
         eventsWindow
       });
@@ -269,6 +353,7 @@ function buildOrchestrationTool(api) {
         `Service: ${serviceBaseUrl(api)}`,
         `Event source: ${result.event_source}`,
         `Cursor: requested=${result.cursor.requested_after || "none"} next=${result.cursor.next_after || "none"}`,
+        `Playbooks: ${result.summary.playbooks.total}${result.selected_playbook_id ? ` (selected=${result.selected_playbook_id})` : ""}`,
         `Recommendations: ${result.summary.recommendations}`,
         result.applied.attempted
           ? `Applied: ${result.applied.action || "none"} (${result.applied.result})`
@@ -283,7 +368,7 @@ function buildOrchestrationTool(api) {
   };
 }
 
-async function executeOrchestration(api, { mode, after, limit, overview, eventsWindow }) {
+async function executeOrchestration(api, { mode, after, limit, playbookId, overview, eventsWindow }) {
   const warnings = [];
   const meta = normalizeEventsMeta(eventsWindow.meta);
   const deduped = dedupeEvents(eventsWindow.items);
@@ -293,7 +378,14 @@ async function executeOrchestration(api, { mode, after, limit, overview, eventsW
   const replayTruncated = after ? meta.truncated : false;
   const resetRequired = Boolean(unsafeFallback || (after && (cursorFound === false || replayTruncated)));
   const actionableEvents = deduped.unique.filter(isPotentiallyActionableEvent);
-  const recommendations = evaluateRecommendations(deduped.unique, overview);
+  const allRecommendations = evaluateRecommendations(deduped.unique, overview);
+  const allPlaybooks = buildPlaybooks(allRecommendations);
+  const recommendations = playbookId
+    ? allRecommendations.filter((recommendation) => recommendation.playbook_id === playbookId)
+    : allRecommendations;
+  const playbooks = playbookId
+    ? allPlaybooks.filter((playbook) => playbook.id === playbookId)
+    : allPlaybooks;
 
   if (unsafeFallback) {
     warnings.push("events_api_unavailable");
@@ -308,11 +400,15 @@ async function executeOrchestration(api, { mode, after, limit, overview, eventsW
   if (mode === "apply" && !after) {
     warnings.push("apply_requires_after_cursor");
   }
+  if (playbookId && playbooks.length === 0) {
+    warnings.push("selected_playbook_not_triggered");
+  }
 
   const result = {
     mode,
     service: serviceBaseUrl(api),
     event_source: eventsWindow.source,
+    selected_playbook_id: playbookId,
     cursor: {
       requested_after: after,
       next_after: nextAfter,
@@ -325,9 +421,11 @@ async function executeOrchestration(api, { mode, after, limit, overview, eventsW
       unique_events: deduped.unique.length,
       duplicate_events: deduped.duplicates,
       actionable_events: actionableEvents.length,
-      recommendations: recommendations.length
+      recommendations: recommendations.length,
+      playbooks: summarizePlaybooks(playbooks)
     },
     recommendations,
+    playbooks,
     applied: {
       attempted: false,
       action: null,
@@ -363,6 +461,8 @@ async function executeOrchestration(api, { mode, after, limit, overview, eventsW
     result.applied.action = candidate.action;
     result.applied.reason = rechecked.blocked_by[0] || "state_changed";
     result.recommendations = replaceRecommendation(result.recommendations, rechecked);
+    result.playbooks = replacePlaybook(result.playbooks, buildPlaybook(rechecked));
+    result.summary.playbooks = summarizePlaybooks(result.playbooks);
     return result;
   }
 
@@ -409,6 +509,11 @@ function replaceRecommendation(recommendations, updated) {
   return recommendations.map((recommendation) => recommendation.rule === updated.rule ? updated : recommendation);
 }
 
+function replacePlaybook(playbooks, updated) {
+  if (!updated) return playbooks;
+  return playbooks.map((playbook) => playbook.id === updated.id ? updated : playbook);
+}
+
 function evaluateRecommendations(events, overview) {
   const newestFirst = [...events].reverse();
   const recommendations = [];
@@ -421,9 +526,11 @@ function evaluateRecommendations(events, overview) {
     recommendations.push({
       rule: rule.id,
       action: rule.action,
+      playbook_id: rule.playbookId,
       event_id: event.event_id,
       event_code: eventCode(event),
       event_action: event?.action || null,
+      event_occurred_at: eventTimestamp(event),
       reason: rule.reason(event, overview),
       apply_eligible: blocked_by.length === 0,
       blocked_by
@@ -431,6 +538,82 @@ function evaluateRecommendations(events, overview) {
   }
 
   return recommendations;
+}
+
+function buildPlaybooks(recommendations) {
+  return recommendations.map((recommendation) => buildPlaybook(recommendation)).filter(Boolean);
+}
+
+function buildPlaybook(recommendation) {
+  const rule = ORCHESTRATION_RULES.find((entry) => entry.id === recommendation?.rule);
+  if (!rule) return null;
+
+  const status = playbookStatus(rule, recommendation.blocked_by);
+  const recommendedAction = status === "observe" ? null : recommendation.action;
+  const steps = [];
+
+  if (recommendedAction) {
+    steps.push({
+      kind: "control_action",
+      title: rule.controlStepTitle,
+      detail: rule.controlStepDetail,
+      action: recommendedAction,
+      apply_eligible: recommendation.apply_eligible,
+      blocked_by: recommendation.blocked_by
+    });
+  }
+
+  for (const step of rule.manualSteps(recommendation)) {
+    steps.push(step);
+  }
+
+  return {
+    id: rule.playbookId,
+    title: rule.playbookTitle,
+    goal: rule.playbookGoal,
+    status,
+    reason: playbookReason(rule, recommendation, status),
+    evidence: [
+      {
+        event_id: recommendation.event_id || null,
+        event_code: recommendation.event_code,
+        occurred_at: recommendation.event_occurred_at || null,
+        action: recommendation.event_action || null
+      }
+    ],
+    recommended_action: recommendedAction,
+    apply_eligible: recommendation.apply_eligible,
+    blocked_by: recommendation.blocked_by,
+    steps
+  };
+}
+
+function summarizePlaybooks(playbooks) {
+  return {
+    total: playbooks.length,
+    actionable: playbooks.filter((playbook) => playbook.status === "actionable").length,
+    blocked: playbooks.filter((playbook) => playbook.status === "blocked").length,
+    observe: playbooks.filter((playbook) => playbook.status === "observe").length
+  };
+}
+
+function playbookReason(rule, recommendation, status) {
+  if (status === "actionable") return recommendation.reason;
+  const reasons = describeBlockedReasons(recommendation.blocked_by);
+  if (status === "observe") {
+    return `${rule.playbookTitle} is already satisfied or safely waiting: ${reasons}.`;
+  }
+  return `${rule.playbookTitle} is currently blocked by: ${reasons}.`;
+}
+
+function describeBlockedReasons(blockedBy) {
+  if (!Array.isArray(blockedBy) || blockedBy.length === 0) return "no blockers";
+  return blockedBy.map((reason) => reason.replace(/_/g, " ")).join(", ");
+}
+
+function playbookStatus(rule, blockedBy) {
+  if (!Array.isArray(blockedBy) || blockedBy.length === 0) return "actionable";
+  return blockedBy.every((reason) => rule.observeBlockedReasons.includes(reason)) ? "observe" : "blocked";
 }
 
 function recheckRecommendation(recommendation, overview) {
@@ -444,6 +627,7 @@ function recheckRecommendation(recommendation, overview) {
   const blocked_by = rule.blockedBy(event, overview);
   return {
     ...recommendation,
+    reason: rule.reason(event, overview),
     apply_eligible: blocked_by.length === 0,
     blocked_by
   };
@@ -601,6 +785,21 @@ function normalizeLimit(value, fallback = DEFAULT_LIMIT) {
   const parsed = Number(value ?? fallback);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(Math.trunc(parsed), MAX_LIMIT);
+}
+
+function normalizePlaybookId(value, provided = false) {
+  if (!provided && value == null) return null;
+  if (typeof value !== "string") {
+    throw new Error("Forgeloop playbookId must be a non-empty string when provided");
+  }
+  const normalized = normalizeCursor(value);
+  if (!normalized) {
+    throw new Error("Forgeloop playbookId must be a non-empty string when provided");
+  }
+  if (!ORCHESTRATION_PLAYBOOK_IDS.has(normalized)) {
+    throw new Error(`Unsupported Forgeloop playbookId: ${normalized}`);
+  }
+  return normalized;
 }
 
 function normalizeCursor(value) {

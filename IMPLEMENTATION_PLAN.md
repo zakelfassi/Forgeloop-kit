@@ -106,6 +106,23 @@ Format:
     - hidden plugin-side cursor persistence
     - autonomous run/workflow/question mutation from the plugin
 
+- [x] Add invocation-scoped OpenClaw operator playbooks on top of the bounded event window seam
+  - Acceptance:
+    - `forgeloop_orchestrate` returns stable operator-readable playbooks in addition to the lower-level recommendations.
+    - An optional playbook selector can scope one invocation without changing cursor semantics or mutation safety.
+    - Apply mode still executes at most one bounded pause / clear-pause / replan action after the same replay-safety checks and fresh-overview recheck.
+    - Fallback `/api/events` outages remain read-only and do not create hidden cursor persistence or background orchestration.
+  - REQUIRED TESTS:
+    - `tests/openclaw-plugin.test.sh`
+  - Shipped behavior:
+    - `forgeloop_orchestrate` now emits invocation-scoped playbooks for failure stabilization, human-answer recovery, and post-clear-pause rebuild follow-through.
+    - Playbooks reuse the same canonical `/api/events` + `/api/overview` signals, expose evidence / blocked reasons / steps, and keep repo-local files plus loopback control helpers authoritative.
+    - Optional `playbookId` targeting can scope recommendation/apply behavior to one playbook while keeping apply capped at one action and preserving caller-managed `after` / `next_after` cursors.
+  - Deferred after this slice:
+    - long-lived `/api/stream`-driven OpenClaw playbook loops
+    - hidden plugin-side cursor persistence
+    - autonomous run/workflow/question mutation fan-out from the plugin
+
 - [x] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
     - JSONL remains the durable source of truth.

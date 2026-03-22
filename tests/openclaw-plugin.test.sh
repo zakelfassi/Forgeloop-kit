@@ -12,9 +12,14 @@ import { pathToFileURL } from "node:url";
 const root = process.argv[2];
 const pluginRoot = path.join(root, ".openclaw", "extensions", "forgeloop");
 const manifest = JSON.parse(fs.readFileSync(path.join(pluginRoot, "openclaw.plugin.json"), "utf8"));
+const packageJson = JSON.parse(fs.readFileSync(path.join(pluginRoot, "package.json"), "utf8"));
+const entrySource = fs.readFileSync(path.join(pluginRoot, "index.ts"), "utf8");
 assert.equal(manifest.id, "forgeloop");
 assert.equal(manifest.configSchema.type, "object");
 assert.equal(manifest.configSchema.properties.allowOrchestrationApply.default, false);
+assert.equal(manifest.version, packageJson.version);
+assert.deepEqual(packageJson.openclaw.extensions, ["./index.ts"]);
+assert.match(entrySource, /export \{ default \} from "\.\/index\.mjs";/);
 
 const plugin = (await import(pathToFileURL(path.join(pluginRoot, "index.mjs")).href)).default;
 
@@ -154,10 +159,103 @@ assert.equal(recommendPayload.event_source, "events_api");
 assert.equal(recommendPayload.cursor.next_after, "evt-3");
 assert.equal(recommendPayload.summary.duplicate_events, 1);
 assert.equal(recommendPayload.summary.recommendations, 1);
+assert.deepEqual(recommendPayload.summary.playbooks, { total: 1, actionable: 1, blocked: 0, observe: 0 });
 assert.equal(recommendPayload.recommendations[0].rule, "replan_after_clear_pause");
 assert.equal(recommendPayload.recommendations[0].action, "replan");
+assert.equal(recommendPayload.recommendations[0].playbook_id, "post_clear_pause_rebuild");
 assert.equal(recommendPayload.recommendations[0].apply_eligible, true);
+assert.equal(recommendPayload.playbooks[0].id, "post_clear_pause_rebuild");
+assert.equal(recommendPayload.playbooks[0].status, "actionable");
+assert.equal(recommendPayload.playbooks[0].recommended_action, "replan");
+assert.equal(recommendPayload.playbooks[0].steps[0].kind, "control_action");
+assert.equal(recommendPayload.playbooks[0].steps[0].action, "replan");
 assert.equal(recommendPayload.applied.result, "not_requested");
+
+const absentPlaybookResult = await tools.forgeloop_orchestrate.execute("4b", {
+  mode: "recommend",
+  after: "evt-0",
+  limit: 9,
+  playbookId: "human_answer_recovery"
+});
+const absentPlaybookPayload = parsePayload(absentPlaybookResult);
+assert.equal(absentPlaybookPayload.selected_playbook_id, "human_answer_recovery");
+assert.equal(absentPlaybookPayload.summary.recommendations, 0);
+assert.deepEqual(absentPlaybookPayload.summary.playbooks, { total: 0, actionable: 0, blocked: 0, observe: 0 });
+assert.deepEqual(absentPlaybookPayload.recommendations, []);
+assert.deepEqual(absentPlaybookPayload.playbooks, []);
+assert.ok(absentPlaybookPayload.warnings.includes("selected_playbook_not_triggered"));
+
+const blockedOverview = makeOverview({
+  runtime_state: { status: "paused", mode: "build", surface: "service", branch: "main" },
+  control_flags: { "pause_requested?": true, "replan_requested?": false },
+  questions: [{ id: "Q-blocked", status_kind: "awaiting_response" }],
+  babysitter: { "running?": false }
+});
+globalThis.fetch = async (url) => {
+  const parsed = new URL(String(url));
+  if (parsed.pathname === "/api/overview") {
+    return okJson({ data: blockedOverview });
+  }
+  if (parsed.pathname === "/api/events") {
+    return okJson({
+      data: [
+        { event_id: "evt-blocked", event_code: "operator_action", occurred_at: "2026-03-21T01:30:00Z", action: "answer_question" }
+      ],
+      meta: { latest_event_id: "evt-blocked", returned_count: 1, limit: 6, "cursor_found?": true, "truncated?": false }
+    });
+  }
+  throw new Error(`Unexpected blocked fetch: ${url}`);
+};
+
+const blockedResult = await tools.forgeloop_orchestrate.execute("4c", {
+  mode: "recommend",
+  after: "evt-prev-blocked",
+  limit: 6,
+  playbookId: "human_answer_recovery"
+});
+const blockedPayload = parsePayload(blockedResult);
+assert.equal(blockedPayload.playbooks[0].id, "human_answer_recovery");
+assert.equal(blockedPayload.playbooks[0].status, "blocked");
+assert.equal(blockedPayload.playbooks[0].recommended_action, "clear_pause");
+assert.ok(blockedPayload.playbooks[0].blocked_by.includes("unanswered_questions_remain"));
+assert.equal(blockedPayload.playbooks[0].steps[0].kind, "control_action");
+assert.equal(blockedPayload.playbooks[0].steps[0].apply_eligible, false);
+assert.deepEqual(blockedPayload.summary.playbooks, { total: 1, actionable: 0, blocked: 1, observe: 0 });
+
+const observeOverview = makeOverview({
+  runtime_state: { status: "paused", mode: "build", surface: "service", branch: "main" },
+  control_flags: { "pause_requested?": true, "replan_requested?": false },
+  questions: [],
+  babysitter: { "running?": false }
+});
+globalThis.fetch = async (url) => {
+  const parsed = new URL(String(url));
+  if (parsed.pathname === "/api/overview") {
+    return okJson({ data: observeOverview });
+  }
+  if (parsed.pathname === "/api/events") {
+    return okJson({
+      data: [
+        { event_id: "evt-observe", event_code: "loop_failed", occurred_at: "2026-03-21T01:45:00Z" }
+      ],
+      meta: { latest_event_id: "evt-observe", returned_count: 1, limit: 6, "cursor_found?": true, "truncated?": false }
+    });
+  }
+  throw new Error(`Unexpected observe fetch: ${url}`);
+};
+
+const observeResult = await tools.forgeloop_orchestrate.execute("4d", {
+  mode: "recommend",
+  after: "evt-prev-observe",
+  limit: 6,
+  playbookId: "failure_stabilization"
+});
+const observePayload = parsePayload(observeResult);
+assert.equal(observePayload.playbooks[0].id, "failure_stabilization");
+assert.equal(observePayload.playbooks[0].status, "observe");
+assert.equal(observePayload.playbooks[0].recommended_action, null);
+assert.equal(observePayload.playbooks[0].steps[0].kind, "manual");
+assert.deepEqual(observePayload.summary.playbooks, { total: 1, actionable: 0, blocked: 0, observe: 1 });
 
 let resetOverview = makeOverview({ events: [] });
 globalThis.fetch = async (url) => {
@@ -198,7 +296,12 @@ globalThis.fetch = async (url) => {
   throw new Error(`Unexpected fallback fetch: ${url}`);
 };
 
-const fallbackResult = await tools.forgeloop_orchestrate.execute("6", { mode: "recommend", after: "evt-base", limit: 4 });
+const fallbackResult = await tools.forgeloop_orchestrate.execute("6", {
+  mode: "recommend",
+  after: "evt-base",
+  limit: 4,
+  playbookId: "failure_stabilization"
+});
 const fallbackPayload = parsePayload(fallbackResult);
 assert.equal(fallbackPayload.event_source, "overview_fallback");
 assert.ok(fallbackPayload.warnings.includes("events_api_unavailable"));
@@ -207,49 +310,66 @@ assert.equal(fallbackPayload.cursor.reset_required, true);
 assert.equal(fallbackPayload.cursor.next_after, "evt-base");
 assert.equal(fallbackPayload.applied.result, "not_requested");
 assert.equal(fallbackPayload.summary.recommendations, 1);
-assert.equal(fallbackPayload.recommendations[0].action, "pause");
+assert.equal(fallbackPayload.playbooks[0].id, "failure_stabilization");
+assert.equal(fallbackPayload.playbooks[0].status, "actionable");
+assert.equal(fallbackPayload.playbooks[0].recommended_action, "pause");
 
-let applyOverview = makeOverview({
+let targetedApplyOverview = makeOverview({
   runtime_state: { status: "paused", mode: "build", surface: "service", branch: "main" },
   control_flags: { "pause_requested?": true, "replan_requested?": false },
   questions: [],
   babysitter: { "running?": false }
 });
 let clearPauseCalls = 0;
+let replanCalls = 0;
 globalThis.fetch = async (url, options = {}) => {
   const parsed = new URL(String(url));
   if (parsed.pathname === "/api/overview") {
-    return okJson({ data: applyOverview });
+    return okJson({ data: targetedApplyOverview });
   }
   if (parsed.pathname === "/api/events") {
     return okJson({
       data: [
-        { event_id: "evt-answer", event_code: "operator_action", occurred_at: "2026-03-21T03:00:00Z", action: "answer_question" }
+        { event_id: "evt-answer", event_code: "operator_action", occurred_at: "2026-03-21T03:00:00Z", action: "answer_question" },
+        { event_id: "evt-clear", event_code: "operator_action", occurred_at: "2026-03-21T03:01:00Z", action: "clear_pause" }
       ],
-      meta: { latest_event_id: "evt-answer", returned_count: 1, limit: 6, "cursor_found?": true, "truncated?": false }
+      meta: { latest_event_id: "evt-clear", returned_count: 2, limit: 6, "cursor_found?": true, "truncated?": false }
     });
   }
   if (parsed.pathname === "/api/control/clear-pause") {
     clearPauseCalls += 1;
+    return okJson({ data: { action: "clear_pause", ok: true } });
+  }
+  if (parsed.pathname === "/api/control/replan") {
+    replanCalls += 1;
     assert.deepEqual(JSON.parse(options.body), {});
-    applyOverview = makeOverview({
-      runtime_state: { status: "running", mode: "build", surface: "service", branch: "main" },
-      control_flags: { "pause_requested?": false, "replan_requested?": false },
+    targetedApplyOverview = makeOverview({
+      runtime_state: { status: "paused", mode: "build", surface: "service", branch: "main" },
+      control_flags: { "pause_requested?": true, "replan_requested?": true },
       questions: [],
       babysitter: { "running?": false }
     });
-    return okJson({ data: { action: "clear_pause", ok: true } });
+    return okJson({ data: { action: "replan", ok: true } });
   }
-  throw new Error(`Unexpected apply fetch: ${url}`);
+  throw new Error(`Unexpected targeted apply fetch: ${url}`);
 };
 
-const applyResult = await tools.forgeloop_orchestrate.execute("7", { mode: "apply", after: "evt-prev", limit: 6 });
-const applyPayload = parsePayload(applyResult);
-assert.equal(clearPauseCalls, 1);
-assert.equal(applyPayload.applied.attempted, true);
-assert.equal(applyPayload.applied.action, "clear_pause");
-assert.equal(applyPayload.applied.result, "applied");
-assert.equal(applyPayload.cursor.next_after, "evt-answer");
+const targetedApplyResult = await tools.forgeloop_orchestrate.execute("7", {
+  mode: "apply",
+  after: "evt-prev",
+  limit: 6,
+  playbookId: "post_clear_pause_rebuild"
+});
+const targetedApplyPayload = parsePayload(targetedApplyResult);
+assert.equal(clearPauseCalls, 0);
+assert.equal(replanCalls, 1);
+assert.equal(targetedApplyPayload.selected_playbook_id, "post_clear_pause_rebuild");
+assert.equal(targetedApplyPayload.applied.attempted, true);
+assert.equal(targetedApplyPayload.applied.action, "replan");
+assert.equal(targetedApplyPayload.applied.result, "applied");
+assert.equal(targetedApplyPayload.cursor.next_after, "evt-clear");
+assert.equal(targetedApplyPayload.summary.recommendations, 1);
+assert.deepEqual(targetedApplyPayload.summary.playbooks, { total: 1, actionable: 1, blocked: 0, observe: 0 });
 
 let applyErrorOverview = makeOverview({
   runtime_state: { status: "running", mode: "build", surface: "service", branch: "main" },
@@ -276,13 +396,31 @@ globalThis.fetch = async (url) => {
   throw new Error(`Unexpected apply-error fetch: ${url}`);
 };
 
-const applyErrorResult = await tools.forgeloop_orchestrate.execute("7b", { mode: "apply", after: "evt-prev-2", limit: 6 });
+const applyErrorResult = await tools.forgeloop_orchestrate.execute("7b", {
+  mode: "apply",
+  after: "evt-prev-2",
+  limit: 6,
+  playbookId: "post_clear_pause_rebuild"
+});
 const applyErrorPayload = parsePayload(applyErrorResult);
 assert.equal(applyErrorPayload.applied.attempted, true);
 assert.equal(applyErrorPayload.applied.action, "replan");
 assert.equal(applyErrorPayload.applied.result, "error");
 assert.match(applyErrorPayload.applied.reason, /simulated replan failure/);
 assert.equal(applyErrorPayload.cursor.next_after, "evt-fail");
+
+await assert.rejects(
+  tools.forgeloop_orchestrate.execute("7c", { mode: "recommend", after: "evt-prev-3", playbookId: "not_a_playbook" }),
+  /Unsupported Forgeloop playbookId/
+);
+await assert.rejects(
+  tools.forgeloop_orchestrate.execute("7d", { mode: "apply", after: "evt-prev-4", playbookId: "   " }),
+  /playbookId must be a non-empty string/
+);
+await assert.rejects(
+  tools.forgeloop_orchestrate.execute("7e", { mode: "apply", after: "evt-prev-5", playbookId: 123 }),
+  /playbookId must be a non-empty string/
+);
 
 const { tools: lockedTools } = registerPlugin({ allowMutations: false, allowOrchestrationApply: false });
 await assert.rejects(
