@@ -1,6 +1,6 @@
 # Forgeloop
 
-[![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 beta](https://img.shields.io/badge/next-v2%20(Elixir)-5b66ff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
+[![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 alpha](https://img.shields.io/badge/main-v2%20alpha-5b66ff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
 
 > **Forgeloop is the safe-autonomy layer for coding agents.**
 >
@@ -174,9 +174,19 @@ The operator contract is documented in:
 | Version | Status | Runtime | Pin to it |
 |---------|--------|---------|-----------|
 | [v1.0.0](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) | **Stable** | Bash | `git checkout v1.0.0` |
-| v2 (main) | In development | Elixir + Bash | `git checkout main` |
+| `main` | **V2 alpha / development** | Elixir + Bash | `git checkout main` |
 
-If you want to stay on the stable bash-only runtime, pin to `v1.0.0`. The `main` branch carries v2 development — the Elixir foundation grows in parallel while the bash runtime remains fully functional.
+If you want the stable public release, pin to `v1.0.0`. If you want the current Elixir service/HUD/OpenClaw/managed-daemon work, use `main` as the **v2 alpha / development track**.
+
+Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track.
+
+Typical stable → main evaluation path inside an installed repo:
+
+```bash
+./forgeloop.sh upgrade --from /path/to/Forgeloop-kit --force
+./forgeloop.sh evals
+bash forgeloop/tests/run.sh
+```
 
 ## Elixir v2 foundation
 

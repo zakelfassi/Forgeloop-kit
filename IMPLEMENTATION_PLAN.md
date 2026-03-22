@@ -405,6 +405,15 @@ Format:
     - `lib/core.sh` now provides shared intake prompt resolution plus a checklist-readiness heuristic that treats fresh template-only installs as not ready.
     - `bin/loop.sh` now exits early for checklist `plan` / `build` with explicit `PROMPT_intake.md` + `kickoff` guidance before runtime claim/state mutation.
     - `bin/kickoff.sh` now reuses the shared intake prompt resolver, and install/docs/site surfaces now position kickoff as the normal fresh-repo path.
+- [x] Clarify public release tracks for the V2 launch path
+  - Acceptance:
+    - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 alpha / development track.
+    - The repo has one durable release-track note that explains who should use each track and how to evaluate/upgrade from stable to main.
+    - Public wording does not overclaim beta, parity, or workflow-lane maturity.
+  - Shipped behavior:
+    - `docs/release-tracks.md` now serves as the stable-v1 vs mainline-v2 source of truth.
+    - `README.md`, `docs/README.md`, `docs/v2-roadmap.md`, and `index.html` now align on `v1.0.0` stable vs `main` as the v2 alpha / development track.
+    - The public upgrade/evaluation path now explicitly points stable users at `./forgeloop.sh upgrade --from ...`, `./forgeloop.sh evals`, and `bash forgeloop/tests/run.sh` before trusting mainline V2 surfaces.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 

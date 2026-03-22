@@ -1,6 +1,8 @@
 # Elixir v2 Roadmap
 
-Forgeloop v2 is an **experimental Elixir parity layer** growing beside the default bash runtime.
+This page describes the current **v2 alpha / development track on `main`**.
+
+Forgeloop v2 is an **experimental Elixir parity layer** growing beside the default bash runtime, not a stable or beta release claim. See `docs/release-tracks.md` for the stable-v1 vs mainline-v2 track split.
 
 ## Current Position
 
