@@ -377,6 +377,20 @@ Format:
     - Live-owner conflicts, reclaimable dead claims, stale active-run metadata, and malformed state now agree across `/api/overview`, `/api/control/run`, `/api/babysitter/start`, and workflow start routes.
     - `/api/events` / `/api/stream` replay semantics are now locked by tests for blank/latest/missing/truncated cursor behavior plus `Last-Event-ID` resume.
     - Bash claim helpers now reject malformed ownership files instead of silently treating them as missing, and `tests/runtime-ownership-reclaim.test.sh` proves live-claim rejection, dead-claim reclaim, and malformed fail-closed behavior.
+- [x] Add a reusable repo-local intake prompt for any external LLM/agentic system
+  - Acceptance:
+    - Forgeloop installs a durable `PROMPT_intake.md` surface that tells any external LLM/agentic system how to produce a project-starting spec pack Forgeloop can consume.
+    - `./forgeloop.sh kickoff` renders `docs/KICKOFF_PROMPT.md` from that repo-local prompt instead of owning an inline source-of-truth prompt body.
+    - The intake contract stays checklist-first by default, with `prd.json` and workflow-lane starter files only as explicit opt-in outputs.
+    - README/docs/site/install surfaces all describe the same intake story and install both `PROMPT_intake.md` and `PROMPT_tasks.md` truthfully.
+  - REQUIRED TESTS:
+    - `tests/kickoff-prompt.test.sh`
+    - `tests/install-output.test.sh`
+    - `tests/install-upgrade.test.sh`
+  - Shipped behavior:
+    - `templates/PROMPT_intake.md` is now the durable repo-local source prompt for greenfield/project-starting spec intake.
+    - `bin/kickoff.sh` now renders `docs/KICKOFF_PROMPT.md` from repo-root `PROMPT_intake.md` when present, with vendored fallback for older repos.
+    - Install/upgrade now place both `PROMPT_intake.md` and `PROMPT_tasks.md` at repo root, and the public docs/site now explain the checklist-first intake strategy explicitly.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 

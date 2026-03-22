@@ -15,6 +15,7 @@ mkdir -p "$target_repo"
 cp -R "$ROOT_DIR" "$upgrade_src"
 printf '\nUPGRADE_MARKER_README\n' >> "$upgrade_src/README.md"
 printf '\n# upgrade marker\n' >> "$upgrade_src/templates/AGENTS.md"
+printf '\nUPGRADE_MARKER_INTAKE\n' >> "$upgrade_src/templates/PROMPT_intake.md"
 
 "$target_repo/forgeloop.sh" upgrade --from "$upgrade_src" --force >/dev/null
 
@@ -25,6 +26,11 @@ fi
 
 if ! grep -q "# upgrade marker" "$target_repo/AGENTS.md"; then
     echo "FAIL: target repo templates were not reapplied during upgrade" >&2
+    exit 1
+fi
+
+if ! grep -q "UPGRADE_MARKER_INTAKE" "$target_repo/PROMPT_intake.md"; then
+    echo "FAIL: target repo PROMPT_intake.md was not reapplied during upgrade" >&2
     exit 1
 fi
 

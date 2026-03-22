@@ -703,9 +703,11 @@ main() {
     # Root coordination files
     install_file "$DEST_KIT_DIR/templates/AGENTS.md" "$TARGET_REPO_DIR/AGENTS.md"
     install_symlink "AGENTS.md" "$TARGET_REPO_DIR/CLAUDE.md"
+    install_file "$DEST_KIT_DIR/templates/PROMPT_intake.md" "$TARGET_REPO_DIR/PROMPT_intake.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_plan.md" "$TARGET_REPO_DIR/PROMPT_plan.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_plan_work.md" "$TARGET_REPO_DIR/PROMPT_plan_work.md"
     install_file "$DEST_KIT_DIR/templates/PROMPT_build.md" "$TARGET_REPO_DIR/PROMPT_build.md"
+    install_file "$DEST_KIT_DIR/templates/PROMPT_tasks.md" "$TARGET_REPO_DIR/PROMPT_tasks.md"
     install_file "$DEST_KIT_DIR/templates/IMPLEMENTATION_PLAN.md" "$TARGET_REPO_DIR/IMPLEMENTATION_PLAN.md"
     install_file "$DEST_KIT_DIR/templates/REQUESTS.md" "$TARGET_REPO_DIR/REQUESTS.md"
     install_file "$DEST_KIT_DIR/templates/QUESTIONS.md" "$TARGET_REPO_DIR/QUESTIONS.md"

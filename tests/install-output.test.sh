@@ -34,9 +34,13 @@ plain_output="$("$ROOT_DIR/install.sh" "$plain_target" --force 2>&1)"
 wrapper_output="$("$ROOT_DIR/install.sh" "$wrapper_target" --force --wrapper 2>&1)"
 
 [[ -f "$plain_target/AGENTS.md" ]] || { echo "FAIL: plain install missing AGENTS.md" >&2; exit 1; }
+[[ -f "$plain_target/PROMPT_intake.md" ]] || { echo "FAIL: plain install missing PROMPT_intake.md" >&2; exit 1; }
+[[ -f "$plain_target/PROMPT_tasks.md" ]] || { echo "FAIL: plain install missing PROMPT_tasks.md" >&2; exit 1; }
 [[ -L "$plain_target/CLAUDE.md" ]] || { echo "FAIL: plain install CLAUDE.md is not a symlink" >&2; exit 1; }
 [[ "$(readlink "$plain_target/CLAUDE.md")" == "AGENTS.md" ]] || { echo "FAIL: plain install CLAUDE.md points to $(readlink "$plain_target/CLAUDE.md")" >&2; exit 1; }
 [[ -f "$wrapper_target/AGENTS.md" ]] || { echo "FAIL: wrapper install missing AGENTS.md" >&2; exit 1; }
+[[ -f "$wrapper_target/PROMPT_intake.md" ]] || { echo "FAIL: wrapper install missing PROMPT_intake.md" >&2; exit 1; }
+[[ -f "$wrapper_target/PROMPT_tasks.md" ]] || { echo "FAIL: wrapper install missing PROMPT_tasks.md" >&2; exit 1; }
 [[ -L "$wrapper_target/CLAUDE.md" ]] || { echo "FAIL: wrapper install CLAUDE.md is not a symlink" >&2; exit 1; }
 [[ "$(readlink "$wrapper_target/CLAUDE.md")" == "AGENTS.md" ]] || { echo "FAIL: wrapper install CLAUDE.md points to $(readlink "$wrapper_target/CLAUDE.md")" >&2; exit 1; }
 

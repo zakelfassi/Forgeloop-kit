@@ -236,8 +236,10 @@ OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
 Forgeloop vendors into `./forgeloop` and writes the control surfaces at repo root:
 
 - `AGENTS.md`
+- `PROMPT_intake.md`
 - `PROMPT_plan.md`
 - `PROMPT_build.md`
+- `PROMPT_tasks.md`
 - `IMPLEMENTATION_PLAN.md`
 - `REQUESTS.md`
 - `QUESTIONS.md`
@@ -272,15 +274,20 @@ Session hooks can load and capture durable repo-local knowledge:
 
 ### Kickoff
 
-For greenfield projects, generate a prompt for a memory-backed agent to produce `docs/*` and `specs/*`:
+For greenfield projects, start with the reusable repo-local intake prompt and stay checklist-first by default.
+
+- Hand `PROMPT_intake.md` directly to any LLM/agentic system, or
+- Render a shareable prompt file with:
 
 ```bash
 ./forgeloop.sh kickoff "<one paragraph project brief>"
 ```
 
+That generated prompt should produce `docs/*`, `specs/*`, and `IMPLEMENTATION_PLAN.md` by default. Ask for `prd.json` only when you intentionally want the tasks lane, and only seed workflow packs when you explicitly want the experimental workflow lane.
+
 ### Tasks lane
 
-If you want machine-readable task execution instead of a markdown checklist:
+If you want machine-readable task execution instead of the default markdown checklist:
 
 > Phase-1 note: this lane is still optional and is **not** the canonical backlog surfaced by the loopback service/UI yet.
 

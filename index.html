@@ -1469,6 +1469,7 @@ flowchart LR
                 <pre id="tree">./
 ├─ AGENTS.md
 ├─ AGENTS-lite.md           # Lite mode (one-shot tasks)
+├─ PROMPT_intake.md         # Reusable intake prompt for new projects
 ├─ PROMPT_plan.md
 ├─ PROMPT_plan_work.md
 ├─ PROMPT_build.md
@@ -1572,7 +1573,7 @@ flowchart LR
           <div class="sectionhead">
             <h2>How to use it</h2>
             <p>
-              Two common paths: start a new repo from scratch (kickoff + plan + build), augment an existing repo
+              Two common paths: start a new repo from scratch (intake prompt + kickoff + plan + build), augment an existing repo
               (specs + plan + build + occasional kit upgrades), or run native workflow packs through the new experimental workflow lane.
             </p>
           </div>
@@ -1603,11 +1604,16 @@ cd /path/to/your/new-repo
                   </p>
                 </li>
                 <li>
-                  Generate a kickoff prompt (paste into your memory-backed agent):
+                  Start from the repo-local intake prompt. Hand <code>PROMPT_intake.md</code> directly to your external LLM/agent,
+                  or render a shareable kickoff prompt:
                   <div class="code" style="margin-top: 8px">
                     <button class="copy" data-copy="#cmd-kickoff">Copy</button>
                     <pre id="cmd-kickoff">./forgeloop.sh kickoff "&lt;one paragraph project brief&gt;"</pre>
                   </div>
+                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
+                    Default output should stay checklist-first: <code>docs/*</code>, <code>specs/*</code>, and <code>IMPLEMENTATION_PLAN.md</code>.
+                    Ask for <code>prd.json</code> only when you intentionally want the tasks lane, and only seed workflow packs when you explicitly want the experimental workflow lane.
+                  </p>
                 </li>
                 <li>
                   Apply the patch your memory-backed agent returns (creates <code>docs/*</code>, <code>specs/*</code>, and
