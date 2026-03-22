@@ -5,8 +5,10 @@ Workspace plugin that lets OpenClaw monitor and pilot Forgeloop through the loop
 ## What it does
 
 - reads the same `/api/overview` snapshot that powers the local HUD
+- reads canonical replayable event windows from `/api/events`
 - sends pause / clear-pause / replan / run / stop actions through the same loopback API
 - answers or resolves questions using the current canonical question revision
+- can evaluate one bounded orchestration window and, when explicitly enabled, apply at most one pause / clear-pause / replan action
 
 ## Recommended topology
 
@@ -20,9 +22,12 @@ Workspace plugin that lets OpenClaw monitor and pilot Forgeloop through the loop
 - `forgeloop_overview`
 - `forgeloop_control`
 - `forgeloop_question`
+- `forgeloop_orchestrate`
 
 ## Notes
 
 - This plugin is a control-surface seam, not a new source of truth.
 - Repo-local files and `.forgeloop/runtime-state.json` stay canonical.
 - Manual runs launched here use `surface: "openclaw"` so they can be distinguished from browser-HUD runs.
+- `forgeloop_orchestrate` is dry-run by default and uses caller-managed `after` / `next_after` cursors instead of hidden plugin persistence.
+- Apply mode is separately gated by `allowOrchestrationApply`, still requires `allowMutations=true`, and stays limited to one bounded pause / clear-pause / replan action.

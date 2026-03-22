@@ -41,17 +41,19 @@ If you want remote operator access, prefer **Tailscale to the host** over exposi
 
 ## Plugin tools
 
-The current seam registers three tools:
+The current seam registers four tools:
 
 - `forgeloop_overview`
 - `forgeloop_control`
 - `forgeloop_question`
+- `forgeloop_orchestrate`
 
 These map directly onto the existing loopback JSON API:
 
 - overview/status snapshots plus dedicated recent-event tails from `/api/events`
 - pause / clear-pause / replan / manual plan-build / stop / workflow preflight-run
 - answer / resolve question
+- bounded event-window review over `/api/events?after=...` with caller-managed replay cursors
 
 ## Config
 
@@ -60,12 +62,30 @@ These map directly onto the existing loopback JSON API:
 - `baseUrl` — service base URL
 - `requestTimeoutMs` — HTTP timeout
 - `allowMutations` — when `false`, control/question tools refuse to mutate state
+- `allowOrchestrationApply` — when `true` and `allowMutations` is also `true`, `forgeloop_orchestrate` may apply one bounded pause / clear-pause / replan action
+- `orchestrationDefaultLimit` — default replay window size for `forgeloop_orchestrate`
+
+## Bounded orchestration contract
+
+`forgeloop_orchestrate` is intentionally narrow:
+
+- dry-run/recommend mode is the default
+- the caller supplies `after` and receives `next_after`; the plugin does not persist cursors
+- it reads canonical replay/tail metadata from `/api/events`
+- it can apply **at most one** bounded action per invocation, and only from:
+  - `pause`
+  - `clear_pause`
+  - `replan`
+- if replay is truncated, the cursor is missing, or `/api/events` is unavailable, it falls back safely to read-only recommendations and does not mutate the control plane
+
+All mutations still flow through the same loopback control endpoints and canonical repo-local artifacts.
 
 ## Important limits
 
 - This does **not** make OpenClaw a Forgeloop runtime/provider.
 - This does **not** bypass the fail-closed repo-local artifact chain.
-- This does **not** yet add daemon-integrated OpenClaw orchestration beyond the current bounded `[WORKFLOW]` request visibility.
-- This does **not** yet add broader workflow orchestration, event compaction/search, or native graph execution beyond the current bounded workflow history and event replay view.
+- This does **not** add hidden plugin-owned cursor persistence or long-lived `/api/stream` orchestration loops yet.
+- This does **not** yet auto-trigger runs, workflow actions, or question mutations from OpenClaw orchestration.
+- This does **not** yet add broader daemon-integrated OpenClaw orchestration, event compaction/search, or native graph execution beyond the current bounded workflow history and event replay view.
 
 Those are later slices.

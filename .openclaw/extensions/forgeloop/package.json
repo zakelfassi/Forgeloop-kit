@@ -1,9 +1,9 @@
 {
   "name": "openclaw-forgeloop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Workspace OpenClaw plugin for Forgeloop's loopback control plane.",
+  "description": "Workspace OpenClaw plugin for Forgeloop's loopback control plane and bounded event-reactive orchestration seam.",
   "openclaw": {
     "extensions": [
       "./index.ts"

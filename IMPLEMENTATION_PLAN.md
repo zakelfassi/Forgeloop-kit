@@ -85,9 +85,26 @@ Format:
     - integration seam contract validation test
     - OpenClaw-triggered action still writes canonical control artifacts
   - Shipped behavior:
-    - The repo now includes `.openclaw/extensions/forgeloop/` with `forgeloop_overview`, `forgeloop_control`, and `forgeloop_question` tools.
+    - The repo now includes `.openclaw/extensions/forgeloop/` with `forgeloop_overview`, `forgeloop_control`, `forgeloop_question`, and `forgeloop_orchestrate` tools.
     - The plugin targets `./forgeloop.sh serve` / the loopback JSON API instead of bypassing repo-local state.
     - Manual runs launched through the plugin use `surface: "openclaw"` while keeping the same babysitter/worktree/runtime-state path.
+
+- [x] Add bounded event-reactive OpenClaw orchestration on top of canonical replayable events
+  - Acceptance:
+    - OpenClaw can review replayable event windows from `/api/events` using caller-managed cursors instead of hidden plugin persistence.
+    - Dry-run mode remains the default, and apply mode is separately gated plus limited to one bounded pause / clear-pause / replan mutation per invocation.
+    - Missing cursors, truncated replay, or `/api/events` outages fail soft into recommendations-only behavior without bypassing canonical control-plane helpers.
+    - Existing repo-local authority remains unchanged: all mutations still flow through the loopback service and canonical repo files.
+  - REQUIRED TESTS:
+    - `tests/openclaw-plugin.test.sh`
+  - Shipped behavior:
+    - `forgeloop_orchestrate` now consumes `/api/events` replay/tail metadata, de-dupes by `event_id`, returns `next_after`, and evaluates a small allowlisted policy over fresh `/api/overview` state.
+    - When `allowOrchestrationApply` is explicitly enabled and replay safety checks pass, the tool can apply at most one pause / clear-pause / replan action through the existing loopback control endpoints.
+    - When replay safety checks fail or `/api/events` is unavailable, the tool falls back to read-only recommendations without inventing a new source of truth.
+  - Deferred after this slice:
+    - long-lived `/api/stream`-driven OpenClaw orchestration
+    - hidden plugin-side cursor persistence
+    - autonomous run/workflow/question mutation from the plugin
 
 - [x] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:

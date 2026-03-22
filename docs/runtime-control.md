@@ -167,6 +167,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
 - manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, and record `surface: "ui"`
 - the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
+- that OpenClaw seam can now review bounded replay windows from `/api/events` and, with separate explicit opt-in, apply at most one pause / clear-pause / replan action through the same control-plane helpers
 - in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
 - the same service/HUD/OpenClaw plane now also exposes a read-only repo-local tracker projection for canonical backlog items + workflow packs without mutating external trackers yet
 - manual workflow `preflight` / `run` actions now flow through the same babysitter/worktree/runtime-state path as other managed runs instead of bypassing it
@@ -177,6 +178,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 Still intentionally deferred here:
 
 - broader workflow orchestration beyond the current one-shot `[WORKFLOW]` request + bounded workflow history view
+- long-lived `/api/stream`-driven OpenClaw orchestration or hidden plugin-side cursor persistence
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 
 ## Proof suite

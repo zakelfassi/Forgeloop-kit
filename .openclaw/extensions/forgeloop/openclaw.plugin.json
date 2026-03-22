@@ -2,7 +2,7 @@
   "id": "forgeloop",
   "name": "Forgeloop",
   "description": "Monitor and pilot a local Forgeloop loopback control plane from OpenClaw.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -22,6 +22,18 @@
         "type": "boolean",
         "default": true,
         "description": "When false, pause/replan/question/run tools refuse to mutate the control plane."
+      },
+      "allowOrchestrationApply": {
+        "type": "boolean",
+        "default": false,
+        "description": "When true, and when allowMutations is also true, forgeloop_orchestrate may apply one bounded pause/clear-pause/replan action after replay safety checks pass."
+      },
+      "orchestrationDefaultLimit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 20,
+        "description": "Default event window size for forgeloop_orchestrate when limit is omitted."
       }
     }
   },
@@ -35,6 +47,12 @@
     },
     "allowMutations": {
       "label": "Allow control mutations"
+    },
+    "allowOrchestrationApply": {
+      "label": "Allow bounded orchestration apply"
+    },
+    "orchestrationDefaultLimit": {
+      "label": "Default orchestration event window"
     }
   }
 }
