@@ -34,6 +34,7 @@ defmodule ForgeloopV2.ControlPlane do
     RunSpec,
     RuntimeLifecycle,
     RuntimeStateStore,
+    ServiceOwnership,
     Tracker,
     WorkflowCatalog,
     WorkflowHistory,
@@ -101,6 +102,9 @@ defmodule ForgeloopV2.ControlPlane do
 
   @spec babysitter(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def babysitter(server \\ __MODULE__), do: GenServer.call(server, :babysitter)
+
+  @spec ownership(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def ownership(server \\ __MODULE__), do: GenServer.call(server, :ownership)
 
   @spec pause(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def pause(server \\ __MODULE__), do: GenServer.call(server, :pause, :infinity)
@@ -223,10 +227,13 @@ defmodule ForgeloopV2.ControlPlane do
                },
                opts
              ) do
+        ownership = build_ownership(runtime_owner, babysitter)
+
         {:ok,
          %{
            runtime_state: runtime_state,
-           runtime_owner: runtime_owner_state(runtime_owner, babysitter),
+           runtime_owner: runtime_owner_state(runtime_owner, ownership),
+           ownership: ownership,
            backlog: backlog,
            control_flags: control_flags,
            tracker: tracker,
@@ -286,6 +293,16 @@ defmodule ForgeloopV2.ControlPlane do
 
   def handle_call(:babysitter, _from, %State{} = state) do
     {:reply, babysitter_status(state, true), state}
+  end
+
+  def handle_call(:ownership, _from, %State{} = state) do
+    reply =
+      with {:ok, runtime_owner} <- read_runtime_owner(state.config),
+           {:ok, babysitter} <- babysitter_status(state, true) do
+        {:ok, build_ownership(runtime_owner, babysitter)}
+      end
+
+    {:reply, reply, state}
   end
 
   def handle_call(:pause, _from, %State{} = state) do
@@ -433,8 +450,8 @@ defmodule ForgeloopV2.ControlPlane do
          {:ok, run_spec} <- RunSpec.checklist(normalized_mode),
          {:ok, runtime_surface} <-
            normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
-         {:ok, runtime_owner, babysitter} <- start_gate_snapshot(state),
-         :ok <- ensure_start_allowed(runtime_owner, babysitter),
+         {:ok, ownership} <- start_gate_snapshot(state),
+         :ok <- ensure_start_allowed(ownership),
          {:ok, payload, next_state} <-
            do_start_managed_run(state, run_spec, runtime_surface, opts) do
       {:ok, payload, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
@@ -449,8 +466,8 @@ defmodule ForgeloopV2.ControlPlane do
          {:ok, runtime_surface} <-
            normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "workflow")),
          {:ok, runner_args} <- normalize_runner_args(Keyword.get(opts, :runner_args, [])),
-         {:ok, runtime_owner, babysitter} <- start_gate_snapshot(state),
-         :ok <- ensure_start_allowed(runtime_owner, babysitter),
+         {:ok, ownership} <- start_gate_snapshot(state),
+         :ok <- ensure_start_allowed(ownership),
          :ok <- ensure_workflow_exists(state.config, workflow_name) do
       run_opts =
         workflow_start_opts(
@@ -778,8 +795,10 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp start_gate_snapshot(%State{} = state) do
     with {:ok, runtime_owner} <- read_runtime_owner(state.config),
-         {:ok, babysitter} <- babysitter_status(state, true) do
-      maybe_cleanup_stale_start_state(state, runtime_owner, babysitter)
+         {:ok, babysitter} <- babysitter_status(state, true),
+         {:ok, refreshed_runtime_owner, refreshed_babysitter} <-
+           maybe_cleanup_stale_start_state(state, runtime_owner, babysitter) do
+      {:ok, build_ownership(refreshed_runtime_owner, refreshed_babysitter)}
     end
   end
 
@@ -803,22 +822,8 @@ defmodule ForgeloopV2.ControlPlane do
   defp maybe_cleanup_stale_start_state(%State{}, runtime_owner, babysitter),
     do: {:ok, runtime_owner, babysitter}
 
-  defp ensure_start_allowed(_runtime_owner, %{running?: true, managed?: true}),
-    do: {:error, :babysitter_already_running}
-
-  defp ensure_start_allowed(_runtime_owner, %{running?: true, active_run: active_run}),
-    do: {:error, {:babysitter_unmanaged_active, active_run}}
-
-  defp ensure_start_allowed(%{state: "error"} = runtime_owner, _babysitter),
-    do: {:error, {:active_runtime_state_error, runtime_owner}}
-
-  defp ensure_start_allowed(_runtime_owner, %{active_run_state: "error", active_run_error: error}),
-       do: {:error, {:active_run_state_error, error}}
-
-  defp ensure_start_allowed(%{live?: true, current: current}, _babysitter) when is_map(current),
-    do: {:error, {:active_runtime_owned_by, current}}
-
-  defp ensure_start_allowed(_runtime_owner, _babysitter), do: :ok
+  defp ensure_start_allowed(%{gate_error: nil}), do: :ok
+  defp ensure_start_allowed(%{gate_error: gate_error}), do: {:error, gate_error}
 
   defp ensure_babysitter_instance(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
     branch = opts[:branch] || state.config.default_branch
@@ -1031,16 +1036,13 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
-  defp runtime_owner_state(runtime_owner, babysitter) do
-    Map.put(runtime_owner, :start_allowed?, start_allowed?(runtime_owner, babysitter))
+  defp runtime_owner_state(runtime_owner, ownership) do
+    Map.put(runtime_owner, :start_allowed?, ownership.start_allowed?)
   end
 
-  defp start_allowed?(%{state: "error"}, _babysitter), do: false
-  defp start_allowed?(_runtime_owner, %{active_run_state: "error"}), do: false
-  defp start_allowed?(%{live?: true}, _babysitter), do: false
-  defp start_allowed?(_runtime_owner, %{running?: true}), do: false
-  defp start_allowed?(_runtime_owner, %{active_run_state: "active"}), do: false
-  defp start_allowed?(_runtime_owner, _babysitter), do: true
+  defp build_ownership(runtime_owner, babysitter) do
+    ServiceOwnership.evaluate(runtime_owner, babysitter)
+  end
 
   defp iso_now do
     DateTime.utc_now()
@@ -1079,6 +1081,7 @@ defmodule ForgeloopV2.ServiceJSON do
     %{
       runtime_state: runtime_state(payload.runtime_state),
       runtime_owner: runtime_owner(payload.runtime_owner),
+      ownership: ownership(Map.get(payload, :ownership) || Map.get(payload, "ownership")),
       backlog: backlog(payload.backlog),
       control_flags: control_flags(payload.control_flags),
       tracker: tracker_overview(payload.tracker),
@@ -1127,6 +1130,22 @@ defmodule ForgeloopV2.ServiceJSON do
       state: Map.get(owner, :state) || Map.get(owner, "state"),
       error: Map.get(owner, :error) || Map.get(owner, "error"),
       start_allowed?: Map.get(owner, :start_allowed?) || Map.get(owner, "start_allowed?") || false
+    }
+  end
+
+  def ownership(nil), do: nil
+
+  def ownership(payload) when is_map(payload) do
+    %{
+      summary_state: Map.get(payload, :summary_state) || Map.get(payload, "summary_state"),
+      headline: Map.get(payload, :headline) || Map.get(payload, "headline"),
+      detail: Map.get(payload, :detail) || Map.get(payload, "detail"),
+      start_allowed?: Map.get(payload, :start_allowed?) || Map.get(payload, "start_allowed?") || false,
+      conflict?: Map.get(payload, :conflict?) || Map.get(payload, "conflict?") || false,
+      fail_closed?: Map.get(payload, :fail_closed?) || Map.get(payload, "fail_closed?") || false,
+      start_gate: sanitize(Map.get(payload, :start_gate) || Map.get(payload, "start_gate")),
+      runtime_owner: sanitize(Map.get(payload, :runtime_owner) || Map.get(payload, "runtime_owner")),
+      active_run: sanitize(Map.get(payload, :active_run) || Map.get(payload, "active_run"))
     }
   end
 
@@ -1943,7 +1962,7 @@ defmodule ForgeloopV2.Service do
            runtime_surface: Map.get(body, "surface", "ui")
          ) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:error, reason} -> start_error_response(control_plane_pid, reason)
     end
   end
 
@@ -1959,7 +1978,7 @@ defmodule ForgeloopV2.Service do
            runtime_surface: "babysitter"
          ) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:error, reason} -> start_error_response(control_plane_pid, reason)
     end
   end
 
@@ -1988,7 +2007,7 @@ defmodule ForgeloopV2.Service do
             json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
 
           {:error, reason} ->
-            error_response(status_for_error(reason), reason)
+            start_error_response(control_plane_pid, reason)
         end
 
       ["api", "workflows", workflow_name, "run"] ->
@@ -2004,7 +2023,7 @@ defmodule ForgeloopV2.Service do
             json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
 
           {:error, reason} ->
-            error_response(status_for_error(reason), reason)
+            start_error_response(control_plane_pid, reason)
         end
 
       ["api", "questions", question_id, "answer"] ->
@@ -2144,48 +2163,133 @@ defmodule ForgeloopV2.Service do
     body_response(status, "application/json", Jason.encode!(ServiceContract.wrap_envelope(payload)))
   end
 
-  defp error_response(status, reason) do
-    json_response(status, %{ok: false, error: error_payload(reason)})
+  defp start_error_response(control_plane_pid, reason) do
+    opts =
+      case start_error_ownership(control_plane_pid, reason) do
+        ownership when is_map(ownership) -> [ownership: ownership]
+        _ -> []
+      end
+
+    error_response(status_for_error(reason), reason, opts)
   end
 
-  defp error_payload({:question_conflict, question_id, current_revision}) do
+  defp start_error_ownership(control_plane_pid, reason) do
+    if ownership_error_reason?(reason) do
+      case ControlPlane.ownership(control_plane_pid) do
+        {:ok, ownership} ->
+          ownership
+          |> normalize_start_error_ownership(reason)
+          |> ServiceJSON.ownership()
+
+        _ ->
+          nil
+      end
+    else
+      nil
+    end
+  catch
+    :exit, _reason -> nil
+  end
+
+  defp normalize_start_error_ownership(ownership, {:active_run_state_error, reason})
+       when is_map(ownership) do
+    start_gate = Map.get(ownership, :start_gate, %{})
+
+    if Map.get(start_gate, :reason) == "active_run_state_error" do
+      ownership
+    else
+      active_run =
+        ownership
+        |> Map.get(:active_run, %{})
+        |> Map.put(:state, "error")
+        |> Map.put(:error, format_active_run_state_error(reason))
+
+      ownership
+      |> Map.put(:summary_state, "error")
+      |> Map.put(:headline, "Managed run metadata is malformed")
+      |> Map.put(:detail, "Starts fail closed until #{format_active_run_state_error(reason)} is repaired or removed.")
+      |> Map.put(:start_allowed?, false)
+      |> Map.put(:conflict?, false)
+      |> Map.put(:fail_closed?, true)
+      |> Map.put(:gate_error, {:active_run_state_error, reason})
+      |> Map.put(:active_run, active_run)
+      |> Map.put(:start_gate, %{
+        status: "error",
+        reason: "active_run_state_error",
+        http_status: 500,
+        reclaim_on_start?: false,
+        cleanup_on_start?: false,
+        details: active_run
+      })
+    end
+  end
+
+  defp normalize_start_error_ownership(ownership, _reason), do: ownership
+
+  defp ownership_error_reason?(:babysitter_already_running), do: true
+  defp ownership_error_reason?({:babysitter_unmanaged_active, _payload}), do: true
+  defp ownership_error_reason?({:active_runtime_owned_by, current}) when is_map(current), do: true
+  defp ownership_error_reason?({:active_runtime_state_error, runtime_owner}) when is_map(runtime_owner), do: true
+  defp ownership_error_reason?({:active_run_state_error, _reason}), do: true
+  defp ownership_error_reason?(_reason), do: false
+
+  defp format_active_run_state_error(reason) when is_binary(reason), do: reason
+  defp format_active_run_state_error(reason), do: inspect(reason)
+
+  defp error_response(status, reason, opts \\ []) do
+    json_response(status, %{ok: false, error: error_payload(reason, opts)})
+  end
+
+  defp error_payload({:question_conflict, question_id, current_revision}, opts) do
     %{
       reason: "question_conflict",
       question_id: question_id,
       current_revision: current_revision,
       detail: inspect({:question_conflict, question_id, current_revision})
     }
+    |> maybe_put_error_ownership(opts)
   end
 
-  defp error_payload({:active_runtime_owned_by, current}) when is_map(current) do
+  defp error_payload({:active_runtime_owned_by, current}, opts) when is_map(current) do
     %{
       reason: "active_runtime_owned_by",
       detail: inspect({:active_runtime_owned_by, current}),
       details: current
     }
+    |> maybe_put_error_ownership(opts)
   end
 
-  defp error_payload({:active_runtime_state_error, runtime_owner}) when is_map(runtime_owner) do
+  defp error_payload({:active_runtime_state_error, runtime_owner}, opts) when is_map(runtime_owner) do
     %{
       reason: "active_runtime_state_error",
       detail: inspect({:active_runtime_state_error, runtime_owner}),
       details: runtime_owner
     }
+    |> maybe_put_error_ownership(opts)
   end
 
-  defp error_payload({:active_run_state_error, reason}) do
+  defp error_payload({:active_run_state_error, reason}, opts) do
     %{
       reason: "active_run_state_error",
       detail: inspect({:active_run_state_error, reason}),
       details: if(is_binary(reason), do: reason, else: inspect(reason))
     }
+    |> maybe_put_error_ownership(opts)
   end
 
-  defp error_payload(reason) do
+  defp error_payload(reason, opts) do
     %{
       reason: error_code(reason),
       detail: inspect(reason)
     }
+    |> maybe_put_error_ownership(opts)
+  end
+
+  defp maybe_put_error_ownership(payload, opts) do
+    case Keyword.get(opts, :ownership) do
+      ownership when is_map(ownership) -> Map.put(payload, :ownership, ownership)
+      _ -> payload
+    end
   end
 
   defp error_code({:missing_expected_revision, _}), do: "missing_expected_revision"

@@ -21,6 +21,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - local JSONL event history with bounded tail/replay readers and live subscriptions for the control plane
 - a loopback-only control-plane service for runtime plus the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), a read-only repo-local tracker projection, and questions/escalations/events/workflows/provider health plus babysitter control
 - a versioned loopback contract descriptor at `/api/schema` plus additive top-level `api` metadata on JSON and SSE envelopes, so the HUD and OpenClaw can follow one explicit service-owned schema while keeping older-service fallbacks where intended
+- an additive service-owned `ownership` start-gate read model plus additive `error.ownership` context on blocked starts, so live conflicts, reclaimable claims, stale cleanup, and malformed metadata stay explicit across the HUD and OpenClaw seam
 - a static repo-local operator UI with replayable SSE-backed live updates, interactive control mutations, and no Node asset pipeline
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including a shared service-owned coordination read model for HUD/OpenClaw, a bounded operator brief/timeline, one-window bounded playbooks/recommendations, and conservative optional one-action apply
 

@@ -52,6 +52,7 @@ These map directly onto the existing loopback JSON API:
 
 - a service-owned contract descriptor at `/api/schema`, which the plugin now uses when available before falling back to the older literal route layout
 - overview/status snapshots plus the shared `/api/coordination` advisory, including a bounded operator brief/timeline, with dedicated recent-event tails from `/api/events`
+- the additive `overview.ownership` start-gate read model plus additive `error.ownership` context on blocked manual-start responses, so OpenClaw can explain live conflicts, reclaimable claims, stale cleanup, and malformed metadata without inventing its own ownership logic
 - pause / clear-pause / replan / manual plan-build / stop / workflow preflight-run
 - answer / resolve question
 - bounded event-window review over service-owned `/api/coordination?after=...` with caller-managed replay cursors and invocation-scoped playbooks

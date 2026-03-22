@@ -70,6 +70,11 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["runtime_owner"]["current"] == nil
     assert payload["data"]["runtime_owner"]["live?"] == false
     assert payload["data"]["runtime_owner"]["start_allowed?"] == true
+    assert payload["data"]["ownership"]["summary_state"] == "ready"
+    assert payload["data"]["ownership"]["start_allowed?"] == true
+    assert payload["data"]["ownership"]["start_gate"]["status"] == "allowed"
+    assert payload["data"]["ownership"]["runtime_owner"]["state"] == "missing"
+    assert payload["data"]["ownership"]["active_run"]["state"] == "missing"
     assert payload["data"]["backlog"]["needs_build?"] == true
     assert payload["data"]["backlog"]["exists?"] == true
     assert payload["data"]["backlog"]["source"]["kind"] == "implementation_plan"
@@ -143,6 +148,7 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["contract_name"] == "forgeloop_loopback"
     assert payload["data"]["contract_version"] == 1
     assert payload["data"]["payload_versions"]["coordination"] == 1
+    assert payload["data"]["payload_versions"]["ownership"] == 1
     assert payload["data"]["endpoints"]["overview"]["path"] == "/api/overview"
     assert payload["data"]["endpoints"]["stream"]["path"] == "/api/stream"
     assert payload["data"]["endpoints"]["questions"]["answer_path_template"] == "/api/questions/{question_id}/answer"
@@ -526,6 +532,10 @@ defmodule ForgeloopV2.ServiceTest do
     assert overview["data"]["runtime_owner"]["start_allowed?"] == false
     assert overview["data"]["runtime_owner"]["current"]["owner"] == "bash"
     assert overview["data"]["runtime_owner"]["current"]["claim_id"] == claim["claim_id"]
+    assert overview["data"]["ownership"]["summary_state"] == "blocked"
+    assert overview["data"]["ownership"]["start_gate"]["status"] == "blocked"
+    assert overview["data"]["ownership"]["start_gate"]["reason"] == "active_runtime_owned_by"
+    assert overview["data"]["ownership"]["runtime_owner"]["owner"] == "bash"
 
     for {path, body} <- [
           {"/api/control/run", %{"mode" => "build"}},
@@ -536,6 +546,8 @@ defmodule ForgeloopV2.ServiceTest do
       assert conflict.status == 409
       assert conflict.body["error"]["reason"] == "active_runtime_owned_by"
       assert conflict.body["error"]["details"]["owner"] == "bash"
+      assert conflict.body["error"]["ownership"]["summary_state"] == "blocked"
+      assert conflict.body["error"]["ownership"]["start_gate"]["reason"] == "active_runtime_owned_by"
     end
   end
 
@@ -569,6 +581,9 @@ defmodule ForgeloopV2.ServiceTest do
     assert overview["data"]["runtime_owner"]["error"] == nil
     assert overview["data"]["runtime_owner"]["reclaimable?"] == true
     assert overview["data"]["runtime_owner"]["start_allowed?"] == true
+    assert overview["data"]["ownership"]["summary_state"] == "recoverable"
+    assert overview["data"]["ownership"]["start_gate"]["status"] == "allowed"
+    assert overview["data"]["ownership"]["start_gate"]["reclaim_on_start?"] == true
 
     assert post_json!(base_url <> "/api/control/run", %{"mode" => "build"})["ok"] == true
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
@@ -588,6 +603,8 @@ defmodule ForgeloopV2.ServiceTest do
     assert overview["data"]["runtime_owner"]["state"] == "error"
     assert is_binary(overview["data"]["runtime_owner"]["error"])
     assert overview["data"]["runtime_owner"]["start_allowed?"] == false
+    assert overview["data"]["ownership"]["summary_state"] == "error"
+    assert overview["data"]["ownership"]["start_gate"]["reason"] == "active_runtime_state_error"
 
     for {path, body} <- [
           {"/api/control/run", %{"mode" => "build"}},
@@ -598,6 +615,8 @@ defmodule ForgeloopV2.ServiceTest do
       assert response.status == 500
       assert response.body["error"]["reason"] == "active_runtime_state_error"
       assert response.body["error"]["details"]["state"] == "error"
+      assert response.body["error"]["ownership"]["summary_state"] == "error"
+      assert response.body["error"]["ownership"]["start_gate"]["reason"] == "active_runtime_state_error"
     end
   end
 
@@ -613,11 +632,15 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
+    overview = get_json!(base_url <> "/api/overview")["data"]
     babysitter = get_json!(base_url <> "/api/babysitter")["data"]
     assert babysitter["running?"] == false
     assert babysitter["active_run_state"] == "stale"
     assert babysitter["active_run_error"] == nil
     assert babysitter["active_run"]["runtime_surface"] == "ui"
+    assert overview["ownership"]["summary_state"] == "recoverable"
+    assert overview["ownership"]["start_gate"]["cleanup_on_start?"] == true
+    assert overview["ownership"]["active_run"]["state"] == "stale"
 
     assert post_json!(base_url <> "/api/babysitter/start", %{"mode" => "build"})["ok"] == true
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
@@ -639,6 +662,8 @@ defmodule ForgeloopV2.ServiceTest do
 
     overview = get_json!(base_url <> "/api/overview")
     assert overview["data"]["runtime_owner"]["start_allowed?"] == false
+    assert overview["data"]["ownership"]["summary_state"] == "error"
+    assert overview["data"]["ownership"]["start_gate"]["reason"] == "active_run_state_error"
 
     babysitter = get_json!(base_url <> "/api/babysitter")["data"]
     assert babysitter["running?"] == false
@@ -654,6 +679,8 @@ defmodule ForgeloopV2.ServiceTest do
       assert response.status == 500
       assert response.body["error"]["reason"] == "active_run_state_error"
       assert response.body["error"]["details"] =~ "invalid_active_run"
+      assert response.body["error"]["ownership"]["summary_state"] == "error"
+      assert response.body["error"]["ownership"]["start_gate"]["reason"] == "active_run_state_error"
     end
   end
 
@@ -801,10 +828,12 @@ defmodule ForgeloopV2.ServiceTest do
 
     assert invalid_runner_args.status == 400
     assert invalid_runner_args.body["error"]["reason"] == "invalid_runner_args"
+    refute Map.has_key?(invalid_runner_args.body["error"], "ownership")
 
     missing = post_json_response!(base_url <> "/api/workflows/missing/run", %{})
     assert missing.status == 404
     assert missing.body["error"]["reason"] == "workflow_not_found"
+    refute Map.has_key?(missing.body["error"], "ownership")
   end
 
   test "manual control runs accept the openclaw runtime surface" do

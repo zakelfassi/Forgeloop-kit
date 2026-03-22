@@ -14,7 +14,8 @@ defmodule ForgeloopV2.ServiceContract do
     workflow_overview: 1,
     provider_health: 1,
     babysitter: 1,
-    runtime_owner: 1
+    runtime_owner: 1,
+    ownership: 1
   }
 
   @endpoints %{

@@ -256,6 +256,7 @@ h3 { font-size: 0.95rem; }
 }
 
 .runtime-panel,
+.ownership-panel,
 .provider-panel,
 .backlog-panel,
 .coordination-panel,
@@ -269,7 +270,8 @@ h3 { font-size: 0.95rem; }
 }
 
 .runtime-panel,
-.provider-panel { grid-column: span 6; }
+.ownership-panel,
+.provider-panel { grid-column: span 4; }
 .backlog-panel,
 .coordination-panel,
 .tracker-panel,
@@ -415,7 +417,9 @@ h3 { font-size: 0.95rem; }
   margin-bottom: 12px;
 }
 
-.coordination-card {
+.coordination-card,
+.ownership-summary-card,
+.ownership-card {
   display: grid;
   gap: 12px;
 }
@@ -462,6 +466,7 @@ h3 { font-size: 0.95rem; }
   }
 
   .runtime-panel,
+  .ownership-panel,
   .provider-panel,
   .backlog-panel,
   .coordination-panel,

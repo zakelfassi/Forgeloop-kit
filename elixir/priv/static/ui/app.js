@@ -23,6 +23,7 @@ const refs = {
   controlStatus: document.getElementById("control-status"),
   controlsBody: document.getElementById("controls-body"),
   runtimeBody: document.getElementById("runtime-body"),
+  ownershipBody: document.getElementById("ownership-body"),
   providerBody: document.getElementById("provider-body"),
   backlogBody: document.getElementById("backlog-body"),
   coordinationBody: document.getElementById("coordination-body"),
@@ -204,16 +205,32 @@ function normalizeLimit(value) {
 }
 
 function buildRequestError(response, payload) {
-  const error = new Error(
-    payload && payload.error && payload.error.reason
-      ? payload.error.reason.replaceAll("_", " ")
-      : `request failed (${response.status})`
-  );
+  const reason = payload && payload.error ? payload.error.reason : null;
+  const ownership = ownershipErrorReason(reason) && payload && payload.error
+    ? normalizeOwnershipPayload(payload.error.ownership)
+    : null;
+  const message = ownership && ownership.detail
+    ? ownership.detail
+    : reason
+      ? reason.replaceAll("_", " ")
+      : `request failed (${response.status})`;
 
+  const error = new Error(message);
   error.status = response.status;
   error.payload = payload;
-  error.reason = payload && payload.error ? payload.error.reason : null;
+  error.reason = reason;
+  error.ownership = ownership;
   return error;
+}
+
+function ownershipErrorReason(reason) {
+  return [
+    "babysitter_already_running",
+    "babysitter_unmanaged_active",
+    "active_runtime_owned_by",
+    "active_runtime_state_error",
+    "active_run_state_error"
+  ].includes(reason);
 }
 
 function connectStream() {
@@ -262,18 +279,21 @@ function connectStream() {
 
 function applySnapshot(snapshot) {
   reconcileQuestionDrafts(snapshot.questions || []);
+  const ownership = normalizeOwnership(snapshot);
+  const normalizedSnapshot = { ...snapshot, ownership };
   state.latestEventId = eventCursorFromSnapshot(snapshot);
-  state.snapshot = snapshot;
-  renderControls(snapshot);
-  renderRuntime(snapshot.runtime_state, snapshot.babysitter, snapshot.control_flags);
-  renderProviders(snapshot.provider_health);
-  renderBacklog(snapshot.backlog);
-  renderCoordination(snapshot.coordination);
-  renderTracker(snapshot.tracker);
-  renderWorkflows(snapshot.workflows || {});
-  renderQuestions(snapshot.questions || []);
-  renderEscalations(snapshot.escalations || []);
-  renderEvents(snapshot.events || []);
+  state.snapshot = normalizedSnapshot;
+  renderControls(normalizedSnapshot);
+  renderRuntime(normalizedSnapshot.runtime_state, normalizedSnapshot.babysitter, normalizedSnapshot.control_flags, ownership);
+  renderOwnership(ownership);
+  renderProviders(normalizedSnapshot.provider_health);
+  renderBacklog(normalizedSnapshot.backlog);
+  renderCoordination(normalizedSnapshot.coordination);
+  renderTracker(normalizedSnapshot.tracker);
+  renderWorkflows(normalizedSnapshot.workflows || {}, ownership);
+  renderQuestions(normalizedSnapshot.questions || []);
+  renderEscalations(normalizedSnapshot.escalations || []);
+  renderEvents(normalizedSnapshot.events || []);
   renderNotice();
 }
 
@@ -281,6 +301,7 @@ function renderControls(snapshot) {
   const flags = snapshot.control_flags || {};
   const babysitter = snapshot.babysitter || {};
   const activeRun = babysitter.active_run || {};
+  const ownership = snapshot.ownership || normalizeOwnership(snapshot);
   const pauseRequested = Boolean(flags["pause_requested?"]);
   const replanRequested = Boolean(flags["replan_requested?"]);
   const deployRequested = Boolean(flags["deploy_requested?"]);
@@ -292,6 +313,7 @@ function renderControls(snapshot) {
   const workflowTargetStatus = workflowRequested ? (workflowTargetValid ? "workflow queued" : "workflow invalid") : "workflow clear";
   const running = Boolean(babysitter["running?"]);
   const runtimeSurface = babysitter.runtime_surface || activeRun.runtime_surface || "—";
+  const manualStartBlocked = ownership.startAllowed === false;
 
   refs.controlsBody.className = "stack";
   refs.controlsBody.innerHTML = `
@@ -301,10 +323,13 @@ function renderControls(snapshot) {
         ${badge(replanRequested ? "replan queued" : "replan clear", replanRequested ? "purple" : "info")}
         ${badge(deployRequested ? "deploy queued" : "deploy clear", deployRequested ? "warn" : "info")}
         ${badge(ingestLogsRequested ? "ingest queued" : "ingest clear", ingestLogsRequested ? "purple" : "info")}
-        ${badge(workflowTargetStatus, workflowRequested ? (workflowTargetValid ? "pink" : "bad") : "info")}
+        ${badge(workflowTargetStatus, workflowRequested ? (workflowTargetValid ? "purple" : "bad") : "info")}
         ${badge(running ? "run active" : "idle", running ? "warn" : "good")}
         ${badge(runtimeSurface === "—" ? "surface idle" : `surface ${runtimeSurface}`, "info")}
+        ${badge(`ownership ${ownership.summaryState}`, ownershipSummaryClass(ownership.summaryState))}
+        ${badge(`start gate ${ownership.startGate.status}`, ownershipGateClass(ownership.startGate.status))}
       </div>
+      <p class="subtle-copy">${escapeHtml(ownership.detail)}</p>
       <p class="subtle-copy">UI actions update the canonical files first. Clearing pause does not write <code>recovered</code>; that still happens on the next daemon or loop cycle.</p>
       <p class="subtle-copy">Daemon workflow request: <code>[WORKFLOW]</code> → <code>${escapeHtml(workflowTargetLabel)}</code>${workflowTarget.error ? ` (${escapeHtml(workflowTarget.error)})` : ""}. The managed public daemon honors this marker; <code>FORGELOOP_DAEMON_RUNTIME=bash</code> keeps the legacy bash path.</p>
     </div>
@@ -320,8 +345,8 @@ function renderControls(snapshot) {
       <div class="control-card">
         <h3>One-off runs</h3>
         <div class="control-buttons">
-          ${controlButton("run-plan", "Run plan", { disabled: running || isPending("run") })}
-          ${controlButton("run-build", "Run build", { disabled: running || isPending("run") })}
+          ${controlButton("run-plan", "Run plan", { disabled: manualStartBlocked || isPending("run") })}
+          ${controlButton("run-build", "Run build", { disabled: manualStartBlocked || isPending("run") })}
         </div>
         <p class="subtle-copy">Manual runs use <code>surface: "ui"</code> and still flow through the babysitter, worktree, and existing escalation chain.</p>
       </div>
@@ -329,13 +354,13 @@ function renderControls(snapshot) {
   `;
 }
 
-function renderRuntime(runtime, babysitter, controlFlags) {
+function renderRuntime(runtime, babysitter, controlFlags, ownership) {
   const runtimeStatus = runtime && runtime.status ? runtime.status : "idle";
   const babysitterRunning = Boolean(babysitter && babysitter["running?"]);
   const babysitterState = babysitterRunning ? "Babysitter active" : "Babysitter idle";
   const pauseRequested = Boolean(controlFlags && controlFlags["pause_requested?"]);
   refs.runtimeBrief.textContent = `Runtime: ${runtimeStatus}`;
-  refs.canonicalBrief.textContent = `${babysitterState}. ${pauseRequested ? "[PAUSE] is present." : "[PAUSE] is clear."}`;
+  refs.canonicalBrief.textContent = `${babysitterState}. ${pauseRequested ? "[PAUSE] is present." : "[PAUSE] is clear."} Start gate: ${ownership.summaryState}.`;
 
   if (!runtime) {
     refs.runtimeBody.className = "stack empty";
@@ -357,11 +382,256 @@ function renderRuntime(runtime, babysitter, controlFlags) {
       <div class="list-meta">
         ${badge(runtime.status || "idle", badgeClass(runtime.status))}
         ${badge(runtime.surface || "unknown", "info")}
+        ${badge(`start gate ${ownership.startGate.status}`, ownershipGateClass(ownership.startGate.status))}
       </div>
       <h3>${escapeHtml(runtime.reason || "Runtime state recorded")}</h3>
       <p>Requested action: ${escapeHtml(runtime.requested_action || "—")}</p>
     </article>
   `;
+}
+
+function renderOwnership(ownership) {
+  if (!ownership) {
+    refs.ownershipBody.className = "stack empty";
+    refs.ownershipBody.textContent = "No ownership snapshot yet.";
+    return;
+  }
+
+  refs.ownershipBody.className = "stack";
+  refs.ownershipBody.innerHTML = `
+    <article class="list-card ownership-summary-card">
+      <div class="list-meta">
+        ${badge(`ownership ${ownership.summaryState}`, ownershipSummaryClass(ownership.summaryState))}
+        ${badge(`start gate ${ownership.startGate.status}`, ownershipGateClass(ownership.startGate.status))}
+        ${ownership.conflict ? badge("conflict", "bad") : badge("no live conflict", "good")}
+        ${ownership.failClosed ? badge("fail closed", "bad") : badge("manual start ready", ownership.startAllowed ? "good" : "warn")}
+      </div>
+      <h3>${escapeHtml(ownership.headline)}</h3>
+      <p>${escapeHtml(ownership.detail)}</p>
+    </article>
+    <article class="list-card ownership-card">
+      <div class="list-meta">
+        ${badge(`status ${ownership.startGate.status}`, ownershipGateClass(ownership.startGate.status))}
+        ${ownership.startGate.reason ? badge(ownership.startGate.reason.replaceAll("_", " "), ownership.startGate.status === "error" ? "bad" : "warn") : badge("no blocker", "good")}
+      </div>
+      <h3>Start gate</h3>
+      <div class="metric-grid compact-grid">
+        ${metric("Allowed", yesNo(ownership.startAllowed))}
+        ${metric("HTTP status", ownership.startGate.httpStatus || "—")}
+        ${metric("Reclaim on start", yesNo(ownership.startGate.reclaimOnStart))}
+        ${metric("Cleanup on start", yesNo(ownership.startGate.cleanupOnStart))}
+      </div>
+      ${ownership.startGate.details ? `<pre>${escapeHtml(JSON.stringify(ownership.startGate.details, null, 2))}</pre>` : ""}
+    </article>
+    <article class="list-card ownership-card">
+      <div class="list-meta">
+        ${badge(`owner ${ownership.runtimeOwner.state}`, ownershipSummaryClass(ownership.runtimeOwner.state === "reclaimable" ? "recoverable" : ownership.runtimeOwner.state))}
+        ${ownership.runtimeOwner.claimId ? badge(ownership.runtimeOwner.claimId, "info") : ""}
+      </div>
+      <h3>Runtime owner</h3>
+      <div class="metric-grid compact-grid">
+        ${metric("State", ownership.runtimeOwner.state)}
+        ${metric("Owner", ownership.runtimeOwner.owner || "—")}
+        ${metric("Surface", ownership.runtimeOwner.surface || "—")}
+        ${metric("Mode", ownership.runtimeOwner.mode || "—")}
+        ${metric("Branch", ownership.runtimeOwner.branch || "—")}
+        ${metric("Reclaimable", yesNo(ownership.runtimeOwner.reclaimable))}
+      </div>
+      <p>${escapeHtml(ownership.runtimeOwner.error || "No runtime-owner metadata error is currently recorded.")}</p>
+    </article>
+    <article class="list-card ownership-card">
+      <div class="list-meta">
+        ${badge(`active run ${ownership.activeRun.state}`, ownershipSummaryClass(ownership.activeRun.state === "stale" ? "recoverable" : ownership.activeRun.state))}
+        ${ownership.activeRun.running ? badge("running", "warn") : badge("idle", "good")}
+        ${ownership.activeRun.managed ? badge("managed", "purple") : badge("unmanaged", "info")}
+      </div>
+      <h3>Managed run metadata</h3>
+      <div class="metric-grid compact-grid">
+        ${metric("State", ownership.activeRun.state)}
+        ${metric("Lane", ownership.activeRun.lane || "—")}
+        ${metric("Action", ownership.activeRun.action || "—")}
+        ${metric("Mode", ownership.activeRun.mode || "—")}
+        ${metric("Workflow", ownership.activeRun.workflowName || "—")}
+        ${metric("Surface", ownership.activeRun.runtimeSurface || "—")}
+      </div>
+      <p>${escapeHtml(ownership.activeRun.error || "No active-run metadata error is currently recorded.")}</p>
+    </article>
+  `;
+}
+
+function normalizeOwnership(snapshot) {
+  if (snapshot && snapshot.ownership && snapshot.ownership.summaryState && snapshot.ownership.startGate) {
+    return snapshot.ownership;
+  }
+
+  return normalizeOwnershipPayload(snapshot && snapshot.ownership)
+    || deriveLegacyOwnership(snapshot || {});
+}
+
+function normalizeOwnershipPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const startGate = payload.start_gate && typeof payload.start_gate === "object" ? payload.start_gate : {};
+  const runtimeOwner = payload.runtime_owner && typeof payload.runtime_owner === "object" ? payload.runtime_owner : {};
+  const activeRun = payload.active_run && typeof payload.active_run === "object" ? payload.active_run : {};
+
+  return {
+    summaryState: payload.summary_state || "ready",
+    headline: payload.headline || "Manual starts are currently clear",
+    detail: payload.detail || "No live ownership conflicts or malformed run metadata are blocking a manual start.",
+    startAllowed: Boolean(payload["start_allowed?"] ?? payload.start_allowed ?? false),
+    conflict: Boolean(payload["conflict?"] ?? payload.conflict),
+    failClosed: Boolean(payload["fail_closed?"] ?? payload.fail_closed),
+    startGate: {
+      status: startGate.status || (payload["start_allowed?"] === false ? "blocked" : "allowed"),
+      reason: startGate.reason || null,
+      httpStatus: startGate.http_status ?? null,
+      reclaimOnStart: Boolean(startGate["reclaim_on_start?"] ?? startGate.reclaim_on_start),
+      cleanupOnStart: Boolean(startGate["cleanup_on_start?"] ?? startGate.cleanup_on_start),
+      details: startGate.details || null
+    },
+    runtimeOwner: {
+      state: runtimeOwner.state || "missing",
+      owner: runtimeOwner.owner || null,
+      surface: runtimeOwner.surface || null,
+      mode: runtimeOwner.mode || null,
+      branch: runtimeOwner.branch || null,
+      claimId: runtimeOwner.claim_id || null,
+      reclaimable: Boolean(runtimeOwner["reclaimable?"] ?? runtimeOwner.reclaimable),
+      error: runtimeOwner.error || null
+    },
+    activeRun: {
+      state: activeRun.state || "missing",
+      managed: Boolean(activeRun["managed?"] ?? activeRun.managed),
+      running: Boolean(activeRun["running?"] ?? activeRun.running),
+      lane: activeRun.lane || null,
+      action: activeRun.action || null,
+      mode: activeRun.mode || null,
+      workflowName: activeRun.workflow_name || null,
+      branch: activeRun.branch || null,
+      runtimeSurface: activeRun.runtime_surface || null,
+      error: activeRun.error || null
+    }
+  };
+}
+
+function deriveLegacyOwnership(snapshot) {
+  const runtimeOwner = snapshot && snapshot.runtime_owner ? snapshot.runtime_owner : {};
+  const babysitter = snapshot && snapshot.babysitter ? snapshot.babysitter : {};
+  const current = runtimeOwner.current || {};
+  const activeRun = babysitter.active_run || {};
+  const activeRunState = babysitter.active_run_state || "missing";
+  const running = Boolean(babysitter["running?"]);
+  const managed = Boolean(babysitter["managed?"]);
+  const reclaimable = Boolean(runtimeOwner["reclaimable?"]);
+  const runtimeState = runtimeOwner.state || "missing";
+  let summaryState = "ready";
+  let headline = "Manual starts are currently clear";
+  let detail = "No live ownership conflicts or malformed run metadata are blocking a manual start.";
+  let startGate = {
+    status: "allowed",
+    reason: null,
+    httpStatus: null,
+    reclaimOnStart: reclaimable,
+    cleanupOnStart: activeRunState === "stale",
+    details: null
+  };
+  let conflict = false;
+  let failClosed = false;
+
+  if (running && managed) {
+    summaryState = "blocked";
+    headline = "A managed babysitter run is already active";
+    detail = "Wait for the active managed run to finish or stop it before launching another one.";
+    startGate = { ...startGate, status: "blocked", reason: "babysitter_already_running", httpStatus: 409, reclaimOnStart: false, cleanupOnStart: false, details: activeRun };
+    conflict = true;
+  } else if (running) {
+    summaryState = "blocked";
+    headline = "Unmanaged active-run metadata is blocking new starts";
+    detail = "Forgeloop sees active unmanaged run metadata and will not start another run automatically.";
+    startGate = { ...startGate, status: "blocked", reason: "babysitter_unmanaged_active", httpStatus: 409, reclaimOnStart: false, cleanupOnStart: false, details: activeRun };
+    conflict = true;
+  } else if (runtimeState === "error") {
+    summaryState = "error";
+    headline = "Runtime ownership metadata is malformed";
+    detail = "Starts fail closed until the active-runtime claim is repaired or removed.";
+    startGate = { ...startGate, status: "error", reason: "active_runtime_state_error", httpStatus: 500, reclaimOnStart: false, cleanupOnStart: false };
+    failClosed = true;
+  } else if (activeRunState === "error") {
+    summaryState = "error";
+    headline = "Managed run metadata is malformed";
+    detail = "Starts fail closed until the active-run metadata is repaired or removed.";
+    startGate = { ...startGate, status: "error", reason: "active_run_state_error", httpStatus: 500, reclaimOnStart: false, cleanupOnStart: false };
+    failClosed = true;
+  } else if (Boolean(runtimeOwner["live?"]) && current && typeof current === "object") {
+    summaryState = "blocked";
+    headline = `Runtime ownership is currently held by ${current.owner || "another runtime"}`;
+    detail = `A live ${(current.surface || "runtime")} ${(current.mode || "run")} still owns the claim${current.claim_id ? ` (${current.claim_id})` : ""}.`;
+    startGate = { ...startGate, status: "blocked", reason: "active_runtime_owned_by", httpStatus: 409, reclaimOnStart: false, cleanupOnStart: false, details: current };
+    conflict = true;
+  } else if (reclaimable || activeRunState === "stale") {
+    summaryState = "recoverable";
+    headline = reclaimable && activeRunState === "stale"
+      ? "A stale claim and stale managed-run metadata can be recovered"
+      : reclaimable
+        ? "A stale runtime claim can be reclaimed on the next start"
+        : "Stale managed-run metadata will be cleaned before launch";
+    detail = reclaimable && activeRunState === "stale"
+      ? "The stale runtime claim can be reclaimed and the stale managed-run metadata will be cleaned before launch."
+      : reclaimable
+        ? "The stale runtime claim can be reclaimed on the next managed start."
+        : "The stale managed-run metadata will be cleaned before launch.";
+  }
+
+  return {
+    summaryState,
+    headline,
+    detail,
+    startAllowed: startGate.status === "allowed",
+    conflict,
+    failClosed,
+    startGate,
+    runtimeOwner: {
+      state: runtimeState,
+      owner: current.owner || null,
+      surface: current.surface || null,
+      mode: current.mode || null,
+      branch: current.branch || null,
+      claimId: current.claim_id || null,
+      reclaimable,
+      error: runtimeOwner.error || null
+    },
+    activeRun: {
+      state: activeRunState,
+      managed,
+      running,
+      lane: babysitter.lane || activeRun.lane || null,
+      action: babysitter.action || activeRun.action || null,
+      mode: babysitter.mode || activeRun.mode || null,
+      workflowName: babysitter.workflow_name || activeRun.workflow_name || null,
+      branch: babysitter.branch || activeRun.branch || null,
+      runtimeSurface: babysitter.runtime_surface || activeRun.runtime_surface || null,
+      error: babysitter.active_run_error || null
+    }
+  };
+}
+
+function ownershipSummaryClass(status) {
+  if (["ready"].includes(status)) return "good";
+  if (["recoverable", "reclaimable", "stale", "active"].includes(status)) return "warn";
+  if (["blocked", "error"].includes(status)) return "bad";
+  return "info";
+}
+
+function ownershipGateClass(status) {
+  if (status === "allowed") return "good";
+  if (status === "blocked") return "warn";
+  if (status === "error") return "bad";
+  return "info";
+}
+
+function yesNo(value) {
+  return value ? "yes" : "no";
 }
 
 function renderProviders(providerHealth) {
@@ -596,7 +866,7 @@ function renderTracker(tracker) {
   `).join("")}`;
 }
 
-function renderWorkflows(workflowOverview) {
+function renderWorkflows(workflowOverview, ownershipOverride) {
   const workflows = workflowOverview && workflowOverview.workflows ? workflowOverview.workflows : [];
   const runtime = workflowOverview && workflowOverview.runtime_state ? workflowOverview.runtime_state : null;
 
@@ -608,6 +878,8 @@ function renderWorkflows(workflowOverview) {
 
   const babysitter = state.snapshot && state.snapshot.babysitter ? state.snapshot.babysitter : {};
   const running = Boolean(babysitter["running?"]);
+  const ownership = ownershipOverride || (state.snapshot && state.snapshot.ownership) || normalizeOwnership(state.snapshot || {});
+  const workflowStartBlocked = ownership.startAllowed === false;
 
   refs.workflowsBody.className = "stack";
   refs.workflowsBody.innerHTML = `${runtime ? `
@@ -662,8 +934,8 @@ function renderWorkflows(workflowOverview) {
         ${historyMeta}
         ${historyList}
         <div class="control-buttons">
-          ${controlButton("workflow-preflight", "Preflight", { disabled: running || isPending(`workflow:${workflowName}:preflight`), workflowName })}
-          ${controlButton("workflow-run", "Run", { disabled: running || isPending(`workflow:${workflowName}:run`), workflowName })}
+          ${controlButton("workflow-preflight", "Preflight", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:preflight`), workflowName })}
+          ${controlButton("workflow-run", "Run", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:run`), workflowName })}
         </div>
       </article>
     `;
@@ -958,9 +1230,10 @@ async function runAction(key, fn, opts) {
   try {
     await fn();
   } catch (error) {
-    const text = error.reason === "babysitter_already_running" || error.reason === "babysitter_unmanaged_active"
+    const ownershipText = error.ownership && error.ownership.detail ? error.ownership.detail : null;
+    const text = ownershipText || (error.reason === "babysitter_already_running" || error.reason === "babysitter_unmanaged_active"
       ? (options.conflictText || "A run is already active.")
-      : (error.message || String(error));
+      : (error.message || String(error)));
     setNotice("bad", text);
   } finally {
     setPending(key, false);

@@ -24,6 +24,7 @@ defmodule ForgeloopV2.ServiceContractTest do
     assert descriptor.payload_versions.provider_health == 1
     assert descriptor.payload_versions.babysitter == 1
     assert descriptor.payload_versions.runtime_owner == 1
+    assert descriptor.payload_versions.ownership == 1
     assert descriptor.endpoints.schema.path == "/api/schema"
     assert descriptor.endpoints.overview.path == "/api/overview"
     assert descriptor.endpoints.events.path == "/api/events"

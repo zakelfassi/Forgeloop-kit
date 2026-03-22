@@ -47,6 +47,17 @@ assert_json_value() {
   echo "[hud-contract] ✅ ${desc}"
 }
 
+assert_json_expr() {
+  local desc="$1"
+  local path="$2"
+  local filter="$3"
+  if ! curl -fsS "$BASE_URL$path" | jq -e "$filter" >/dev/null; then
+    echo "[hud-contract] ${desc} failed: jq filter was false: $filter" >&2
+    exit 1
+  fi
+  echo "[hud-contract] ✅ ${desc}"
+}
+
 assert_visible() {
   local desc="$1"
   local selector="$2"
@@ -103,6 +114,8 @@ assert_json_value "schema exposes contract name" '/api/schema' '.data.contract_n
 assert_json_value "schema exposes contract version" '/api/schema' '.data.contract_version' '1'
 assert_json_value "schema exposes overview path" '/api/schema' '.data.endpoints.overview.path' '/api/overview'
 assert_json_value "overview envelope exposes api metadata" '/api/overview?limit=5' '.api.contract_version' '1'
+assert_json_expr "overview exposes ownership summary state" '/api/overview?limit=5' '.data.ownership.summary_state as $s | ($s == "ready" or $s == "recoverable" or $s == "blocked" or $s == "error")'
+assert_json_expr "overview exposes ownership start gate status" '/api/overview?limit=5' '.data.ownership.start_gate.status as $s | ($s == "allowed" or $s == "blocked" or $s == "error")'
 
 agent-browser --session "$SESSION_NAME" open "$BASE_URL" >/dev/null 2>&1
 agent-browser --session "$SESSION_NAME" wait "$BROWSER_WAIT_MS" >/dev/null 2>&1
@@ -110,9 +123,11 @@ agent-browser --session "$SESSION_NAME" wait "$BROWSER_WAIT_MS" >/dev/null 2>&1
 assert_visible "connection pill renders" '#connection-pill'
 assert_visible "control status renders" '#control-status'
 assert_visible "runtime panel renders" '#runtime-body'
+assert_visible "ownership panel renders" '#ownership-body'
 assert_visible "coordination panel renders" '#coordination-body'
 assert_visible "events panel renders" '#events-body'
 assert_text_contains "connection pill leaves boot state" '#connection-pill' 'Connected'
+assert_text_contains "ownership panel leaves empty state" '#ownership-body' 'Start gate'
 
 agent-browser --session "$SESSION_NAME" screenshot "$SCREENSHOT_PATH" >/dev/null 2>&1
 

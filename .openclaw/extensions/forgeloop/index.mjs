@@ -205,6 +205,7 @@ function buildOverviewTool(api) {
         return acc;
       }, {});
       const babysitter = data.babysitter || {};
+      const ownership = normalizeOwnershipOverview(data);
       const flags = data.control_flags || {};
       const workflowTarget = flags.workflow_target || {};
       const workflowFlag = boolFlag(flags["workflow_requested?"] ?? flags.workflow_requested);
@@ -224,6 +225,15 @@ function buildOverviewTool(api) {
         `Questions: ${questions.length} total, ${questions.filter((item) => item.status_kind === "awaiting_response").length} awaiting response`,
         `Escalations: ${escalations.length}`,
         `Tracker: ${trackerIssues.length} projected repo-local issues`,
+        `Ownership: ${ownership.summary_state}${ownership.start_gate.reclaim_on_start || ownership.start_gate.cleanup_on_start ? ` (reclaim_on_start=${boolFlag(ownership.start_gate.reclaim_on_start)} cleanup_on_start=${boolFlag(ownership.start_gate.cleanup_on_start)})` : ""}`,
+        `Start gate: ${ownership.start_gate.status}${ownership.start_gate.reason ? ` (${ownership.start_gate.reason})` : ""}`,
+        `Ownership detail: ${ownership.detail}`,
+        ownership.runtime_owner.owner
+          ? `Runtime owner: ${ownership.runtime_owner.owner} via ${ownership.runtime_owner.surface || "unknown"} / ${ownership.runtime_owner.mode || "unknown"}${ownership.runtime_owner.claim_id ? ` (${ownership.runtime_owner.claim_id})` : ""}`
+          : null,
+        ownership.active_run.state !== "missing"
+          ? `Active run: ${ownership.active_run.state} ${ownership.active_run.mode || ownership.active_run.action || "run"} via ${ownership.active_run.runtime_surface || "unknown"}`
+          : null,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
         `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active, failed=${workflowOutcomeCounts.failed || 0}, escalated=${workflowOutcomeCounts.escalated || 0}, start_failed=${workflowOutcomeCounts.start_failed || 0})`,
         coordination
@@ -1265,10 +1275,15 @@ async function requestJson(api, path, opts = {}) {
 
     if (!response.ok || !payload?.ok) {
       const reason = payload?.error?.reason || payload?.error?.message || response.statusText || `HTTP ${response.status}`;
-      const error = new Error(`Forgeloop request failed (${response.status}): ${reason}`);
+      const ownership = ownershipErrorReason(reason)
+        ? normalizeOwnershipPayload(payload?.error?.ownership)
+        : null;
+      const detailSuffix = ownership?.detail ? ` — ${ownership.detail}` : "";
+      const error = new Error(`Forgeloop request failed (${response.status}): ${reason}${detailSuffix}`);
       error.status = response.status;
       error.reason = payload?.error?.reason || null;
       error.payload = payload;
+      error.ownership = ownership;
       throw error;
     }
 
@@ -1481,6 +1496,173 @@ function pendingCount(items) {
 
 function boolFlag(value) {
   return value ? "yes" : "no";
+}
+
+function ownershipErrorReason(reason) {
+  return [
+    "babysitter_already_running",
+    "babysitter_unmanaged_active",
+    "active_runtime_owned_by",
+    "active_runtime_state_error",
+    "active_run_state_error"
+  ].includes(reason);
+}
+
+function normalizeOwnershipOverview(overview) {
+  return normalizeOwnershipPayload(overview?.ownership) || deriveLegacyOwnershipOverview(overview || {});
+}
+
+function normalizeOwnershipPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const startGate = payload.start_gate && typeof payload.start_gate === "object" ? payload.start_gate : {};
+  const runtimeOwner = payload.runtime_owner && typeof payload.runtime_owner === "object" ? payload.runtime_owner : {};
+  const activeRun = payload.active_run && typeof payload.active_run === "object" ? payload.active_run : {};
+
+  return {
+    summary_state: payload.summary_state || "ready",
+    headline: payload.headline || "Manual starts are currently clear",
+    detail: payload.detail || "No live ownership conflicts or malformed run metadata are blocking a manual start.",
+    start_allowed: Boolean(payload["start_allowed?"] ?? payload.start_allowed),
+    conflict: Boolean(payload["conflict?"] ?? payload.conflict),
+    fail_closed: Boolean(payload["fail_closed?"] ?? payload.fail_closed),
+    start_gate: {
+      status: startGate.status || (Boolean(payload["start_allowed?"] ?? payload.start_allowed) ? "allowed" : "blocked"),
+      reason: startGate.reason || null,
+      http_status: startGate.http_status ?? null,
+      reclaim_on_start: Boolean(startGate["reclaim_on_start?"] ?? startGate.reclaim_on_start),
+      cleanup_on_start: Boolean(startGate["cleanup_on_start?"] ?? startGate.cleanup_on_start),
+      details: startGate.details || null
+    },
+    runtime_owner: {
+      state: runtimeOwner.state || "missing",
+      owner: runtimeOwner.owner || null,
+      surface: runtimeOwner.surface || null,
+      mode: runtimeOwner.mode || null,
+      branch: runtimeOwner.branch || null,
+      claim_id: runtimeOwner.claim_id || null,
+      reclaimable: Boolean(runtimeOwner["reclaimable?"] ?? runtimeOwner.reclaimable),
+      error: runtimeOwner.error || null
+    },
+    active_run: {
+      state: activeRun.state || "missing",
+      managed: Boolean(activeRun["managed?"] ?? activeRun.managed),
+      running: Boolean(activeRun["running?"] ?? activeRun.running),
+      lane: activeRun.lane || null,
+      action: activeRun.action || null,
+      mode: activeRun.mode || null,
+      workflow_name: activeRun.workflow_name || null,
+      branch: activeRun.branch || null,
+      runtime_surface: activeRun.runtime_surface || null,
+      error: activeRun.error || null
+    }
+  };
+}
+
+function deriveLegacyOwnershipOverview(overview) {
+  const runtimeOwner = overview?.runtime_owner || {};
+  const babysitter = overview?.babysitter || {};
+  const current = runtimeOwner.current || {};
+  const activeRun = babysitter.active_run || {};
+  const activeRunState = babysitter.active_run_state || "missing";
+  const running = Boolean(babysitter["running?"] ?? babysitter.running);
+  const managed = Boolean(babysitter["managed?"] ?? babysitter.managed);
+  const reclaimable = Boolean(runtimeOwner["reclaimable?"] ?? runtimeOwner.reclaimable);
+  const ownerState = runtimeOwner.state || "missing";
+
+  if (running && managed) {
+    return {
+      summary_state: "blocked",
+      headline: "A managed babysitter run is already active",
+      detail: "Wait for the active managed run to finish or stop it before launching another one.",
+      start_allowed: false,
+      conflict: true,
+      fail_closed: false,
+      start_gate: { status: "blocked", reason: "babysitter_already_running", http_status: 409, reclaim_on_start: false, cleanup_on_start: false, details: activeRun },
+      runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+      active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+    };
+  }
+
+  if (running) {
+    return {
+      summary_state: "blocked",
+      headline: "Unmanaged active-run metadata is blocking new starts",
+      detail: "Forgeloop sees active unmanaged run metadata and will not start another run automatically.",
+      start_allowed: false,
+      conflict: true,
+      fail_closed: false,
+      start_gate: { status: "blocked", reason: "babysitter_unmanaged_active", http_status: 409, reclaim_on_start: false, cleanup_on_start: false, details: activeRun },
+      runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+      active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+    };
+  }
+
+  if (ownerState === "error") {
+    return {
+      summary_state: "error",
+      headline: "Runtime ownership metadata is malformed",
+      detail: "Starts fail closed until the active-runtime claim is repaired or removed.",
+      start_allowed: false,
+      conflict: false,
+      fail_closed: true,
+      start_gate: { status: "error", reason: "active_runtime_state_error", http_status: 500, reclaim_on_start: false, cleanup_on_start: false, details: null },
+      runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+      active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+    };
+  }
+
+  if (activeRunState === "error") {
+    return {
+      summary_state: "error",
+      headline: "Managed run metadata is malformed",
+      detail: "Starts fail closed until the active-run metadata is repaired or removed.",
+      start_allowed: false,
+      conflict: false,
+      fail_closed: true,
+      start_gate: { status: "error", reason: "active_run_state_error", http_status: 500, reclaim_on_start: false, cleanup_on_start: false, details: null },
+      runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+      active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+    };
+  }
+
+  if (Boolean(runtimeOwner["live?"] ?? runtimeOwner.live) && current && typeof current === "object") {
+    return {
+      summary_state: "blocked",
+      headline: `Runtime ownership is currently held by ${current.owner || "another runtime"}`,
+      detail: `A live ${current.surface || "runtime"} ${current.mode || "run"} still owns the claim${current.claim_id ? ` (${current.claim_id})` : ""}.`,
+      start_allowed: false,
+      conflict: true,
+      fail_closed: false,
+      start_gate: { status: "blocked", reason: "active_runtime_owned_by", http_status: 409, reclaim_on_start: false, cleanup_on_start: false, details: current },
+      runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+      active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+    };
+  }
+
+  return {
+    summary_state: reclaimable || activeRunState === "stale" ? "recoverable" : "ready",
+    headline: reclaimable && activeRunState === "stale"
+      ? "A stale claim and stale managed-run metadata can be recovered"
+      : reclaimable
+        ? "A stale runtime claim can be reclaimed on the next start"
+        : activeRunState === "stale"
+          ? "Stale managed-run metadata will be cleaned before launch"
+          : "Manual starts are currently clear",
+    detail: reclaimable && activeRunState === "stale"
+      ? "The stale runtime claim can be reclaimed and the stale managed-run metadata will be cleaned before launch."
+      : reclaimable
+        ? "The stale runtime claim can be reclaimed on the next managed start."
+        : activeRunState === "stale"
+          ? "The stale managed-run metadata will be cleaned before launch."
+          : "No live ownership conflicts or malformed run metadata are blocking a manual start.",
+    start_allowed: true,
+    conflict: false,
+    fail_closed: false,
+    start_gate: { status: "allowed", reason: null, http_status: null, reclaim_on_start: reclaimable, cleanup_on_start: activeRunState === "stale", details: null },
+    runtime_owner: { state: ownerState, owner: current.owner || null, surface: current.surface || null, mode: current.mode || null, branch: current.branch || null, claim_id: current.claim_id || null, reclaimable, error: runtimeOwner.error || null },
+    active_run: { state: activeRunState, managed, running, lane: babysitter.lane || activeRun.lane || null, action: babysitter.action || activeRun.action || null, mode: babysitter.mode || activeRun.mode || null, workflow_name: babysitter.workflow_name || activeRun.workflow_name || null, branch: babysitter.branch || activeRun.branch || null, runtime_surface: babysitter.runtime_surface || activeRun.runtime_surface || null, error: babysitter.active_run_error || null }
+  };
 }
 
 function nullableBoolean(value) {

@@ -51,6 +51,17 @@ globalThis.fetch = async (url, options = {}) => {
     return okJson({
       data: makeOverview({
         runtime_state: { status: "running", mode: "build", surface: "ui", branch: "main" },
+        ownership: {
+          summary_state: "ready",
+          headline: "Manual starts are currently clear",
+          detail: "No live ownership conflicts or malformed run metadata are blocking a manual start.",
+          "start_allowed?": true,
+          "conflict?": false,
+          "fail_closed?": false,
+          start_gate: { status: "allowed", reason: null, http_status: null, "reclaim_on_start?": false, "cleanup_on_start?": false, details: null },
+          runtime_owner: { state: "missing", owner: null, surface: null, mode: null, branch: null, claim_id: null, "reclaimable?": false, error: null },
+          active_run: { state: "missing", "managed?": false, "running?": false, lane: null, action: null, mode: null, workflow_name: null, branch: null, runtime_surface: null, error: null }
+        },
         control_flags: { "pause_requested?": false, "replan_requested?": true },
         questions: [{ id: "Q-1", status_kind: "awaiting_response" }],
         escalations: [{ id: "E-1" }],
@@ -119,6 +130,9 @@ const overviewResult = await tools.forgeloop_overview.execute("1", { limit: 9 })
 assert.match(overviewResult.content[0].text, /Runtime: running \/ build via ui on main/);
 assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPLEMENTATION_PLAN\.md/);
 assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
+assert.match(overviewResult.content[0].text, /Ownership: ready/);
+assert.match(overviewResult.content[0].text, /Start gate: allowed/);
+assert.match(overviewResult.content[0].text, /Ownership detail: No live ownership conflicts or malformed run metadata are blocking a manual start\./);
 assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active, failed=1, escalated=0, start_failed=0\)/);
 assert.match(overviewResult.content[0].text, /Coordination: actionable \(1 playbooks, 1 recommendations\)/);
 assert.match(overviewResult.content[0].text, /Coordination brief: Actionable: Queue the next rebuild pass/);
@@ -149,6 +163,48 @@ assert.match(questionResult.content[0].text, /status_kind\": \"answered\"/);
 assert.deepEqual(
   JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/questions/Q-1/answer")).options.body),
   { expected_revision: "rev-1", answer: "Proceed." }
+);
+
+globalThis.fetch = async (url, options = {}) => {
+  const parsed = new URL(String(url));
+  if (parsed.pathname === "/api/schema") {
+    return okJson({ data: makeSchema() });
+  }
+  if (parsed.pathname === "/api/control/run") {
+    return {
+      ok: false,
+      status: 409,
+      statusText: "Conflict",
+      async text() {
+        return JSON.stringify({
+          ok: false,
+          api: { name: "forgeloop_loopback", contract_version: 1, schema_path: "/api/schema" },
+          error: {
+            reason: "active_runtime_owned_by",
+            detail: "live owner conflict",
+            details: { owner: "bash" },
+            ownership: {
+              summary_state: "blocked",
+              headline: "Runtime ownership is currently held by bash",
+              detail: "A live daemon build still owns the claim (rt-1). Wait for it to release or intervene manually.",
+              "start_allowed?": false,
+              "conflict?": true,
+              "fail_closed?": false,
+              start_gate: { status: "blocked", reason: "active_runtime_owned_by", http_status: 409, "reclaim_on_start?": false, "cleanup_on_start?": false, details: { owner: "bash" } },
+              runtime_owner: { state: "live", owner: "bash", surface: "daemon", mode: "build", branch: "main", claim_id: "rt-1", "reclaimable?": false, error: null },
+              active_run: { state: "missing", "managed?": false, "running?": false, lane: null, action: null, mode: null, workflow_name: null, branch: null, runtime_surface: null, error: null }
+            }
+          }
+        });
+      }
+    };
+  }
+  throw new Error(`Unexpected ownership error fetch: ${url} ${options.method || "GET"}`);
+};
+
+await assert.rejects(
+  tools.forgeloop_control.execute("3b", { action: "build" }),
+  /A live daemon build still owns the claim \(rt-1\)\. Wait for it to release or intervene manually\./
 );
 
 let recommendationOverview = makeOverview({
@@ -896,7 +952,8 @@ function makeSchema(overrides = {}) {
       workflow_overview: 1,
       provider_health: 1,
       babysitter: 1,
-      runtime_owner: 1
+      runtime_owner: 1,
+      ownership: 1
     },
     endpoints: {
       overview: { path: "/api/overview" },

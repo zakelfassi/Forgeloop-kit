@@ -176,8 +176,8 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - `/api/overview` now exposes whether `[WORKFLOW]` is queued plus the configured daemon workflow target so the HUD/OpenClaw seam can show the one-shot daemon request clearly
 - `/api/events` now supports bounded tails plus replay-after-cursor semantics over the canonical JSONL log, and `/api/stream` now uses that same event seam for SSE resume/live delivery
 - JSON and SSE snapshot/event envelopes now carry additive top-level `api` metadata so the HUD and OpenClaw can follow one service-owned loopback contract without changing the underlying file-first control plane
-- `/api/overview.runtime_owner` now distinguishes `live`, `reclaimable`, and `error` ownership states, and `/api/babysitter` now exposes `active_run_state` / `active_run_error` so stale metadata is visible without being treated as running
-- manual start surfaces now auto-clean stale babysitter metadata before launching, while malformed ownership or active-run files block starts fail-closed with stable error reasons
+- `/api/overview` now also exposes an additive `ownership` read model that summarizes start-gate state across live-owner conflicts, reclaimable dead claims, stale active-run cleanup, and malformed metadata while keeping raw `runtime_owner` / `babysitter` fields available for compatibility
+- manual start surfaces now auto-clean stale babysitter metadata before launching, while malformed ownership or active-run files block starts fail-closed with stable reason codes plus additive `error.ownership` context for operator-facing clients
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:

@@ -1,9 +1,9 @@
 {
   "name": "openclaw-forgeloop",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
-  "description": "Workspace OpenClaw plugin for Forgeloop's loopback control plane and shared coordination brief/timeline orchestration seam.",
+  "description": "Workspace OpenClaw plugin for Forgeloop's loopback control plane, ownership/start-gate visibility, and shared coordination brief/timeline orchestration seam.",
   "openclaw": {
     "extensions": [
       "./index.ts"

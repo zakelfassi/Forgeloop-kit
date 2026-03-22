@@ -421,6 +421,20 @@ Format:
     - `ForgeloopV2.Service` now injects additive top-level `api` metadata into JSON responses plus SSE snapshot/event frames without changing existing endpoint semantics.
     - The static HUD now discovers and follows the service-owned contract when available, and the OpenClaw plugin now prefers the same contract while preserving literal-route compatibility for older services.
     - Docs/site copy now describe the loopback contract freeze as additive service hardening rather than a new control plane.
+- [x] Clarify ownership/start-gate state across the loopback service, HUD, and OpenClaw
+  - Acceptance:
+    - `/api/overview` exposes one additive service-owned ownership/start-gate read model for manual starts without removing the older raw `runtime_owner` / `babysitter` fields.
+    - Blocked manual-start responses keep stable reason codes while also returning additive `error.ownership` context for operator-facing clients.
+    - The HUD, OpenClaw seam, manual browser proof, and docs/site all render/describe the same ownership/start-gate model instead of splitting that logic per client.
+  - REQUIRED TESTS:
+    - `elixir/test/forgeloop_v2/service_test.exs`
+    - `elixir/test/forgeloop_v2/service_contract_test.exs`
+    - `tests/openclaw-plugin.test.sh`
+    - `tests/manual/hud-contract.agent-browser.sh`
+  - Shipped behavior:
+    - `ForgeloopV2.ServiceOwnership` now derives one additive ownership/start-gate read model from raw runtime-owner + babysitter state, including ready/recoverable/blocked/error summaries and stable start-gate detail.
+    - `/api/overview` now embeds that shared `ownership` payload, and blocked start surfaces now include additive `error.ownership` context without changing stable reason codes.
+    - The HUD and OpenClaw seam now prefer that shared ownership/start-gate view for operator messaging, while docs/site copy describe it as additive service hardening rather than a new control plane.
 - [x] Clarify public release tracks for the V2 launch path
   - Acceptance:
     - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 alpha / development track.
