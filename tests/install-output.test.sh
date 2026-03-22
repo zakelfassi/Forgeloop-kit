@@ -26,12 +26,28 @@ assert_not_contains_line() {
     fi
 }
 
+assert_order() {
+    local haystack="$1"
+    local first="$2"
+    local second="$3"
+    local first_line second_line
+
+    first_line="$(grep -nF "$first" <<<"$haystack" | head -n1 | cut -d: -f1)"
+    second_line="$(grep -nF "$second" <<<"$haystack" | head -n1 | cut -d: -f1)"
+
+    if [[ -z "$first_line" || -z "$second_line" || "$first_line" -ge "$second_line" ]]; then
+        echo "FAIL: expected '$first' to appear before '$second'" >&2
+        exit 1
+    fi
+}
+
 plain_target="$tmp_root/plain-target"
 wrapper_target="$tmp_root/wrapper-target"
 mkdir -p "$plain_target" "$wrapper_target"
 
 plain_output="$("$ROOT_DIR/install.sh" "$plain_target" --force 2>&1)"
 wrapper_output="$("$ROOT_DIR/install.sh" "$wrapper_target" --force --wrapper 2>&1)"
+wrapper_help="$(cd "$wrapper_target" && ./forgeloop.sh --help 2>&1)"
 
 [[ -f "$plain_target/AGENTS.md" ]] || { echo "FAIL: plain install missing AGENTS.md" >&2; exit 1; }
 [[ -f "$plain_target/PROMPT_intake.md" ]] || { echo "FAIL: plain install missing PROMPT_intake.md" >&2; exit 1; }
@@ -46,13 +62,19 @@ wrapper_output="$("$ROOT_DIR/install.sh" "$wrapper_target" --force --wrapper 2>&
 
 assert_contains "$plain_output" "bash ./forgeloop/evals/run.sh"
 assert_not_contains_line "$plain_output" "  ./forgeloop/evals/run.sh"
+assert_contains "$plain_output" "./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\""
 assert_contains "$plain_output" "./forgeloop/bin/loop.sh plan 1"
 assert_contains "$plain_output" "./forgeloop/bin/loop.sh 5"
 assert_contains "$plain_output" "./forgeloop/bin/workflow.sh list"
+assert_order "$plain_output" "./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\"" "./forgeloop/bin/loop.sh plan 1"
 
 assert_contains "$wrapper_output" "./forgeloop.sh evals"
+assert_contains "$wrapper_output" "./forgeloop.sh kickoff \"<one paragraph project brief>\""
 assert_contains "$wrapper_output" "./forgeloop.sh plan 1"
 assert_contains "$wrapper_output" "./forgeloop.sh build 5"
 assert_contains "$wrapper_output" "./forgeloop.sh workflow list"
+assert_order "$wrapper_output" "./forgeloop.sh kickoff \"<one paragraph project brief>\"" "./forgeloop.sh plan 1"
+assert_contains "$wrapper_help" "./forgeloop.sh kickoff \"<brief>\""
+assert_order "$wrapper_help" "./forgeloop.sh kickoff \"<brief>\"" "./forgeloop.sh plan [max_iters] [--lite|--full] [--watch|--infinite]"
 
 echo "ok: install output"

@@ -42,6 +42,33 @@ PROMPT_PLAN_WORK="${FORGELOOP_PROMPT_PLAN_WORK:-PROMPT_plan_work.md}"
 log() { forgeloop_core__log "$1" "$LOG_FILE"; }
 notify() { forgeloop_core__notify "$REPO_DIR" "$@"; }
 
+print_intake_readiness_guidance() {
+    local prompt_source kickoff_cmd
+    prompt_source="$(forgeloop_core__resolve_intake_prompt_source "$REPO_DIR" "$FORGELOOP_DIR" || true)"
+
+    if [[ -x "$REPO_DIR/forgeloop.sh" ]]; then
+        kickoff_cmd="./forgeloop.sh kickoff \"<one paragraph project brief>\""
+    else
+        kickoff_cmd="./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\""
+    fi
+
+    echo "Checklist intake is not ready yet." >&2
+    echo "This repo still looks like a fresh Forgeloop bootstrap with template-only specs/docs/plan files." >&2
+    if [[ -n "$prompt_source" ]]; then
+        echo "Review the intake prompt at: $prompt_source" >&2
+    else
+        echo "Could not find PROMPT_intake.md. Reinstall or upgrade Forgeloop so the intake prompt is available." >&2
+    fi
+    echo "Then render a shareable kickoff prompt with:" >&2
+    echo "  $kickoff_cmd" >&2
+    echo "That writes: docs/KICKOFF_PROMPT.md" >&2
+    echo "Before retrying checklist plan/build, apply real repo-local intake output:" >&2
+    echo "  - docs/*" >&2
+    echo "  - specs/*" >&2
+    echo "  - IMPLEMENTATION_PLAN.md" >&2
+    echo "Checklist lane remains the default. Tasks/workflow lanes stay explicit opt-ins." >&2
+}
+
 run_verify_cmd() {
     local cmd="$1"
     if [[ -z "$cmd" ]]; then
@@ -160,6 +187,23 @@ export FORGELOOP_RUNTIME_SURFACE="loop"
 export FORGELOOP_RUNTIME_MODE="$MODE"
 export FORGELOOP_RUNTIME_BRANCH="$CURRENT_BRANCH"
 
+PROMPT_FILE_PATH="$PROMPT_FILE"
+if [[ "$PROMPT_FILE_PATH" != /* ]]; then
+    PROMPT_FILE_PATH="$REPO_DIR/$PROMPT_FILE_PATH"
+fi
+
+if [[ "$MODE" != "review" ]] && [[ ! -f "$PROMPT_FILE_PATH" ]]; then
+    echo "Error: $PROMPT_FILE not found" >&2
+    exit 1
+fi
+
+if [[ "$MODE" == "plan" || "$MODE" == "build" ]]; then
+    if ! forgeloop_core__check_checklist_intake_readiness "$REPO_DIR" "$FORGELOOP_DIR"; then
+        print_intake_readiness_guidance
+        exit 2
+    fi
+fi
+
 ACTIVE_RUNTIME_CLAIM_ID=""
 cleanup_active_runtime_claim() {
     forgeloop_core__active_runtime_claim_end "$REPO_DIR" "${ACTIVE_RUNTIME_CLAIM_ID:-}" || true
@@ -194,11 +238,6 @@ echo "Autopush:   ${FORGELOOP_AUTOPUSH:-false}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 notify "🚀" "Forgeloop Started" "Mode: $MODE | Branch: $CURRENT_BRANCH"
-
-if [ "$MODE" != "review" ] && [ ! -f "$PROMPT_FILE" ]; then
-    echo "Error: $PROMPT_FILE not found"
-    exit 1
-fi
 
 # Session knowledge context (best-effort): write $RUNTIME_DIR/session-context.md and inject into prompts.
 SESSION_CONTEXT_FILE=$(forgeloop_core__init_session_context "$REPO_DIR" "$FORGELOOP_DIR" "$RUNTIME_DIR")

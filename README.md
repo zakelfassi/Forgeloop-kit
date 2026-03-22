@@ -75,10 +75,13 @@ In the target repo:
 ```bash
 ./forgeloop.sh serve
 ./forgeloop.sh evals
+./forgeloop.sh kickoff "<one paragraph project brief>"   # Fresh repo path
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
 ./forgeloop.sh workflow list
 ```
+
+Fresh repos now treat `PROMPT_intake.md` + `kickoff` as part of the normal lifecycle: checklist `plan` / `build` stop early when the repo still only contains bootstrap templates and point you back to the intake flow before any LLM work starts.
 
 For continuous operation:
 
@@ -284,6 +287,8 @@ For greenfield projects, start with the reusable repo-local intake prompt and st
 ```
 
 That generated prompt should produce `docs/*`, `specs/*`, and `IMPLEMENTATION_PLAN.md` by default. Ask for `prd.json` only when you intentionally want the tasks lane, and only seed workflow packs when you explicitly want the experimental workflow lane.
+
+If the repo still only contains the installed bootstrap templates, `./forgeloop.sh plan` and `./forgeloop.sh build` now stop early with explicit guidance back to `PROMPT_intake.md` / `kickoff` instead of spending a low-signal checklist iteration.
 
 ### Tasks lane
 

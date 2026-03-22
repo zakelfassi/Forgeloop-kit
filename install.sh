@@ -542,6 +542,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 usage() {
   cat <<'USAGE'
 Usage:
+  ./forgeloop.sh kickoff "<brief>" [--project <name>] [--seed <path-or-url>] [--notes <text>] [--out <path>]
   ./forgeloop.sh plan [max_iters] [--lite|--full] [--watch|--infinite]
   ./forgeloop.sh plan-work "scope" [max_iters] [--watch|--infinite]
   ./forgeloop.sh build [max_iters] [--lite|--full] [--watch|--infinite]
@@ -559,7 +560,6 @@ Usage:
   ./forgeloop.sh notify "emoji" "title" "message"
   ./forgeloop.sh ingest --report <file> [--mode request|plan-work]
   ./forgeloop.sh ingest-logs (--file <path> | --cmd "<command>" | --latest) [--tail <lines>] [--mode request|plan-work]
-  ./forgeloop.sh kickoff "<brief>" [--project <name>] [--seed <path-or-url>] [--notes <text>] [--out <path>]
   ./forgeloop.sh session-start     # Load knowledge context
   ./forgeloop.sh session-end       # Capture session knowledge
 
@@ -760,12 +760,14 @@ main() {
     if [ "$WRAPPER" = "true" ]; then
         echo "  ./forgeloop.sh serve"
         echo "  ./forgeloop.sh evals"
+        echo "  ./forgeloop.sh kickoff \"<one paragraph project brief>\""
         echo "  ./forgeloop.sh plan 1"
         echo "  ./forgeloop.sh build 5"
         echo "  ./forgeloop.sh workflow list"
     else
         echo "  (cd ./forgeloop/elixir && mix forgeloop_v2.serve --repo ..)"
         echo "  bash ./forgeloop/evals/run.sh"
+        echo "  ./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\""
         echo "  ./forgeloop/bin/loop.sh plan 1"
         echo "  ./forgeloop/bin/loop.sh 5"
         echo "  ./forgeloop/bin/workflow.sh list"

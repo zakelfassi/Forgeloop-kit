@@ -21,6 +21,8 @@ Useful commands:
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
 
+Fresh bootstrap repos should use `kickoff` before checklist `plan` / `build`; template-only installs are now blocked with explicit intake guidance until real docs/specs/plan content exists.
+
 GCP provisioning scripts live in `ops/gcp/`.
 
 ## Secondary systems

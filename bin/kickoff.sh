@@ -18,27 +18,11 @@ Notes:
 USAGE
 }
 
-resolve_prompt_source() {
-  local repo_prompt="$1/PROMPT_intake.md"
-  local vendored_prompt="$2/templates/PROMPT_intake.md"
-
-  if [ -f "$repo_prompt" ]; then
-    printf '%s\n' "$repo_prompt"
-    return 0
-  fi
-
-  if [ -f "$vendored_prompt" ]; then
-    printf '%s\n' "$vendored_prompt"
-    return 0
-  fi
-
-  return 1
-}
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOTSTRAP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$BOOTSTRAP_DIR/lib/core.sh"
 REPO_DIR="$(forgeloop_core__resolve_repo_dir "${BASH_SOURCE[0]}")"
+FORGELOOP_DIR="$(forgeloop_core__resolve_forgeloop_dir "$REPO_DIR")"
 
 if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
   usage
@@ -83,7 +67,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-PROMPT_SOURCE="$(resolve_prompt_source "$REPO_DIR" "$BOOTSTRAP_DIR" || true)"
+PROMPT_SOURCE="$(forgeloop_core__resolve_intake_prompt_source "$REPO_DIR" "$FORGELOOP_DIR" || true)"
 if [ -z "$PROMPT_SOURCE" ]; then
   echo "Could not find PROMPT_intake.md in repo root or vendored Forgeloop templates." >&2
   echo "Reinstall or upgrade Forgeloop so the intake prompt is available." >&2

@@ -57,6 +57,76 @@ forgeloop_core__resolve_forgeloop_dir() {
     fi
 }
 
+# Resolve the active intake prompt source for a repo.
+# Usage: prompt=$(forgeloop_core__resolve_intake_prompt_source "$REPO_DIR" "$FORGELOOP_DIR")
+forgeloop_core__resolve_intake_prompt_source() {
+    local repo_dir="$1"
+    local forgeloop_dir="${2:-$(forgeloop_core__resolve_forgeloop_dir "$repo_dir")}"
+    local repo_prompt="$repo_dir/PROMPT_intake.md"
+    local vendored_prompt="$forgeloop_dir/templates/PROMPT_intake.md"
+
+    if [[ -f "$repo_prompt" ]]; then
+        printf '%s\n' "$repo_prompt"
+        return 0
+    fi
+
+    if [[ -f "$vendored_prompt" ]]; then
+        printf '%s\n' "$vendored_prompt"
+        return 0
+    fi
+
+    return 1
+}
+
+# Determine whether checklist-lane intake is ready or the repo still looks like a fresh bootstrap.
+# Usage: if forgeloop_core__check_checklist_intake_readiness "$REPO_DIR" "$FORGELOOP_DIR"; then ...; fi
+forgeloop_core__check_checklist_intake_readiness() {
+    local repo_dir="$1"
+    local forgeloop_dir="${2:-$(forgeloop_core__resolve_forgeloop_dir "$repo_dir")}"
+    local specs_dir="$repo_dir/specs"
+    local docs_dir="$repo_dir/docs"
+    local plan_file="${FORGELOOP_IMPLEMENTATION_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
+    local file base line
+
+    if [[ "$plan_file" != /* ]]; then
+        plan_file="$repo_dir/$plan_file"
+    fi
+
+    if [[ -d "$specs_dir" ]]; then
+        while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            if [[ "$base" != "README.md" && "$base" != "feature_template.md" ]]; then
+                return 0
+            fi
+        done < <(find "$specs_dir" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null)
+    fi
+
+    if [[ -d "$docs_dir" ]]; then
+        while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            if [[ "$base" != "README.md" && "$base" != "KICKOFF_PROMPT.md" ]]; then
+                return 0
+            fi
+        done < <(find "$docs_dir" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null)
+    fi
+
+    if [[ -f "$plan_file" ]]; then
+        while IFS= read -r line; do
+            case "$line" in
+                *"Pending item"*|*"Completed item (keep this section trimmed)"*|*"Describe the next highest priority work item"*|*"Add more items here"*)
+                    continue
+                    ;;
+            esac
+
+            if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*\[[[:space:]xX]\][[:space:]]+.+$ ]]; then
+                return 0
+            fi
+        done < "$plan_file"
+    fi
+
+    return 1
+}
+
 # Load Forgeloop configuration from config.sh
 # Usage: forgeloop_core__load_config "$REPO_DIR"
 forgeloop_core__load_config() {

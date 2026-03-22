@@ -391,6 +391,20 @@ Format:
     - `templates/PROMPT_intake.md` is now the durable repo-local source prompt for greenfield/project-starting spec intake.
     - `bin/kickoff.sh` now renders `docs/KICKOFF_PROMPT.md` from repo-root `PROMPT_intake.md` when present, with vendored fallback for older repos.
     - Install/upgrade now place both `PROMPT_intake.md` and `PROMPT_tasks.md` at repo root, and the public docs/site now explain the checklist-first intake strategy explicitly.
+- [x] Make checklist intake readiness part of the normal first-run lifecycle
+  - Acceptance:
+    - Fresh bootstrap repos do not enter checklist `plan` / `build` loops against template-only specs/docs/plan files.
+    - The gate points operators back to `PROMPT_intake.md` and the existing `kickoff` command instead of creating hidden install-time side effects.
+    - Install output, wrapper help, repo-local docs, and public docs/site all present kickoff as the first-run checklist intake path.
+    - Runtime ownership/state files are not claimed or written when the intake gate blocks checklist entry.
+  - REQUIRED TESTS:
+    - `tests/intake-lifecycle.test.sh`
+    - `tests/install-output.test.sh`
+    - `tests/kickoff-prompt.test.sh`
+  - Shipped behavior:
+    - `lib/core.sh` now provides shared intake prompt resolution plus a checklist-readiness heuristic that treats fresh template-only installs as not ready.
+    - `bin/loop.sh` now exits early for checklist `plan` / `build` with explicit `PROMPT_intake.md` + `kickoff` guidance before runtime claim/state mutation.
+    - `bin/kickoff.sh` now reuses the shared intake prompt resolver, and install/docs/site surfaces now position kickoff as the normal fresh-repo path.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 

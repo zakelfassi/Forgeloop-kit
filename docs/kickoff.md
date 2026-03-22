@@ -36,6 +36,8 @@ Forgeloop now ships a durable repo-local intake prompt for that job:
    ./forgeloop.sh build 10
    ```
 
+If the repo still only contains the installed bootstrap templates, checklist `plan` / `build` now stop early and point you back to `PROMPT_intake.md` plus `./forgeloop.sh kickoff "<one paragraph project brief>"` before any checklist-lane LLM work starts.
+
 ## Lane strategy
 
 The intake prompt is deliberately checklist-first:

@@ -1124,6 +1124,7 @@
 ./install.sh "$REPO" --wrapper
 cd "$REPO"
 ./forgeloop.sh evals
+# Fresh repo path: ./forgeloop.sh kickoff "&lt;one paragraph project brief&gt;"
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
 # Optional: ./forgeloop.sh sync-skills
@@ -1187,6 +1188,7 @@ flowchart LR
               <h4>Plan + build</h4>
               <p>
                 Run planning/build loops against your real specs, repo checks, and branch state instead of one-shot prompt glue.
+                Fresh template-only repos now stop early and point you back to the intake prompt before checklist work starts.
               </p>
             </div>
             <div class="step">
@@ -1613,6 +1615,9 @@ cd /path/to/your/new-repo
                   <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
                     Default output should stay checklist-first: <code>docs/*</code>, <code>specs/*</code>, and <code>IMPLEMENTATION_PLAN.md</code>.
                     Ask for <code>prd.json</code> only when you intentionally want the tasks lane, and only seed workflow packs when you explicitly want the experimental workflow lane.
+                  </p>
+                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
+                    Fresh installs now treat this as part of the normal lifecycle: checklist <code>plan</code>/<code>build</code> stop early until real intake output replaces the bootstrap templates.
                   </p>
                 </li>
                 <li>
