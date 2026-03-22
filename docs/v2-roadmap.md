@@ -27,7 +27,8 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
 - Elixir shares the same repo-local artifact contract and runtime-state shape.
 - Running bash and Elixir as simultaneous active controllers for the same repo is unsupported.
 - Bash `loop.sh` / legacy bash daemon and managed Elixir runs now participate in the same `.forgeloop/v2/active-runtime.json` claim file at run boundaries.
-- Live conflicting ownership now blocks new managed starts at those run boundaries, but this still stops short of a full daemon-session lock or split-brain-prevention guarantee.
+- Same-host dead claims now become reclaimable, while malformed ownership files stay visible and block new managed starts fail-closed.
+- This still stops short of a full daemon-session lock or split-brain-prevention guarantee.
 
 ## Current Workflow-Pack Lane
 
@@ -65,6 +66,7 @@ Elixir is not promoted by feature count. It is promoted by preserving the bash f
 4. keep recovery explicit and safe
 5. keep repo-root and vendored layouts working
 6. make babysitter orchestration and service exposure as reviewable as the rest of the control plane
+7. make stale/crash ownership recovery and loopback error semantics explicit enough to release-review
 
 The required local gates for each milestone are:
 

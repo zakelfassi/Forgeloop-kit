@@ -344,11 +344,13 @@ def load_payload():
     try:
         with open(path, 'r', encoding='utf-8') as fh:
             payload = json.load(fh)
-        return payload if isinstance(payload, dict) else None
+        if isinstance(payload, dict):
+            return ('ok', payload)
+        return ('error', 'invalid_active_runtime_payload')
     except FileNotFoundError:
-        return None
-    except Exception:
-        return None
+        return ('missing', None)
+    except Exception as exc:
+        return ('error', f'{type(exc).__name__}:{exc}')
 
 
 def pid_alive(value):
@@ -359,9 +361,13 @@ def pid_alive(value):
         return False
 
 
-current = load_payload()
+payload_state, current = load_payload()
 claim_id = None
 started_at = now_iso()
+
+if payload_state == 'error':
+    print('invalid active runtime claim', file=sys.stderr)
+    sys.exit(3)
 
 if current:
     current_owner = current.get('owner')
@@ -447,7 +453,7 @@ try:
 except FileNotFoundError:
     sys.exit(0)
 except Exception:
-    sys.exit(0)
+    sys.exit(3)
 
 if isinstance(current, dict) and current.get('claim_id') == claim_id:
     try:

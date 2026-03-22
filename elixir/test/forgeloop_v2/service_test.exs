@@ -486,8 +486,9 @@ defmodule ForgeloopV2.ServiceTest do
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
   end
 
-  test "service run endpoint rejects a live conflicting runtime owner" do
+  test "live conflicting runtime owners block all manual start surfaces consistently" do
     repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    create_workflow_package!(repo.repo_root, "alpha")
     layout = create_ui_layout!(repo.repo_root)
     config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
     claim = write_runtime_claim!(config, owner: "bash", mode: "daemon")
@@ -496,15 +497,141 @@ defmodule ForgeloopV2.ServiceTest do
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
     overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["runtime_owner"]["state"] == "live"
+    assert overview["data"]["runtime_owner"]["error"] == nil
     assert overview["data"]["runtime_owner"]["live?"] == true
     assert overview["data"]["runtime_owner"]["start_allowed?"] == false
     assert overview["data"]["runtime_owner"]["current"]["owner"] == "bash"
     assert overview["data"]["runtime_owner"]["current"]["claim_id"] == claim["claim_id"]
 
-    conflict = post_json_response!(base_url <> "/api/control/run", %{"mode" => "build"})
-    assert conflict.status == 409
-    assert conflict.body["error"]["reason"] == "active_runtime_owned_by"
-    assert conflict.body["error"]["details"]["owner"] == "bash"
+    for {path, body} <- [
+          {"/api/control/run", %{"mode" => "build"}},
+          {"/api/babysitter/start", %{"mode" => "build"}},
+          {"/api/workflows/alpha/preflight", %{}}
+        ] do
+      conflict = post_json_response!(base_url <> path, body)
+      assert conflict.status == 409
+      assert conflict.body["error"]["reason"] == "active_runtime_owned_by"
+      assert conflict.body["error"]["details"]["owner"] == "bash"
+    end
+  end
+
+  test "reclaimable runtime owners stay visible without blocking managed starts" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    write_runtime_claim_payload!(config, %{
+      "schema_version" => 2,
+      "claim_id" => "rt-reclaimable",
+      "owner" => "bash",
+      "surface" => "daemon",
+      "mode" => "build",
+      "branch" => config.default_branch,
+      "pid" => 999_999,
+      "process_pid" => nil,
+      "host" => local_host_name!(),
+      "started_at" => ago_iso!(300),
+      "updated_at" => ago_iso!(300)
+    })
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["runtime_owner"]["state"] == "reclaimable"
+    assert overview["data"]["runtime_owner"]["error"] == nil
+    assert overview["data"]["runtime_owner"]["reclaimable?"] == true
+    assert overview["data"]["runtime_owner"]["start_allowed?"] == true
+
+    assert post_json!(base_url <> "/api/control/run", %{"mode" => "build"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+  end
+
+  test "malformed runtime ownership stays visible and blocks manual starts fail-closed" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    write_raw_runtime_claim!(config, "{not-json\n")
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["runtime_owner"]["state"] == "error"
+    assert is_binary(overview["data"]["runtime_owner"]["error"])
+    assert overview["data"]["runtime_owner"]["start_allowed?"] == false
+
+    for {path, body} <- [
+          {"/api/control/run", %{"mode" => "build"}},
+          {"/api/babysitter/start", %{"mode" => "build"}},
+          {"/api/workflows/alpha/preflight", %{}}
+        ] do
+      response = post_json_response!(base_url <> path, body)
+      assert response.status == 500
+      assert response.body["error"]["reason"] == "active_runtime_state_error"
+      assert response.body["error"]["details"]["state"] == "error"
+    end
+  end
+
+  test "stale active-run metadata is visible but not treated as running and is cleaned before start" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "ui layout"])
+
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    write_active_run!(config, last_heartbeat_at: ago_iso!(300), runtime_surface: "ui")
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    babysitter = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter["running?"] == false
+    assert babysitter["active_run_state"] == "stale"
+    assert babysitter["active_run_error"] == nil
+    assert babysitter["active_run"]["runtime_surface"] == "ui"
+
+    assert post_json!(base_url <> "/api/babysitter/start", %{"mode" => "build"})["ok"] == true
+    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+
+    refreshed = get_json!(base_url <> "/api/babysitter")["data"]
+    assert refreshed["active_run_state"] == "missing"
+    refute File.exists?(Worktree.active_run_path(config))
+  end
+
+  test "malformed active-run metadata stays visible and blocks manual starts fail-closed" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    write_raw_active_run!(config, "{broken\n")
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["runtime_owner"]["start_allowed?"] == false
+
+    babysitter = get_json!(base_url <> "/api/babysitter")["data"]
+    assert babysitter["running?"] == false
+    assert babysitter["active_run_state"] == "error"
+    assert is_binary(babysitter["active_run_error"])
+
+    for {path, body} <- [
+          {"/api/control/run", %{"mode" => "build"}},
+          {"/api/babysitter/start", %{"mode" => "build"}},
+          {"/api/workflows/alpha/preflight", %{}}
+        ] do
+      response = post_json_response!(base_url <> path, body)
+      assert response.status == 500
+      assert response.body["error"]["reason"] == "active_run_state_error"
+      assert response.body["error"]["details"] =~ "invalid_active_run"
+    end
   end
 
   test "idle managed babysitters are replaced when mode or runtime surface changes" do
@@ -849,6 +976,19 @@ defmodule ForgeloopV2.ServiceTest do
     assert replay_payload["meta"]["cursor_found?"] == true
     assert Enum.map(replay_payload["data"], & &1["action"]) == ["third"]
 
+    blank_after_payload = get_json!(base_url <> "/api/events?after=%20%20&limit=2")
+    assert blank_after_payload["ok"] == true
+    assert Enum.map(blank_after_payload["data"], & &1["action"]) == ["second", "third"]
+
+    latest_cursor = Enum.at(replay_payload["data"], -1)["event_id"]
+
+    latest_payload =
+      get_json!(base_url <> "/api/events?after=#{URI.encode_www_form(latest_cursor)}&limit=5")
+
+    assert latest_payload["ok"] == true
+    assert latest_payload["meta"]["cursor_found?"] == true
+    assert latest_payload["data"] == []
+
     missing_payload = get_json!(base_url <> "/api/events?after=evt-missing&limit=5")
     assert missing_payload["ok"] == true
     assert missing_payload["meta"]["cursor_found?"] == false
@@ -901,6 +1041,12 @@ defmodule ForgeloopV2.ServiceTest do
         "recorded_at" => "2026-03-21T10:05:00Z"
       })
 
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "resume_probe_three",
+        "recorded_at" => "2026-03-21T10:06:00Z"
+      })
+
     events_payload = get_json!(base_url <> "/api/events?limit=5")
 
     after_cursor =
@@ -917,6 +1063,63 @@ defmodule ForgeloopV2.ServiceTest do
     refute replay =~ "event: snapshot"
     assert replay =~ "event: event"
     assert replay =~ "resume_probe_two"
+
+    :gen_tcp.close(socket)
+
+    {:ok, header_socket} =
+      open_stream_socket(base_url <> "/api/stream?limit=5", [{"last-event-id", after_cursor}])
+
+    on_exit(fn -> :gen_tcp.close(header_socket) end)
+
+    header_replay = recv_until(header_socket, "resume_probe_two", 4_000)
+    refute header_replay =~ "event: snapshot"
+    assert header_replay =~ "resume_probe_two"
+  end
+
+  test "stream endpoint falls back to a snapshot when replay cursors are missing or truncated" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "gap_one",
+        "recorded_at" => "2026-03-21T10:07:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "gap_two",
+        "recorded_at" => "2026-03-21T10:08:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "gap_three",
+        "recorded_at" => "2026-03-21T10:09:00Z"
+      })
+
+    payload = get_json!(base_url <> "/api/events?limit=5")
+    first_cursor = Enum.find(payload["data"], &(&1["action"] == "gap_one"))["event_id"]
+
+    {:ok, missing_socket} =
+      open_stream_socket(base_url <> "/api/stream?limit=5&after=evt-missing")
+
+    on_exit(fn -> :gen_tcp.close(missing_socket) end)
+    missing_stream = recv_until(missing_socket, "event: snapshot", 4_000)
+    assert missing_stream =~ "event: snapshot"
+
+    {:ok, truncated_socket} =
+      open_stream_socket(
+        base_url <> "/api/stream?limit=1&after=#{URI.encode_www_form(first_cursor)}"
+      )
+
+    on_exit(fn -> :gen_tcp.close(truncated_socket) end)
+    truncated_stream = recv_until(truncated_socket, "event: snapshot", 4_000)
+    assert truncated_stream =~ "event: snapshot"
   end
 
   defp start_service!(config) do
@@ -1009,9 +1212,12 @@ defmodule ForgeloopV2.ServiceTest do
     decode_response(response)
   end
 
-  defp open_stream_socket(url) do
+  defp open_stream_socket(url, headers \\ []) do
     uri = URI.parse(url)
     {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", uri.port, [:binary, active: false])
+
+    header_lines =
+      Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end)
 
     :ok =
       :gen_tcp.send(
@@ -1023,6 +1229,7 @@ defmodule ForgeloopV2.ServiceTest do
           " HTTP/1.1\r\n",
           "host: 127.0.0.1\r\n",
           "accept: text/event-stream\r\n",
+          header_lines,
           "connection: keep-alive\r\n\r\n"
         ]
       )

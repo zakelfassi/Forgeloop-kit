@@ -136,7 +136,8 @@ Important current limits:
 
 - the public daemon launcher now prefers the managed Elixir backend, but `FORGELOOP_DAEMON_RUNTIME=bash` still drops back to the legacy bash daemon implementation and its older shell loop
 - bounded `[WORKFLOW]` scheduling only works when that managed daemon backend is active
-- `.forgeloop/v2/active-runtime.json` is now a shared run-boundary ownership guard across bash + Elixir entrypoints, but it is still not a full daemon-session lock or split-brain-prevention guarantee
+- `.forgeloop/v2/active-runtime.json` is now a shared run-boundary ownership guard across bash + Elixir entrypoints, with same-host dead claims becoming reclaimable and malformed ownership files now blocking starts fail-closed
+- this is still not a full daemon-session lock or split-brain-prevention guarantee
 
 ## Loopback JSON control-plane service (experimental Elixir v2)
 
@@ -173,6 +174,8 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - manual workflow `preflight` / `run` actions now flow through the same babysitter/worktree/runtime-state path as other managed runs instead of bypassing it
 - `/api/overview` now exposes whether `[WORKFLOW]` is queued plus the configured daemon workflow target so the HUD/OpenClaw seam can show the one-shot daemon request clearly
 - `/api/events` now supports bounded tails plus replay-after-cursor semantics over the canonical JSONL log, and `/api/stream` now uses that same event seam for SSE resume/live delivery
+- `/api/overview.runtime_owner` now distinguishes `live`, `reclaimable`, and `error` ownership states, and `/api/babysitter` now exposes `active_run_state` / `active_run_error` so stale metadata is visible without being treated as running
+- manual start surfaces now auto-clean stale babysitter metadata before launching, while malformed ownership or active-run files block starts fail-closed with stable error reasons
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:

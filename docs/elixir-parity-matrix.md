@@ -11,6 +11,7 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 | Recovery is explicit and safe | bash pause/resume behavior in daemon flows | `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/orchestrator_test.exs` | In progress |
 | Provider auth/rate-limit failover preserves forward progress | `tests/llm-auth-failover.test.sh` | `elixir/test/forgeloop_v2/llm_router_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | In progress |
 | Repo-root and vendored layouts both work | `tests/daemon-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/repo_paths_test.exs` | In progress |
+| Runtime ownership reclaim + fail-closed malformed ownership stay reviewable across bash, daemon, and loopback starts | `tests/runtime-ownership-reclaim.test.sh`, `tests/daemon-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs`, `elixir/test/forgeloop_v2/service_test.exs`, `elixir/test/forgeloop_v2/daemon_test.exs` | In progress |
 
 ## Notes
 
@@ -18,6 +19,7 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - Elixir parity is measured on operator-visible artifacts and transitions first, not on internal implementation shape.
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
 - Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a loopback control-plane service + interactive operator UI, a repo-local OpenClaw plugin seam for that same service, a read-only repo-local tracker projection for canonical backlog items + workflow packs, and managed workflow control/visibility over workflow artifacts; in phase 1 that service/UI backlog is the configured implementation plan file (`FORGELOOP_IMPLEMENTATION_PLAN_FILE`, default `IMPLEMENTATION_PLAN.md`), and that groundwork helps future UI/plugin work but is not yet a full bash-parity contract on its own.
+- The current release hardening bar now also expects loopback visibility for reclaimable vs malformed runtime ownership plus stale/error babysitter metadata, not just green happy-path service tests.
 
 ## Current experimental v2-only extensions
 

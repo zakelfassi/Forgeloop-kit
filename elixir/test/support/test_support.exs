@@ -235,6 +235,85 @@ defmodule ForgeloopV2.TestSupport do
     )
   end
 
+  def write_runtime_claim_payload!(config, payload) when is_map(payload) do
+    File.mkdir_p!(config.v2_state_dir)
+
+    File.write!(
+      ForgeloopV2.ActiveRuntime.path(config),
+      Jason.encode!(payload, pretty: true) <> "\n"
+    )
+  end
+
+  def write_raw_runtime_claim!(config, body) when is_binary(body) do
+    File.mkdir_p!(config.v2_state_dir)
+    File.write!(ForgeloopV2.ActiveRuntime.path(config), body)
+  end
+
+  def write_active_run!(config, attrs \\ %{})
+
+  def write_active_run!(config, attrs) when is_list(attrs),
+    do: write_active_run!(config, Map.new(attrs))
+
+  def write_active_run!(config, attrs) when is_map(attrs) do
+    File.mkdir_p!(Path.dirname(ForgeloopV2.Worktree.active_run_path(config)))
+
+    payload =
+      %{
+        "workspace_id" =>
+          Map.get(attrs, "workspace_id", Map.get(attrs, :workspace_id, "ws-test")),
+        "status" => Map.get(attrs, "status", Map.get(attrs, :status, "running")),
+        "lane" => Map.get(attrs, "lane", Map.get(attrs, :lane, "checklist")),
+        "action" => Map.get(attrs, "action", Map.get(attrs, :action, "build")),
+        "mode" => Map.get(attrs, "mode", Map.get(attrs, :mode, "build")),
+        "branch" => Map.get(attrs, "branch", Map.get(attrs, :branch, config.default_branch)),
+        "runtime_surface" =>
+          Map.get(attrs, "runtime_surface", Map.get(attrs, :runtime_surface, "ui")),
+        "last_heartbeat_at" =>
+          Map.get(
+            attrs,
+            "last_heartbeat_at",
+            Map.get(attrs, :last_heartbeat_at, now!() |> DateTime.to_iso8601())
+          )
+      }
+
+    File.write!(
+      ForgeloopV2.Worktree.active_run_path(config),
+      Jason.encode!(payload, pretty: true) <> "\n"
+    )
+
+    payload
+  end
+
+  def write_raw_active_run!(config, body) when is_binary(body) do
+    File.mkdir_p!(Path.dirname(ForgeloopV2.Worktree.active_run_path(config)))
+    File.write!(ForgeloopV2.Worktree.active_run_path(config), body)
+  end
+
+  def ago_iso!(seconds) when is_integer(seconds) and seconds >= 0 do
+    now!()
+    |> DateTime.add(-seconds, :second)
+    |> DateTime.to_iso8601()
+  end
+
+  def local_host_name! do
+    case :inet.gethostname() do
+      {:ok, hostname} ->
+        hostname
+        |> to_string()
+        |> String.downcase()
+        |> String.split(".")
+        |> List.first()
+        |> case do
+          nil -> "unknown"
+          "" -> "unknown"
+          value -> value
+        end
+
+      _ ->
+        "unknown"
+    end
+  end
+
   def now! do
     DateTime.utc_now()
     |> DateTime.truncate(:second)

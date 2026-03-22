@@ -1005,6 +1005,9 @@ defmodule ForgeloopV2.Daemon do
       {:ok, %{live?: true, current: current}} when is_map(current) ->
         {:error, {:active_runtime_owned_by, current}}
 
+      {:ok, %{state: "error"} = status} ->
+        {:error, {:active_runtime_state_error, status}}
+
       {:ok, _status} ->
         :ok
     end

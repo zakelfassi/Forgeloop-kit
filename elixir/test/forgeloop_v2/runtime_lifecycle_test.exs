@@ -68,7 +68,15 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
     config = config_for!(repo.repo_root)
     write_legacy_runtime_claim!(config)
 
-    assert {:ok, %{legacy?: true, reclaimable?: false, live?: true, stale?: false}} =
+    assert {:ok,
+            %{
+              legacy?: true,
+              reclaimable?: false,
+              live?: true,
+              stale?: false,
+              state: "live",
+              error: nil
+            }} =
              ActiveRuntime.status(config)
 
     assert {:error, {:active_runtime_owned_by, current}} =
@@ -89,7 +97,15 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
 
     write_legacy_runtime_claim!(config, "bash", stale_timestamp)
 
-    assert {:ok, %{legacy?: true, reclaimable?: true, live?: false, stale?: true}} =
+    assert {:ok,
+            %{
+              legacy?: true,
+              reclaimable?: true,
+              live?: false,
+              stale?: true,
+              state: "reclaimable",
+              error: nil
+            }} =
              ActiveRuntime.status(config)
 
     assert {:ok, claim} =
@@ -98,5 +114,59 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
     assert claim["schema_version"] == 2
     assert claim["owner"] == "elixir"
     assert claim["claim_id"] != nil
+  end
+
+  test "structured stale runtime claims are reclaimable" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+
+    write_runtime_claim_payload!(config, %{
+      "schema_version" => 2,
+      "claim_id" => "rt-stale-structured",
+      "owner" => "bash",
+      "surface" => "daemon",
+      "mode" => "build",
+      "branch" => config.default_branch,
+      "pid" => 999_999,
+      "process_pid" => nil,
+      "host" => local_host_name!(),
+      "started_at" => ago_iso!(300),
+      "updated_at" => ago_iso!(300)
+    })
+
+    assert {:ok,
+            %{
+              legacy?: false,
+              reclaimable?: true,
+              live?: false,
+              stale?: true,
+              state: "reclaimable",
+              error: nil
+            }} =
+             ActiveRuntime.status(config)
+
+    assert {:ok, claim} =
+             ActiveRuntime.claim(config, owner: "elixir", surface: "loop", mode: "build")
+
+    assert claim["schema_version"] == 2
+    assert claim["owner"] == "elixir"
+    assert is_binary(claim["claim_id"])
+  end
+
+  test "malformed runtime claims surface explicit error state and block new claims" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+    write_raw_runtime_claim!(config, "{not-json\n")
+
+    assert {:error, {:invalid_active_runtime_claim, path, _reason}} = ActiveRuntime.read(config)
+    assert path == ActiveRuntime.path(config)
+
+    assert {:ok, %{state: "error", error: error, live?: false, reclaimable?: false, current: nil}} =
+             ActiveRuntime.status(config)
+
+    assert error =~ "invalid_active_runtime_claim"
+
+    assert {:error, {:invalid_active_runtime_claim, ^path, _reason}} =
+             ActiveRuntime.claim(config, owner: "elixir", surface: "loop", mode: "build")
   end
 end

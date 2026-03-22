@@ -53,7 +53,9 @@ defmodule ForgeloopV2.DaemonTest do
       )
 
     config = config_for!(repo.repo_root, max_blocked_iterations: 1)
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
+    {:ok, pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
 
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
@@ -79,7 +81,9 @@ defmodule ForgeloopV2.DaemonTest do
   test "pause flag writes paused runtime state" do
     repo = create_repo_fixture!(requests: "[PAUSE]\n")
     config = config_for!(repo.repo_root)
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
+    {:ok, pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
 
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
@@ -103,7 +107,9 @@ defmodule ForgeloopV2.DaemonTest do
         branch: "main"
       })
 
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    {:ok, pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
 
@@ -145,7 +151,9 @@ defmodule ForgeloopV2.DaemonTest do
 
     ControlFiles.consume_flag(config, "PAUSE")
 
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    {:ok, pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
 
@@ -193,7 +201,10 @@ defmodule ForgeloopV2.DaemonTest do
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
 
     output = File.read!(Path.join([config.v2_state_dir, "driver", "plan-last.txt"]))
-    prepared_event = Enum.find(Events.read_all(config), &(&1["event_type"] == "worktree_prepared"))
+
+    prepared_event =
+      Enum.find(Events.read_all(config), &(&1["event_type"] == "worktree_prepared"))
+
     checkout_path = prepared_event["checkout_path"]
 
     assert output =~ "PWD="
@@ -220,7 +231,10 @@ defmodule ForgeloopV2.DaemonTest do
     create_workflow_package!(repo.repo_root, "alpha")
 
     runner =
-      write_executable!(Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"), @workflow_runner)
+      write_executable!(
+        Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"),
+        @workflow_runner
+      )
 
     run_git!(repo.repo_root, ["add", "."])
     run_git!(repo.repo_root, ["commit", "-m", "workflow fixture"])
@@ -261,7 +275,9 @@ defmodule ForgeloopV2.DaemonTest do
 
   test "daemon does not tear down an already-running managed babysitter" do
     repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
-    config = config_for!(repo.repo_root, shell_driver_enabled: true, babysitter_shutdown_grace_ms: 50)
+
+    config =
+      config_for!(repo.repo_root, shell_driver_enabled: true, babysitter_shutdown_grace_ms: 50)
 
     {:ok, babysitter_pid} =
       Babysitter.start_link(
@@ -275,7 +291,12 @@ defmodule ForgeloopV2.DaemonTest do
       )
 
     assert :ok = Babysitter.start_run(babysitter_pid)
-    wait_until(fn -> Babysitter.snapshot(babysitter_pid).running? and File.exists?(Worktree.active_run_path(config)) end)
+
+    wait_until(fn ->
+      Babysitter.snapshot(babysitter_pid).running? and
+        File.exists?(Worktree.active_run_path(config))
+    end)
+
     active_run_before = Worktree.active_run_path(config) |> File.read!() |> Jason.decode!()
 
     {:ok, pid} =
@@ -295,6 +316,65 @@ defmodule ForgeloopV2.DaemonTest do
 
     assert :ok = Babysitter.stop_child(babysitter_pid, :kill)
     wait_until(fn -> not Babysitter.snapshot(babysitter_pid).running? end)
+  end
+
+  test "stale structured runtime ownership does not block daemon managed starts" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root)
+
+    write_runtime_claim_payload!(config, %{
+      "schema_version" => 2,
+      "claim_id" => "rt-daemon-reclaimable",
+      "owner" => "bash",
+      "surface" => "daemon",
+      "mode" => "build",
+      "branch" => config.default_branch,
+      "pid" => 999_999,
+      "process_pid" => nil,
+      "host" => local_host_name!(),
+      "started_at" => ago_iso!(300),
+      "updated_at" => ago_iso!(300)
+    })
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :build
+    assert RuntimeStateStore.status(config) == "idle"
+    assert :missing = ActiveRuntime.read(config)
+  end
+
+  test "malformed runtime ownership escalates daemon starts fail-closed" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root, failure_escalate_after: 1)
+    write_raw_runtime_claim!(config, "{not-json\n")
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert {:ok, state} = RuntimeStateStore.read(config)
+    assert state.status == "awaiting-human"
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
+
+    assert File.exists?(
+             Path.join([config.v2_state_dir, "babysitter", "daemon-build-start-error-last.txt"])
+           )
+
+    assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
   end
 
   test "managed daemon start failure escalates fail-closed and preserves replan" do
@@ -317,7 +397,10 @@ defmodule ForgeloopV2.DaemonTest do
     assert state.status == "awaiting-human"
     assert File.read!(config.requests_file) =~ "[PAUSE]"
     assert File.read!(config.requests_file) =~ "[REPLAN]"
-    assert File.exists?(Path.join([config.v2_state_dir, "babysitter", "daemon-plan-start-error-last.txt"]))
+
+    assert File.exists?(
+             Path.join([config.v2_state_dir, "babysitter", "daemon-plan-start-error-last.txt"])
+           )
 
     last_result = Daemon.snapshot(pid).last_result
     assert match?({:stopped, {:escalated, 1}}, last_result)
@@ -328,7 +411,10 @@ defmodule ForgeloopV2.DaemonTest do
     create_workflow_package!(repo.repo_root, "alpha")
 
     runner =
-      write_executable!(Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"), @workflow_runner)
+      write_executable!(
+        Path.join(repo.repo_root, "bin/fake-workflow-runner.sh"),
+        @workflow_runner
+      )
 
     run_git!(repo.repo_root, ["add", "."])
     run_git!(repo.repo_root, ["commit", "-m", "workflow fixture"])
@@ -360,7 +446,13 @@ defmodule ForgeloopV2.DaemonTest do
     assert File.read!(config.requests_file) =~ "[WORKFLOW]"
 
     assert [_evidence_file] =
-             Path.wildcard(Path.join([config.v2_state_dir, "babysitter", "daemon-workflow-*-start-error-last.txt"]))
+             Path.wildcard(
+               Path.join([
+                 config.v2_state_dir,
+                 "babysitter",
+                 "daemon-workflow-*-start-error-last.txt"
+               ])
+             )
 
     assert {:ok, history} = WorkflowHistory.fetch(config, "alpha")
     assert history.latest.outcome == :start_failed
@@ -395,7 +487,13 @@ defmodule ForgeloopV2.DaemonTest do
     assert File.read!(config.requests_file) =~ "[WORKFLOW]"
 
     assert [_evidence_file] =
-             Path.wildcard(Path.join([config.v2_state_dir, "babysitter", "daemon-workflow-*-start-error-last.txt"]))
+             Path.wildcard(
+               Path.join([
+                 config.v2_state_dir,
+                 "babysitter",
+                 "daemon-workflow-*-start-error-last.txt"
+               ])
+             )
 
     assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
     assert Daemon.snapshot(pid).last_action == :workflow_error

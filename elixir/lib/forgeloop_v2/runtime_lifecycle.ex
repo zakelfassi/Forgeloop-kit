@@ -24,20 +24,24 @@ defmodule ForgeloopV2.ActiveRuntime do
              :runtime,
              [timeout_ms: config.control_lock_timeout_ms],
              fn ->
-               current = read_unlocked(config)
-
-               cond do
-                 is_nil(current) ->
+               case read_unlocked(config) do
+                 :missing ->
                    persist_claim(config, build_claim(attrs, nil))
 
-                 status_for_claim(config, current).reclaimable? ->
-                   persist_claim(config, build_claim(attrs, nil))
+                 {:ok, current} ->
+                   cond do
+                     status_for_claim(config, current).reclaimable? ->
+                       persist_claim(config, build_claim(attrs, nil))
 
-                 same_process_claim?(current, attrs) ->
-                   persist_claim(config, build_claim(attrs, current))
+                     same_process_claim?(current, attrs) ->
+                       persist_claim(config, build_claim(attrs, current))
 
-                 true ->
-                   {:error, {:active_runtime_owned_by, current}}
+                     true ->
+                       {:error, {:active_runtime_owned_by, current}}
+                   end
+
+                 {:error, reason} ->
+                   {:error, invalid_claim_reason(config, reason)}
                end
              end
            ) do
@@ -55,18 +59,21 @@ defmodule ForgeloopV2.ActiveRuntime do
              [timeout_ms: config.control_lock_timeout_ms],
              fn ->
                case read_unlocked(config) do
-                 nil ->
+                 :missing ->
                    :ok
 
-                 %{"claim_id" => ^claim_id} ->
+                 {:ok, %{"claim_id" => ^claim_id}} ->
                    case File.rm(path(config)) do
                      :ok -> :ok
                      {:error, :enoent} -> :ok
                      {:error, reason} -> {:error, reason}
                    end
 
-                 current ->
+                 {:ok, current} ->
                    {:error, {:active_runtime_claim_mismatch, current}}
+
+                 {:error, reason} ->
+                   {:error, invalid_claim_reason(config, reason)}
                end
              end
            ) do
@@ -76,27 +83,28 @@ defmodule ForgeloopV2.ActiveRuntime do
 
   def release(%Config{}, _claim_id), do: :ok
 
-  @spec read(Config.t()) :: {:ok, map()} | :missing
+  @spec read(Config.t()) :: {:ok, map()} | :missing | {:error, term()}
   def read(%Config{} = config) do
     case read_unlocked(config) do
-      nil -> :missing
-      payload -> {:ok, payload}
+      {:error, reason} -> {:error, invalid_claim_reason(config, reason)}
+      other -> other
     end
   end
 
-  @spec status(Config.t()) :: {:ok, map()} | {:error, term()}
+  @spec status(Config.t()) :: {:ok, map()}
   def status(%Config{} = config) do
-    claim = read_unlocked(config)
-    status = status_for_claim(config, claim)
+    case read_unlocked(config) do
+      :missing ->
+        {:ok, status_payload(nil, status_for_claim(config, nil), "missing", nil)}
 
-    {:ok,
-     %{
-       current: claim,
-       live?: status.live?,
-       stale?: status.stale?,
-       reclaimable?: status.reclaimable?,
-       legacy?: status.legacy?
-     }}
+      {:ok, claim} ->
+        status = status_for_claim(config, claim)
+        {:ok, status_payload(claim, status, status_state(status), nil)}
+
+      {:error, reason} ->
+        error = invalid_claim_reason(config, reason)
+        {:ok, status_payload(nil, status_for_claim(config, nil), "error", inspect(error))}
+    end
   end
 
   @spec path(Config.t()) :: Path.t()
@@ -215,6 +223,22 @@ defmodule ForgeloopV2.ActiveRuntime do
 
   defp same_process_claim?(_, _), do: false
 
+  defp status_payload(claim, status, state, error) do
+    %{
+      current: claim,
+      live?: status.live?,
+      stale?: status.stale?,
+      reclaimable?: status.reclaimable?,
+      legacy?: status.legacy?,
+      state: state,
+      error: error
+    }
+  end
+
+  defp status_state(%{live?: true}), do: "live"
+  defp status_state(%{reclaimable?: true}), do: "reclaimable"
+  defp status_state(_status), do: "missing"
+
   defp status_for_claim(_config, nil),
     do: %{live?: false, stale?: false, reclaimable?: false, legacy?: false}
 
@@ -319,13 +343,21 @@ defmodule ForgeloopV2.ActiveRuntime do
     case File.read(path(config)) do
       {:ok, body} ->
         case Jason.decode(body) do
-          {:ok, payload} when is_map(payload) -> payload
-          _ -> nil
+          {:ok, payload} when is_map(payload) -> {:ok, payload}
+          {:ok, payload} -> {:error, {:invalid_active_runtime_payload, payload}}
+          {:error, reason} -> {:error, {:invalid_active_runtime_json, reason}}
         end
 
-      _ ->
-        nil
+      {:error, :enoent} ->
+        :missing
+
+      {:error, reason} ->
+        {:error, {:active_runtime_read_failed, reason}}
     end
+  end
+
+  defp invalid_claim_reason(%Config{} = config, reason) do
+    {:invalid_active_runtime_claim, path(config), reason}
   end
 
   defp generate_claim_id do

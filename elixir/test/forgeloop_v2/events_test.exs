@@ -54,7 +54,10 @@ defmodule ForgeloopV2.EventsTest do
              })
 
     File.write!(config.requests_file, "[PAUSE]\n")
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
+    {:ok, pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
 
@@ -115,7 +118,13 @@ defmodule ForgeloopV2.EventsTest do
       )
 
     config = config_for!(repo.repo_root, shell_driver_enabled: true)
-    {:ok, pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.ShellLoop, schedule: false)
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.ShellLoop,
+        schedule: false
+      )
 
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
@@ -134,9 +143,23 @@ defmodule ForgeloopV2.EventsTest do
     repo = create_repo_fixture!()
     config = config_for!(repo.repo_root)
 
-    :ok = Events.emit(config, :daemon_tick, %{"action" => "first", "recorded_at" => "2026-03-21T10:00:00Z"})
-    :ok = Events.emit(config, :daemon_tick, %{"action" => "second", "recorded_at" => "2026-03-21T10:01:00Z"})
-    :ok = Events.emit(config, :operator_action, %{"action" => "third", "recorded_at" => "2026-03-21T10:02:00Z"})
+    :ok =
+      Events.emit(config, :daemon_tick, %{
+        "action" => "first",
+        "recorded_at" => "2026-03-21T10:00:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :daemon_tick, %{
+        "action" => "second",
+        "recorded_at" => "2026-03-21T10:01:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "third",
+        "recorded_at" => "2026-03-21T10:02:00Z"
+      })
 
     assert {:ok, tail} = Events.tail(config, limit: 2)
     assert Enum.map(tail.items, & &1["action"]) == ["second", "third"]
@@ -150,6 +173,15 @@ defmodule ForgeloopV2.EventsTest do
     assert replay.meta["cursor_found?"] || replay.meta[:cursor_found?]
     assert Enum.map(replay.items, & &1["action"]) == ["third"]
 
+    third_id = Enum.at(replay.items, 0)["event_id"]
+    assert {:ok, latest} = Events.replay(config, after: third_id, limit: 5)
+    assert latest.meta["cursor_found?"] || latest.meta[:cursor_found?]
+    assert latest.items == []
+
+    assert {:ok, blank} = Events.replay(config, after: "  ", limit: 5)
+    refute blank.meta["cursor_found?"] || blank.meta[:cursor_found?]
+    assert blank.items == []
+
     assert {:ok, missing} = Events.replay(config, after: "evt-missing", limit: 5)
     refute missing.meta["cursor_found?"] || missing.meta[:cursor_found?]
     assert missing.items == []
@@ -161,7 +193,15 @@ defmodule ForgeloopV2.EventsTest do
     path = Events.event_log_path(config)
     File.mkdir_p!(Path.dirname(path))
 
-    File.write!(path, Jason.encode!(%{"event_type" => "daemon_ingest_logs_completed", "recorded_at" => "2026-03-21T11:00:00Z", "skipped" => true}) <> "\n")
+    File.write!(
+      path,
+      Jason.encode!(%{
+        "event_type" => "daemon_ingest_logs_completed",
+        "recorded_at" => "2026-03-21T11:00:00Z",
+        "skipped" => true
+      }) <> "\n"
+    )
+
     File.write!(path, "not-json\n", [:append])
 
     [event] = Events.read_all(config)
@@ -180,7 +220,11 @@ defmodule ForgeloopV2.EventsTest do
     assert :ok = Events.subscribe(config)
     on_exit(fn -> Events.unsubscribe(config) end)
 
-    assert :ok = Events.emit(config, :operator_action, %{"action" => "subscribed", "recorded_at" => "2026-03-21T12:00:00Z"})
+    assert :ok =
+             Events.emit(config, :operator_action, %{
+               "action" => "subscribed",
+               "recorded_at" => "2026-03-21T12:00:00Z"
+             })
 
     assert_receive {:forgeloop_v2_event, ^path, event}, 1_000
     assert event["event_code"] == "operator_action"

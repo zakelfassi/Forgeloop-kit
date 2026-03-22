@@ -355,6 +355,28 @@ Format:
     - `Loop.run/3` is now the authoritative Elixir claim boundary; redundant babysitter and daemon-tick claims were removed.
     - `/api/overview` now exposes additive `runtime_owner` state, and service-managed starts reject live conflicting owners before launching new work.
     - Bash `bin/loop.sh` and `bin/forgeloop-daemon.sh` now write and clear the same active-runtime claim on lifecycle boundaries.
+- [x] Harden crash/stale ownership recovery and freeze the loopback contract for release
+  - Acceptance:
+    - Structured same-host dead runtime claims become reclaimable instead of blocking the next managed start.
+    - Malformed `.forgeloop/v2/active-runtime.json` stays visible in `/api/overview.runtime_owner` and blocks manual/managed starts fail-closed.
+    - `/api/babysitter` now reports `active_run_state` / `active_run_error`, never treats stale metadata as running, and manual starts auto-clean stale metadata before launching.
+    - `/api/control/run`, `/api/babysitter/start`, and workflow start surfaces now return consistent conflict/error reasons for live-owner, malformed-owner, and malformed-active-run cases.
+    - `/api/events` and `/api/stream` cursor edge behavior is locked by tests, including blank cursor normalization, latest-cursor replay, snapshot fallback, and `Last-Event-ID` resume.
+    - Bash claim helpers now refuse malformed ownership files fail-closed, with a shell reclaim proof.
+  - REQUIRED TESTS:
+    - `tests/runtime-ownership-reclaim.test.sh`
+    - `tests/daemon-entrypoint-layouts.test.sh`
+    - `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs`
+    - `elixir/test/forgeloop_v2/worktree_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+    - `elixir/test/forgeloop_v2/events_test.exs`
+    - `elixir/test/forgeloop_v2/daemon_test.exs`
+  - Shipped behavior:
+    - `ForgeloopV2.ActiveRuntime.read/1` now distinguishes missing vs malformed ownership files, and `status/1` now exposes additive `state` / `error` fields for `missing`, `live`, `reclaimable`, and `error` cases.
+    - The loopback control plane now normalizes `Worktree.active_run_state/1`, exposes `active_run_state` / `active_run_error` through `/api/babysitter`, auto-cleans stale metadata before manual starts, and blocks malformed ownership or active-run state fail-closed with stable error codes.
+    - Live-owner conflicts, reclaimable dead claims, stale active-run metadata, and malformed state now agree across `/api/overview`, `/api/control/run`, `/api/babysitter/start`, and workflow start routes.
+    - `/api/events` / `/api/stream` replay semantics are now locked by tests for blank/latest/missing/truncated cursor behavior plus `Last-Event-ID` resume.
+    - Bash claim helpers now reject malformed ownership files instead of silently treating them as missing, and `tests/runtime-ownership-reclaim.test.sh` proves live-claim rejection, dead-claim reclaim, and malformed fail-closed behavior.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 
