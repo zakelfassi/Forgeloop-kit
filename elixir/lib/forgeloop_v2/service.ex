@@ -1517,7 +1517,15 @@ defmodule ForgeloopV2.Service do
   @moduledoc false
   use GenServer
 
-  alias ForgeloopV2.{Config, ControlPlane, Events, Service.State, ServiceJSON, UIAssets}
+  alias ForgeloopV2.{
+    Config,
+    ControlPlane,
+    Events,
+    Service.State,
+    ServiceContract,
+    ServiceJSON,
+    UIAssets
+  }
 
   @recv_timeout_ms 5_000
   @stream_heartbeat_interval_ms 15_000
@@ -1759,6 +1767,10 @@ defmodule ForgeloopV2.Service do
 
   defp route(%{method: "GET", path: "/health"}, _config, _control_plane_pid) do
     json_response(200, %{ok: true, service: "forgeloop_v2", mode: "loopback"})
+  end
+
+  defp route(%{method: "GET", path: "/api/schema"}, _config, _control_plane_pid) do
+    json_response(200, %{ok: true, data: ServiceContract.descriptor()})
   end
 
   defp route(%{method: "GET", path: "/api/overview", query: query}, _config, control_plane_pid) do
@@ -2129,7 +2141,7 @@ defmodule ForgeloopV2.Service do
   end
 
   defp json_response(status, payload) do
-    body_response(status, "application/json", Jason.encode!(payload))
+    body_response(status, "application/json", Jason.encode!(ServiceContract.wrap_envelope(payload)))
   end
 
   defp error_response(status, reason) do
@@ -2291,7 +2303,7 @@ defmodule ForgeloopV2.Service do
   defp send_initial_stream_payload(socket, control_plane_pid, limit, nil) do
     case overview_payload(control_plane_pid, limit) do
       {:ok, payload} ->
-        json = Jason.encode!(%{ok: true, data: payload})
+        json = Jason.encode!(ServiceContract.wrap_envelope(%{ok: true, data: payload}))
 
         with :ok <- send_snapshot(socket, json) do
           {:ok, %{delivered_ids: delivered_event_ids(payload.events || [])}}
@@ -2421,7 +2433,7 @@ defmodule ForgeloopV2.Service do
   end
 
   defp send_event(socket, event) do
-    json = Jason.encode!(%{ok: true, data: event})
+    json = Jason.encode!(ServiceContract.wrap_envelope(%{ok: true, data: event}))
 
     :gen_tcp.send(socket, [
       "id: ",

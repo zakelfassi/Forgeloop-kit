@@ -63,6 +63,9 @@ defmodule ForgeloopV2.ServiceTest do
 
     payload = get_json!(base_url <> "/api/overview")
     assert payload["ok"] == true
+    assert payload["api"]["name"] == "forgeloop_loopback"
+    assert payload["api"]["contract_version"] == 1
+    assert payload["api"]["schema_path"] == "/api/schema"
     assert payload["data"]["runtime_state"]["status"] == "running"
     assert payload["data"]["runtime_owner"]["current"] == nil
     assert payload["data"]["runtime_owner"]["live?"] == false
@@ -109,6 +112,7 @@ defmodule ForgeloopV2.ServiceTest do
 
     providers = get_json!(base_url <> "/api/providers")
     assert providers["ok"] == true
+    assert providers["api"]["contract_version"] == 1
     assert Enum.any?(providers["data"]["providers"], &(&1["name"] == "claude"))
   end
 
@@ -123,6 +127,25 @@ defmodule ForgeloopV2.ServiceTest do
     html = get_response!(base_url <> "/")
     assert html.status == 200
     assert html.body =~ "hud"
+  end
+
+  test "service schema endpoint describes the versioned loopback contract" do
+    repo = create_repo_fixture!()
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    payload = get_json!(base_url <> "/api/schema")
+    assert payload["ok"] == true
+    assert payload["api"]["contract_version"] == 1
+    assert payload["data"]["contract_name"] == "forgeloop_loopback"
+    assert payload["data"]["contract_version"] == 1
+    assert payload["data"]["payload_versions"]["coordination"] == 1
+    assert payload["data"]["endpoints"]["overview"]["path"] == "/api/overview"
+    assert payload["data"]["endpoints"]["stream"]["path"] == "/api/stream"
+    assert payload["data"]["endpoints"]["questions"]["answer_path_template"] == "/api/questions/{question_id}/answer"
   end
 
   test "service backlog endpoint matches orchestrator pending-work answer for the same plan file" do
@@ -932,6 +955,7 @@ defmodule ForgeloopV2.ServiceTest do
     response = get_response_raw!(base_url <> "/api/coordination?playbook_id=not-a-playbook")
     assert response.status == 400
     assert response.body["ok"] == false
+    assert response.body["api"]["contract_version"] == 1
     assert response.body["error"]["reason"] == "invalid_coordination_playbook"
   end
 
@@ -963,6 +987,7 @@ defmodule ForgeloopV2.ServiceTest do
 
     tail_payload = get_json!(base_url <> "/api/events?limit=2")
     assert tail_payload["ok"] == true
+    assert tail_payload["api"]["contract_version"] == 1
     assert Enum.map(tail_payload["data"], & &1["action"]) == ["second", "third"]
     assert tail_payload["meta"]["returned_count"] == 2
     assert tail_payload["meta"]["truncated?"] == true
@@ -1007,6 +1032,7 @@ defmodule ForgeloopV2.ServiceTest do
 
     first = recv_until(socket, "event: snapshot", 4_000)
     assert first =~ "event: snapshot"
+    assert first =~ ~s("contract_version":1)
     assert first =~ "pending task"
 
     :ok =
@@ -1017,6 +1043,7 @@ defmodule ForgeloopV2.ServiceTest do
 
     second = recv_until(socket, "stream_probe", 4_000)
     assert second =~ "event: event"
+    assert second =~ ~s("contract_version":1)
     assert second =~ "id: evt-"
     assert second =~ "stream_probe"
   end

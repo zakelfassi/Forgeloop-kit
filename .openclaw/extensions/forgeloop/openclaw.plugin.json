@@ -2,7 +2,7 @@
   "id": "forgeloop",
   "name": "Forgeloop",
   "description": "Monitor and pilot a local Forgeloop loopback control plane from OpenClaw.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -4,7 +4,7 @@ Workspace plugin that lets OpenClaw monitor and pilot Forgeloop through the loop
 
 ## What it does
 
-- reads the same `/api/overview` snapshot that powers the local HUD
+- reads the same `/api/overview` snapshot that powers the local HUD, and now discovers the service-owned loopback contract through `/api/schema` when available
 - reads the shared coordination advisory from `/api/coordination` when the service exposes it, including a service-owned operator brief plus bounded recent timeline, with older-service fallback to canonical `/api/events`
 - sends pause / clear-pause / replan / run / stop actions through the same loopback API
 - answers or resolves questions using the current canonical question revision
@@ -29,7 +29,9 @@ Workspace plugin that lets OpenClaw monitor and pilot Forgeloop through the loop
 - This plugin is a control-surface seam, not a new source of truth.
 - Repo-local files and `.forgeloop/runtime-state.json` stay canonical.
 - Manual runs launched here use `surface: "openclaw"` so they can be distinguished from browser-HUD runs.
-- `forgeloop_orchestrate` is dry-run by default, uses caller-managed `after` / `next_after` cursors instead of hidden plugin persistence, and now prefers the service-owned coordination read model that the HUD also renders, including the shared brief/timeline over the same bounded event window.
+- `forgeloop_orchestrate` is dry-run by default, uses caller-managed `after` / `next_after` cursors instead of hidden plugin persistence, and now prefers the shared service-owned coordination advisory plus recent event tails over the same event window.
+- When available, the plugin discovers the loopback contract through `/api/schema`; additive top-level `api` metadata is retained for future client/version handling while older services still fall back to the literal route layout.
+- If `/api/schema` is unavailable, the plugin falls back to the prior literal route layout without creating a second control plane.
 - If `/api/coordination` is unavailable on an older service, the plugin falls back to the prior local `/api/events` + `/api/overview` evaluation path for backward compatibility and still returns the same bounded informational brief/timeline shape.
 - Optional `playbookId` targeting can scope one invocation to a single playbook without changing cursor semantics or creating a second control plane.
 - Apply mode is separately gated by `allowOrchestrationApply`, still requires `allowMutations=true`, stays limited to one bounded pause / clear-pause / replan action, and blocks if the shared coordination endpoint fails unexpectedly.

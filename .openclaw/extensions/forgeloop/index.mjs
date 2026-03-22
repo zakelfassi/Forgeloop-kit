@@ -4,6 +4,8 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
 const COORDINATION_TIMELINE_LIMIT = 6;
 const PLUGIN_ID = "forgeloop";
+const serviceContractCache = new Map();
+const serviceApiMetadataCache = new Map();
 const ALLOWED_ORCHESTRATION_ACTIONS = new Set(["pause", "clear_pause", "replan"]);
 const ORCHESTRATION_PLAYBOOK_IDS = new Set([
   "human_answer_recovery",
@@ -307,7 +309,13 @@ function buildQuestionTool(api) {
 
       const payload = await requestJson(
         api,
-        `/api/questions/${encodeURIComponent(questionId)}/${action}`,
+        await resolveTemplatePath(
+          api,
+          "questions",
+          action === "answer" ? "answer_path_template" : "resolve_path_template",
+          { question_id: encodeURIComponent(questionId) },
+          `/api/questions/${encodeURIComponent(questionId)}/${action}`
+        ),
         { method: "POST", body }
       );
 
@@ -932,7 +940,8 @@ async function fetchCoordination(api, { after, limit, playbookId }) {
   if (playbookId) params.set("playbook_id", playbookId);
 
   try {
-    const payload = await requestJson(api, `/api/coordination?${params.toString()}`);
+    const coordinationPath = await resolvePath(api, "coordination", "/api/coordination");
+    const payload = await requestJson(api, `${coordinationPath}?${params.toString()}`);
     return {
       kind: "service",
       data: normalizeCoordinationPayload(payload?.data || {})
@@ -1130,7 +1139,8 @@ function recheckRecommendation(recommendation, overview) {
 }
 
 async function currentRevision(api, questionId) {
-  const payload = await requestJson(api, "/api/questions");
+  const questionsPath = await resolvePath(api, "questions", "/api/questions");
+  const payload = await requestJson(api, questionsPath);
   const questions = Array.isArray(payload?.data) ? payload.data : [];
   const question = questions.find((entry) => entry.id === questionId);
 
@@ -1142,7 +1152,8 @@ async function currentRevision(api, questionId) {
 }
 
 async function fetchOverview(api, limit) {
-  return requestJson(api, `/api/overview?limit=${normalizeLimit(limit)}`);
+  const overviewPath = await resolvePath(api, "overview", "/api/overview");
+  return requestJson(api, `${overviewPath}?limit=${normalizeLimit(limit)}`);
 }
 
 async function fetchEventsWindow(api, { after, limit, fallbackEvents = [], allowFallback = true } = {}) {
@@ -1152,7 +1163,8 @@ async function fetchEventsWindow(api, { after, limit, fallbackEvents = [], allow
   if (normalizedAfter) params.set("after", normalizedAfter);
 
   try {
-    const payload = await requestJson(api, `/api/events?${params.toString()}`);
+    const eventsPath = await resolvePath(api, "events", "/api/events");
+    const payload = await requestJson(api, `${eventsPath}?${params.toString()}`);
     return {
       source: "events_api",
       items: Array.isArray(payload?.data) ? payload.data : [],
@@ -1171,16 +1183,18 @@ async function fetchEventsWindow(api, { after, limit, fallbackEvents = [], allow
 }
 
 async function executeControlAction(api, action, params = {}) {
+  const controlPaths = await resolveControlPaths(api);
+
   switch (action) {
     case "pause":
-      return requestJson(api, "/api/control/pause", { method: "POST", body: {} });
+      return requestJson(api, controlPaths.pause, { method: "POST", body: {} });
     case "clear_pause":
-      return requestJson(api, "/api/control/clear-pause", { method: "POST", body: {} });
+      return requestJson(api, controlPaths.clearPause, { method: "POST", body: {} });
     case "replan":
-      return requestJson(api, "/api/control/replan", { method: "POST", body: {} });
+      return requestJson(api, controlPaths.replan, { method: "POST", body: {} });
     case "plan":
     case "build":
-      return requestJson(api, "/api/control/run", {
+      return requestJson(api, controlPaths.run, {
         method: "POST",
         body: compact({
           mode: action,
@@ -1194,7 +1208,14 @@ async function executeControlAction(api, action, params = {}) {
         throw new Error("workflowName is required for workflow actions");
       }
       const workflowAction = action === "workflow_preflight" ? "preflight" : "run";
-      return requestJson(api, `/api/workflows/${encodeURIComponent(params.workflowName)}/${workflowAction}`, {
+      const workflowPath = await resolveTemplatePath(
+        api,
+        "workflows",
+        workflowAction === "preflight" ? "preflight_path_template" : "run_path_template",
+        { workflow_name: encodeURIComponent(params.workflowName) },
+        `/api/workflows/${encodeURIComponent(params.workflowName)}/${workflowAction}`
+      );
+      return requestJson(api, workflowPath, {
         method: "POST",
         body: compact({
           branch: params.branch,
@@ -1202,11 +1223,13 @@ async function executeControlAction(api, action, params = {}) {
         })
       });
     }
-    case "stop":
-      return requestJson(api, "/api/babysitter/stop", {
+    case "stop": {
+      const stopPath = await resolvePath(api, "babysitter.stop_path", "/api/babysitter/stop");
+      return requestJson(api, stopPath, {
         method: "POST",
         body: { reason: params.stopReason || "pause" }
       });
+    }
     default:
       throw new Error(`Unsupported Forgeloop action: ${action}`);
   }
@@ -1238,6 +1261,8 @@ async function requestJson(api, path, opts = {}) {
       payload = null;
     }
 
+    rememberEnvelopeApi(api, payload);
+
     if (!response.ok || !payload?.ok) {
       const reason = payload?.error?.reason || payload?.error?.message || response.statusText || `HTTP ${response.status}`;
       const error = new Error(`Forgeloop request failed (${response.status}): ${reason}`);
@@ -1251,6 +1276,99 @@ async function requestJson(api, path, opts = {}) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function getContract(api) {
+  const cacheKey = serviceBaseUrl(api);
+  if (serviceContractCache.has(cacheKey)) {
+    return serviceContractCache.get(cacheKey);
+  }
+
+  const contract = await fetchContract(api);
+  serviceContractCache.set(cacheKey, contract);
+  return contract;
+}
+
+async function fetchContract(api) {
+  const url = new URL("/api/schema", serviceBaseUrl(api));
+  const timeoutMs = requestTimeout(api);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : null;
+    rememberEnvelopeApi(api, payload);
+
+    if (!payload?.ok || !payload?.data || typeof payload.data !== "object") {
+      return null;
+    }
+
+    return payload.data;
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function rememberEnvelopeApi(api, payload) {
+  if (payload?.api && typeof payload.api === "object") {
+    serviceApiMetadataCache.set(serviceBaseUrl(api), payload.api);
+  }
+}
+
+async function resolveControlPaths(api) {
+  const endpoint = await resolveEndpoint(api, "control");
+  return {
+    pause: endpoint?.pause_path || "/api/control/pause",
+    clearPause: endpoint?.clear_pause_path || "/api/control/clear-pause",
+    replan: endpoint?.replan_path || "/api/control/replan",
+    run: endpoint?.run_path || "/api/control/run"
+  };
+}
+
+async function resolvePath(api, selector, fallback) {
+  const endpoint = await resolveEndpoint(api, selector);
+  if (typeof endpoint === "string") return endpoint;
+  if (endpoint && typeof endpoint === "object" && typeof endpoint.path === "string") {
+    return endpoint.path;
+  }
+  return fallback;
+}
+
+async function resolveTemplatePath(api, selector, templateKey, params, fallback) {
+  const endpoint = await resolveEndpoint(api, selector);
+  const template = endpoint && typeof endpoint === "object" ? endpoint[templateKey] : null;
+  return fillPathTemplate(template, params) || fallback;
+}
+
+async function resolveEndpoint(api, selector) {
+  const contract = await getContract(api);
+  if (!contract?.endpoints) return null;
+
+  return String(selector || "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((value, segment) => (value && typeof value === "object" ? value[segment] : null), contract.endpoints);
+}
+
+function fillPathTemplate(template, params = {}) {
+  if (typeof template !== "string" || template.length === 0) return null;
+  return template.replace(/\{([^}]+)\}/g, (_match, key) => {
+    const value = params[key];
+    return value == null ? `{${key}}` : String(value);
+  });
 }
 
 function serviceBaseUrl(api) {

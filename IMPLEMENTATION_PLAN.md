@@ -405,6 +405,22 @@ Format:
     - `lib/core.sh` now provides shared intake prompt resolution plus a checklist-readiness heuristic that treats fresh template-only installs as not ready.
     - `bin/loop.sh` now exits early for checklist `plan` / `build` with explicit `PROMPT_intake.md` + `kickoff` guidance before runtime claim/state mutation.
     - `bin/kickoff.sh` now reuses the shared intake prompt resolver, and install/docs/site surfaces now position kickoff as the normal fresh-repo path.
+- [x] Freeze/version the loopback service contract for HUD and OpenClaw
+  - Acceptance:
+    - The loopback service publishes one explicit contract descriptor for its stable route/schema surface.
+    - JSON and SSE snapshot/event envelopes carry additive top-level service contract metadata.
+    - The HUD and OpenClaw seam consume that service-owned contract when available while preserving older-service fallback behavior where intended.
+    - Canonical repo files and runtime state remain the only source of truth.
+  - REQUIRED TESTS:
+    - `elixir/test/forgeloop_v2/service_contract_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+    - `tests/openclaw-plugin.test.sh`
+    - `tests/manual/hud-contract.agent-browser.sh`
+  - Shipped behavior:
+    - `ForgeloopV2.ServiceContract` now owns the loopback contract descriptor at `/api/schema`, including contract version, payload versions, and stable route/path templates.
+    - `ForgeloopV2.Service` now injects additive top-level `api` metadata into JSON responses plus SSE snapshot/event frames without changing existing endpoint semantics.
+    - The static HUD now discovers and follows the service-owned contract when available, and the OpenClaw plugin now prefers the same contract while preserving literal-route compatibility for older services.
+    - Docs/site copy now describe the loopback contract freeze as additive service hardening rather than a new control plane.
 - [x] Clarify public release tracks for the V2 launch path
   - Acceptance:
     - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 alpha / development track.

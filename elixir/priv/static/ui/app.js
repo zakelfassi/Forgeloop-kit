@@ -5,6 +5,8 @@ const state = {
   stream: null,
   hasSnapshot: false,
   snapshot: null,
+  contract: null,
+  api: null,
   latestEventId: null,
   refreshTimer: null,
   questionDrafts: {},
@@ -39,6 +41,7 @@ async function boot() {
   renderNotice();
 
   try {
+    await fetchContract();
     const snapshot = await fetchOverview();
     applySnapshot(snapshot);
     state.hasSnapshot = true;
@@ -60,14 +63,34 @@ function bindEvents() {
   refs.questionsBody.addEventListener("click", handleQuestionClick);
 }
 
+async function fetchContract() {
+  try {
+    const response = await fetch("/api/schema", { headers: { Accept: "application/json" } });
+    if (!response.ok) return null;
+
+    const payload = await response.json();
+    rememberApiMetadata(payload);
+
+    if (!payload.ok || !payload.data || typeof payload.data !== "object") {
+      return null;
+    }
+
+    state.contract = payload.data;
+    return state.contract;
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function fetchOverview() {
-  const response = await fetch("/api/overview?limit=50", { headers: { Accept: "application/json" } });
+  const response = await fetch(overviewPath(50), { headers: { Accept: "application/json" } });
 
   if (!response.ok) {
     throw new Error(`overview request failed (${response.status})`);
   }
 
   const payload = await response.json();
+  rememberApiMetadata(payload);
 
   if (!payload.ok || !payload.data) {
     throw new Error("overview payload was not ok");
@@ -103,11 +126,81 @@ async function postJson(path, body) {
     payload = null;
   }
 
+  rememberApiMetadata(payload);
+
   if (!response.ok || !payload || payload.ok !== true) {
     throw buildRequestError(response, payload);
   }
 
   return payload.data;
+}
+
+function rememberApiMetadata(payload) {
+  if (payload && payload.api && typeof payload.api === "object") {
+    state.api = payload.api;
+  }
+}
+
+function overviewPath(limit) {
+  const path = endpointPath("overview") || "/api/overview";
+  return `${path}?limit=${normalizeLimit(limit)}`;
+}
+
+function streamPath(limit) {
+  const path = endpointPath("stream") || "/api/stream";
+  return `${path}?limit=${normalizeLimit(limit)}`;
+}
+
+function controlPath(action) {
+  const endpoint = endpointDescriptor("control") || {};
+
+  switch (action) {
+    case "pause":
+      return endpoint.pause_path || "/api/control/pause";
+    case "clear-pause":
+      return endpoint.clear_pause_path || "/api/control/clear-pause";
+    case "replan":
+      return endpoint.replan_path || "/api/control/replan";
+    case "run":
+      return endpoint.run_path || "/api/control/run";
+    default:
+      return null;
+  }
+}
+
+function workflowActionPath(workflowName, action) {
+  const endpoint = endpointDescriptor("workflows") || {};
+  const template = action === "preflight" ? endpoint.preflight_path_template : endpoint.run_path_template;
+  return fillPathTemplate(template, { workflow_name: encodeURIComponent(workflowName) }) || `/api/workflows/${encodeURIComponent(workflowName)}/${action}`;
+}
+
+function questionActionPath(questionId, action) {
+  const endpoint = endpointDescriptor("questions") || {};
+  const template = action === "answer" ? endpoint.answer_path_template : endpoint.resolve_path_template;
+  return fillPathTemplate(template, { question_id: encodeURIComponent(questionId) }) || `/api/questions/${encodeURIComponent(questionId)}/${action}`;
+}
+
+function endpointPath(name) {
+  const endpoint = endpointDescriptor(name);
+  return endpoint && typeof endpoint.path === "string" ? endpoint.path : null;
+}
+
+function endpointDescriptor(name) {
+  return state.contract && state.contract.endpoints ? state.contract.endpoints[name] || null : null;
+}
+
+function fillPathTemplate(template, params) {
+  if (typeof template !== "string" || !template) return null;
+  return template.replace(/\{([^}]+)\}/g, (_match, key) => {
+    const value = params[key];
+    return value == null ? `{${key}}` : value;
+  });
+}
+
+function normalizeLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return STREAM_EVENT_LIMIT;
+  return Math.min(Math.trunc(parsed), 500);
 }
 
 function buildRequestError(response, payload) {
@@ -128,12 +221,13 @@ function connectStream() {
     state.stream.close();
   }
 
-  const stream = new EventSource(`/api/stream?limit=${STREAM_EVENT_LIMIT}`);
+  const stream = new EventSource(streamPath(STREAM_EVENT_LIMIT));
   state.stream = stream;
 
   stream.addEventListener("snapshot", (event) => {
     try {
       const payload = JSON.parse(event.data);
+      rememberApiMetadata(payload);
       if (payload.ok && payload.data) {
         applySnapshot(payload.data);
         state.hasSnapshot = true;
@@ -147,6 +241,7 @@ function connectStream() {
   stream.addEventListener("event", (event) => {
     try {
       const payload = JSON.parse(event.data);
+      rememberApiMetadata(payload);
       if (payload.ok && payload.data) {
         applyLiveEvent(payload.data);
         state.hasSnapshot = true;
@@ -687,7 +782,7 @@ async function handleControlClick(event) {
 
   if (action === "pause") {
     await runAction("pause", async () => {
-      await postJson("/api/control/pause", {});
+      await postJson(controlPath("pause"), {});
       await refreshOverview("Pause requested. The daemon will stay stopped until [PAUSE] is cleared.");
     });
     return;
@@ -695,7 +790,7 @@ async function handleControlClick(event) {
 
   if (action === "clear-pause") {
     await runAction("clear-pause", async () => {
-      await postJson("/api/control/clear-pause", {});
+      await postJson(controlPath("clear-pause"), {});
       await refreshOverview("Pause cleared. Recovery will happen on the next daemon or loop cycle.");
     });
     return;
@@ -703,7 +798,7 @@ async function handleControlClick(event) {
 
   if (action === "replan") {
     await runAction("replan", async () => {
-      await postJson("/api/control/replan", {});
+      await postJson(controlPath("replan"), {});
       await refreshOverview("Replan requested. The next loop can consume [REPLAN].");
     });
     return;
@@ -713,7 +808,7 @@ async function handleControlClick(event) {
     const mode = action === "run-plan" ? "plan" : "build";
 
     await runAction("run", async () => {
-      await postJson("/api/control/run", { mode });
+      await postJson(controlPath("run"), { mode });
       await refreshOverview(`${mode} run launched via UI surface.`);
     }, {
       conflictText: "A babysitter run is already active. Wait for it to finish before launching another one."
@@ -727,7 +822,7 @@ async function handleControlClick(event) {
     const pendingKey = `workflow:${workflowName}:${workflowAction}`;
 
     await runAction(pendingKey, async () => {
-      await postJson(`/api/workflows/${encodeURIComponent(workflowName)}/${workflowAction}`, { surface: "ui" });
+      await postJson(workflowActionPath(workflowName, workflowAction), { surface: "ui" });
       await refreshOverview(`${workflowName} ${workflowAction} launched via UI surface.`);
     }, {
       conflictText: "A babysitter run is already active. Wait for it to finish before launching another workflow action."
@@ -822,7 +917,7 @@ async function handleQuestionClick(event) {
     }
 
     await runQuestionAction(id, `answer:${id}`, async () => {
-      await postJson(`/api/questions/${encodeURIComponent(id)}/answer`, {
+      await postJson(questionActionPath(id, "answer"), {
         answer: draft,
         expected_revision: question.revision
       });
@@ -844,7 +939,7 @@ async function handleQuestionClick(event) {
     }
 
     await runQuestionAction(id, `resolve:${id}`, async () => {
-      await postJson(`/api/questions/${encodeURIComponent(id)}/resolve`, body);
+      await postJson(questionActionPath(id, "resolve"), body);
 
       try {
         await refreshOverview(`Resolved ${id}. Canonical files updated; no fake recovery was written.`);

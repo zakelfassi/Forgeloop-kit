@@ -43,6 +43,10 @@ globalThis.fetch = async (url, options = {}) => {
   fetchCalls.push({ url: String(url), options });
   const parsed = new URL(String(url));
 
+  if (parsed.pathname === "/api/schema") {
+    return okJson({ data: makeSchema() });
+  }
+
   if (parsed.pathname === "/api/overview" && parsed.searchParams.get("limit") === "9") {
     return okJson({
       data: makeOverview({
@@ -125,6 +129,7 @@ assert.match(overviewResult.content[0].text, /Event operator_action @ 2026-03-21
 
 const controlResult = await tools.forgeloop_control.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);
+assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/schema")).url, "http://127.0.0.1:4010/api/schema");
 assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/events?limit=9")).url, "http://127.0.0.1:4010/api/events?limit=9");
 assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/control/run")).url, "http://127.0.0.1:4010/api/control/run");
 assert.deepEqual(
@@ -486,6 +491,7 @@ assert.equal(resetPayload.cursor.next_after, "evt-9");
 assert.equal(resetPayload.cursor.reset_required, true);
 assert.ok(resetPayload.warnings.includes("cursor_not_found_reset_required"));
 
+const { tools: legacyFallbackTools } = registerPlugin({ baseUrl: "http://127.0.0.1:4011" });
 const fallbackOverview = makeOverview({
   runtime_state: { status: "running", mode: "build", surface: "service", branch: "main" },
   control_flags: { "pause_requested?": false, "replan_requested?": false },
@@ -495,6 +501,9 @@ const fallbackOverview = makeOverview({
 });
 globalThis.fetch = async (url) => {
   const parsed = new URL(String(url));
+  if (parsed.pathname === "/api/schema") {
+    return errorJson(404, "not_found");
+  }
   if (parsed.pathname === "/api/overview") {
     return okJson({ data: fallbackOverview });
   }
@@ -507,7 +516,7 @@ globalThis.fetch = async (url) => {
   throw new Error(`Unexpected fallback fetch: ${url}`);
 };
 
-const fallbackResult = await tools.forgeloop_orchestrate.execute("6", {
+const fallbackResult = await legacyFallbackTools.forgeloop_orchestrate.execute("6", {
   mode: "recommend",
   after: "evt-base",
   limit: 4,
@@ -629,6 +638,7 @@ assert.equal(targetedApplyPayload.applied.action, "replan");
 assert.equal(targetedApplyPayload.applied.result, "applied");
 assert.equal(targetedApplyPayload.cursor.next_after, "evt-clear");
 
+const { tools: legacyFallbackApplyTools } = registerPlugin({ baseUrl: "http://127.0.0.1:4012" });
 let fallbackApplyOverview = makeOverview({
   runtime_state: { status: "paused", mode: "build", surface: "service", branch: "main" },
   control_flags: { "pause_requested?": true, "replan_requested?": false },
@@ -638,6 +648,9 @@ let fallbackApplyOverview = makeOverview({
 let fallbackApplyReplanCalls = 0;
 globalThis.fetch = async (url, options = {}) => {
   const parsed = new URL(String(url));
+  if (parsed.pathname === "/api/schema") {
+    return errorJson(404, "not_found");
+  }
   if (parsed.pathname === "/api/overview") {
     return okJson({ data: fallbackApplyOverview });
   }
@@ -660,7 +673,7 @@ globalThis.fetch = async (url, options = {}) => {
   throw new Error(`Unexpected fallback apply fetch: ${url}`);
 };
 
-const fallbackApplyResult = await tools.forgeloop_orchestrate.execute("7b", {
+const fallbackApplyResult = await legacyFallbackApplyTools.forgeloop_orchestrate.execute("7b", {
   mode: "apply",
   after: "evt-prev-2",
   limit: 6,
@@ -870,6 +883,48 @@ function makeOverview(overrides = {}) {
   };
 }
 
+function makeSchema(overrides = {}) {
+  return {
+    contract_name: "forgeloop_loopback",
+    contract_version: 1,
+    payload_versions: {
+      overview: 1,
+      events: 1,
+      events_meta: 1,
+      coordination: 1,
+      tracker: 1,
+      workflow_overview: 1,
+      provider_health: 1,
+      babysitter: 1,
+      runtime_owner: 1
+    },
+    endpoints: {
+      overview: { path: "/api/overview" },
+      events: { path: "/api/events" },
+      coordination: { path: "/api/coordination", payload_version: 1 },
+      questions: {
+        path: "/api/questions",
+        answer_path_template: "/api/questions/{question_id}/answer",
+        resolve_path_template: "/api/questions/{question_id}/resolve"
+      },
+      workflows: {
+        path: "/api/workflows",
+        preflight_path_template: "/api/workflows/{workflow_name}/preflight",
+        run_path_template: "/api/workflows/{workflow_name}/run"
+      },
+      control: {
+        pause_path: "/api/control/pause",
+        clear_pause_path: "/api/control/clear-pause",
+        replan_path: "/api/control/replan",
+        run_path: "/api/control/run"
+      },
+      babysitter: { stop_path: "/api/babysitter/stop" },
+      stream: { path: "/api/stream", snapshot_event: "snapshot", data_event: "event" }
+    },
+    ...overrides
+  };
+}
+
 function makeCoordination(overrides = {}) {
   return {
     schema_version: 1,
@@ -915,7 +970,11 @@ function okJson(body) {
     status: 200,
     statusText: "OK",
     async text() {
-      return JSON.stringify({ ok: true, ...body });
+      return JSON.stringify({
+        ok: true,
+        api: { name: "forgeloop_loopback", contract_version: 1, schema_path: "/api/schema" },
+        ...body
+      });
     }
   };
 }
@@ -926,7 +985,11 @@ function errorJson(status, reason) {
     status,
     statusText: reason,
     async text() {
-      return JSON.stringify({ ok: false, error: { reason } });
+      return JSON.stringify({
+        ok: false,
+        api: { name: "forgeloop_loopback", contract_version: 1, schema_path: "/api/schema" },
+        error: { reason }
+      });
     }
   };
 }
