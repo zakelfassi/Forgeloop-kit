@@ -50,10 +50,10 @@ The current seam registers four tools:
 
 These map directly onto the existing loopback JSON API:
 
-- overview/status snapshots plus dedicated recent-event tails from `/api/events`
+- overview/status snapshots plus the shared `/api/coordination` advisory, with dedicated recent-event tails from `/api/events`
 - pause / clear-pause / replan / manual plan-build / stop / workflow preflight-run
 - answer / resolve question
-- bounded event-window review over `/api/events?after=...` with caller-managed replay cursors and invocation-scoped playbooks
+- bounded event-window review over service-owned `/api/coordination?after=...` with caller-managed replay cursors and invocation-scoped playbooks
 
 ## Config
 
@@ -71,14 +71,16 @@ These map directly onto the existing loopback JSON API:
 
 - dry-run/recommend mode is the default
 - the caller supplies `after` and receives `next_after`; the plugin does not persist cursors
-- it reads canonical replay/tail metadata from `/api/events`
+- it prefers the shared service-owned coordination read model from `/api/coordination`, which is also embedded in `/api/overview` for the HUD
+- on older services that do not expose `/api/coordination`, it falls back to the prior local `/api/events` + `/api/overview` evaluation path for backward compatibility
 - it now derives a small fixed set of operator playbooks (`human_answer_recovery`, `post_clear_pause_rebuild`, `failure_stabilization`) alongside the lower-level recommendations
 - an optional `playbookId` selector can scope one invocation to a single playbook without widening the mutation surface
 - it can apply **at most one** bounded action per invocation, and only from:
   - `pause`
   - `clear_pause`
   - `replan`
-- if replay is truncated, the cursor is missing, or `/api/events` is unavailable, it falls back safely to read-only recommendations/playbooks and does not mutate the control plane
+- if replay is truncated, the cursor is missing, or `/api/events` is unavailable on an older-service fallback path, it falls back safely to read-only recommendations/playbooks and does not mutate the control plane
+- if `/api/coordination` exists but fails unexpectedly, recommend mode degrades to read-only fallback and apply mode blocks instead of mutating on uncertain shared state
 
 All mutations still flow through the same loopback control endpoints and canonical repo-local artifacts.
 
@@ -89,6 +91,6 @@ All mutations still flow through the same loopback control endpoints and canonic
 - This does **not** add hidden plugin-owned cursor persistence or long-lived `/api/stream` orchestration loops yet.
 - This does **not** yet auto-trigger runs, workflow actions, or question mutations from OpenClaw orchestration.
 - This does **not** yet turn playbooks into a long-lived autonomous event loop; they stay invocation-scoped guidance over one replay window.
-- This does **not** yet add broader daemon-integrated OpenClaw orchestration, event compaction/search, or native graph execution beyond the current bounded workflow history and event replay view.
+- This does **not** yet add broader daemon-integrated OpenClaw orchestration, event compaction/search, or native graph execution beyond the current shared coordination read model, bounded workflow history, and event replay view.
 
 Those are later slices.

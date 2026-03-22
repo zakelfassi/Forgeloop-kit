@@ -196,6 +196,8 @@ function buildOverviewTool(api) {
       const workflowTargetValidity = workflowTarget["valid?"] === false ? `invalid:${workflowTarget.error || "config"}` : "valid";
       const workflowTargetLabel = workflowTarget.name ? `${workflowTarget.action || "preflight"} ${workflowTarget.name}` : "unconfigured";
       const backlogLabel = backlog.source?.label || "IMPLEMENTATION_PLAN.md";
+      const coordination = data.coordination || null;
+      const coordinationSummary = coordination?.summary?.playbooks || null;
 
       const text = [
         `Forgeloop overview (${serviceBaseUrl(api)})`,
@@ -207,6 +209,9 @@ function buildOverviewTool(api) {
         `Tracker: ${trackerIssues.length} projected repo-local issues`,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
         `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active, failed=${workflowOutcomeCounts.failed || 0}, escalated=${workflowOutcomeCounts.escalated || 0}, start_failed=${workflowOutcomeCounts.start_failed || 0})`,
+        coordination
+          ? `Coordination: ${coordination.status || "idle"} (${coordinationSummary?.total || 0} playbooks, ${coordination.summary?.recommendations || 0} recommendations)`
+          : "Coordination: unavailable in this service snapshot",
         ...workflows.map((workflow) => {
           const latest = workflow.history?.latest;
           const latestText = latest
@@ -333,25 +338,20 @@ function buildOrchestrationTool(api) {
       );
       const overviewPayload = await fetchOverview(api, limit);
       const overview = overviewPayload?.data || {};
-      const eventsWindow = await fetchEventsWindow(api, {
-        after,
-        limit,
-        fallbackEvents: overview.events || [],
-        allowFallback: true
-      });
       const result = await executeOrchestration(api, {
         mode,
         after,
         limit,
         playbookId,
-        overview,
-        eventsWindow
+        overview
       });
 
       const text = [
         `Forgeloop orchestration: ${mode}`,
         `Service: ${serviceBaseUrl(api)}`,
         `Event source: ${result.event_source}`,
+        `Coordination source: ${result.coordination_source}`,
+        `Coordination status: ${result.status}`,
         `Cursor: requested=${result.cursor.requested_after || "none"} next=${result.cursor.next_after || "none"}`,
         `Playbooks: ${result.summary.playbooks.total}${result.selected_playbook_id ? ` (selected=${result.selected_playbook_id})` : ""}`,
         `Recommendations: ${result.summary.recommendations}`,
@@ -368,7 +368,147 @@ function buildOrchestrationTool(api) {
   };
 }
 
-async function executeOrchestration(api, { mode, after, limit, playbookId, overview, eventsWindow }) {
+async function executeOrchestration(api, { mode, after, limit, playbookId, overview }) {
+  const coordination = await fetchCoordination(api, { after, limit, playbookId });
+
+  if (coordination.kind === "service") {
+    return executeServiceOrchestration(api, {
+      mode,
+      after,
+      limit,
+      playbookId,
+      coordination: coordination.data
+    });
+  }
+
+  const eventsWindow = await fetchEventsWindow(api, {
+    after,
+    limit,
+    fallbackEvents: overview.events || [],
+    allowFallback: true
+  });
+
+  if (coordination.kind === "unsupported") {
+    const fallback = await executeLocalOrchestration(api, { mode, after, limit, playbookId, overview, eventsWindow });
+    fallback.coordination_source = "plugin_fallback";
+    return fallback;
+  }
+
+  const fallback = await executeLocalOrchestration(api, {
+    mode: "recommend",
+    after,
+    limit,
+    playbookId,
+    overview,
+    eventsWindow
+  });
+  fallback.mode = mode;
+  fallback.coordination_source = "plugin_fallback";
+  if (!fallback.warnings.includes("service_coordination_failed")) {
+    fallback.warnings.push("service_coordination_failed");
+  }
+  if (mode === "apply") {
+    fallback.applied = {
+      attempted: false,
+      action: null,
+      result: "blocked",
+      reason: "service_coordination_failed"
+    };
+  }
+  return fallback;
+}
+
+async function executeServiceOrchestration(api, { mode, after, limit, playbookId, coordination }) {
+  const result = buildCoordinationResult(api, mode, coordination, "service");
+
+  if (mode !== "apply") {
+    return result;
+  }
+
+  const serviceInvariantReason = serviceApplyInvariantFailure(result, { after, playbookId });
+  if (serviceInvariantReason) {
+    result.applied.result = "blocked";
+    result.applied.reason = serviceInvariantReason;
+    return result;
+  }
+
+  const applyBlockedReason = firstApplyBlockerFromResult(result);
+  if (applyBlockedReason) {
+    result.applied.result = "blocked";
+    result.applied.reason = applyBlockedReason;
+    return result;
+  }
+
+  let candidate = firstApplyCandidate(result.recommendations);
+  if (!candidate) {
+    result.applied.result = result.recommendations.length > 0 ? "blocked" : "skipped";
+    result.applied.reason = result.recommendations.length > 0 ? "no_apply_eligible_recommendation" : "no_recommendations";
+    return result;
+  }
+
+  let recheckedCoordination;
+  try {
+    const rechecked = await fetchCoordination(api, { after, limit, playbookId });
+    if (rechecked.kind !== "service") {
+      result.applied.result = "blocked";
+      result.applied.reason = "service_coordination_failed";
+      return result;
+    }
+    recheckedCoordination = rechecked.data;
+  } catch (_error) {
+    result.applied.result = "blocked";
+    result.applied.reason = "service_coordination_failed";
+    return result;
+  }
+
+  result.status = recheckedCoordination.status || result.status;
+  result.selected_playbook_id = recheckedCoordination.selected_playbook_id ?? result.selected_playbook_id;
+  result.cursor = recheckedCoordination.cursor || result.cursor;
+  result.summary = recheckedCoordination.summary || result.summary;
+  result.recommendations = Array.isArray(recheckedCoordination.recommendations) ? recheckedCoordination.recommendations : [];
+  result.playbooks = Array.isArray(recheckedCoordination.playbooks) ? recheckedCoordination.playbooks : [];
+  result.warnings = dedupeWarnings([...(result.warnings || []), ...(recheckedCoordination.warnings || [])]);
+
+  const recheckInvariantReason = serviceApplyInvariantFailure(result, { after, playbookId });
+  if (recheckInvariantReason) {
+    result.applied.result = "blocked";
+    result.applied.reason = recheckInvariantReason;
+    return result;
+  }
+
+  candidate = firstApplyCandidate(result.recommendations);
+  if (!candidate) {
+    result.applied.result = result.recommendations.length > 0 ? "blocked" : "skipped";
+    result.applied.reason = result.recommendations.length > 0 ? "no_apply_eligible_recommendation" : "no_recommendations";
+    return result;
+  }
+
+  try {
+    const payload = await executeControlAction(api, candidate.action, {});
+    result.applied.attempted = true;
+    result.applied.action = candidate.action;
+    result.applied.response = payload?.data ?? payload;
+
+    try {
+      const latestOverviewPayload = await fetchOverview(api, limit);
+      result.applied.result = "applied";
+      result.applied.reason = null;
+      result.applied.latest_overview = latestOverviewPayload?.data || {};
+    } catch (error) {
+      result.applied.result = "error";
+      result.applied.reason = `post_apply_overview_failed:${error.message}`;
+    }
+  } catch (error) {
+    result.applied.attempted = true;
+    result.applied.action = candidate.action;
+    result.applied.result = "error";
+    result.applied.reason = error.message;
+  }
+
+  return result;
+}
+
+function executeLocalOrchestration(api, { mode, after, limit, playbookId, overview, eventsWindow }) {
   const warnings = [];
   const meta = normalizeEventsMeta(eventsWindow.meta);
   const deduped = dedupeEvents(eventsWindow.items);
@@ -405,8 +545,11 @@ async function executeOrchestration(api, { mode, after, limit, playbookId, overv
   }
 
   const result = {
+    schema_version: 1,
     mode,
     service: serviceBaseUrl(api),
+    coordination_source: "plugin_fallback",
+    status: coordinationStatusFromPlaybooks(playbooks),
     event_source: eventsWindow.source,
     selected_playbook_id: playbookId,
     cursor: {
@@ -436,59 +579,180 @@ async function executeOrchestration(api, { mode, after, limit, playbookId, overv
   };
 
   if (mode !== "apply") {
-    return result;
+    return Promise.resolve(result);
   }
 
   const applyBlockedReason = firstApplyBlocker({ after, eventsWindow, cursorFound, replayTruncated });
   if (applyBlockedReason) {
     result.applied.result = "blocked";
     result.applied.reason = applyBlockedReason;
-    return result;
+    return Promise.resolve(result);
   }
 
   const candidate = firstApplyCandidate(recommendations);
   if (!candidate) {
     result.applied.result = recommendations.length > 0 ? "blocked" : "skipped";
     result.applied.reason = recommendations.length > 0 ? "no_apply_eligible_recommendation" : "no_recommendations";
-    return result;
+    return Promise.resolve(result);
   }
 
-  const freshOverviewPayload = await fetchOverview(api, limit);
-  const freshOverview = freshOverviewPayload?.data || {};
-  const rechecked = recheckRecommendation(candidate, freshOverview);
-  if (!rechecked.apply_eligible) {
-    result.applied.result = "blocked";
-    result.applied.action = candidate.action;
-    result.applied.reason = rechecked.blocked_by[0] || "state_changed";
-    result.recommendations = replaceRecommendation(result.recommendations, rechecked);
-    result.playbooks = replacePlaybook(result.playbooks, buildPlaybook(rechecked));
-    result.summary.playbooks = summarizePlaybooks(result.playbooks);
-    return result;
-  }
+  return fetchOverview(api, limit)
+    .then((freshOverviewPayload) => {
+      const freshOverview = freshOverviewPayload?.data || {};
+      const rechecked = recheckRecommendation(candidate, freshOverview);
+      if (!rechecked.apply_eligible) {
+        result.applied.result = "blocked";
+        result.applied.action = candidate.action;
+        result.applied.reason = rechecked.blocked_by[0] || "state_changed";
+        result.recommendations = replaceRecommendation(result.recommendations, rechecked);
+        result.playbooks = replacePlaybook(result.playbooks, buildPlaybook(rechecked));
+        result.summary.playbooks = summarizePlaybooks(result.playbooks);
+        result.status = coordinationStatusFromPlaybooks(result.playbooks);
+        return result;
+      }
+
+      return executeControlAction(api, candidate.action, {})
+        .then((payload) => {
+          result.applied.attempted = true;
+          result.applied.action = candidate.action;
+          result.applied.response = payload?.data ?? payload;
+
+          return fetchOverview(api, limit)
+            .then((latestOverviewPayload) => {
+              result.applied.result = "applied";
+              result.applied.reason = null;
+              result.applied.latest_overview = latestOverviewPayload?.data || {};
+              return result;
+            })
+            .catch((error) => {
+              result.applied.result = "error";
+              result.applied.reason = `post_apply_overview_failed:${error.message}`;
+              return result;
+            });
+        })
+        .catch((error) => {
+          result.applied.attempted = true;
+          result.applied.action = candidate.action;
+          result.applied.result = "error";
+          result.applied.reason = error.message;
+          return result;
+        });
+    });
+}
+
+function buildCoordinationResult(api, mode, coordination, coordinationSource) {
+  const normalized = normalizeCoordinationPayload(coordination);
+  return {
+    schema_version: normalized.schema_version || 1,
+    mode,
+    service: serviceBaseUrl(api),
+    coordination_source: coordinationSource,
+    status: normalized.status || coordinationStatusFromPlaybooks(normalized.playbooks),
+    event_source: normalized.event_source || "events_api",
+    selected_playbook_id: normalized.selected_playbook_id ?? null,
+    cursor: normalized.cursor,
+    summary: normalized.summary,
+    recommendations: normalized.recommendations,
+    playbooks: normalized.playbooks,
+    applied: {
+      attempted: false,
+      action: null,
+      result: mode === "apply" ? "skipped" : "not_requested",
+      reason: mode === "apply" ? "no_apply_attempted" : null
+    },
+    warnings: normalized.warnings
+  };
+}
+
+function normalizeCoordinationPayload(coordination) {
+  const payload = coordination && typeof coordination === "object" ? coordination : {};
+  const playbooks = Array.isArray(payload.playbooks) ? payload.playbooks : [];
+  const summaryPlaybooks = payload.summary && payload.summary.playbooks ? payload.summary.playbooks : summarizePlaybooks(playbooks);
+  return {
+    schema_version: Number(payload.schema_version || 1),
+    status: payload.status || coordinationStatusFromPlaybooks(playbooks),
+    selected_playbook_id: normalizeCursor(payload.selected_playbook_id),
+    event_source: payload.event_source || "events_api",
+    cursor: {
+      requested_after: normalizeCursor(payload.cursor?.requested_after),
+      next_after: normalizeCursor(payload.cursor?.next_after),
+      cursor_found: nullableBoolean(payload.cursor?.cursor_found),
+      truncated: Boolean(payload.cursor?.truncated),
+      reset_required: Boolean(payload.cursor?.reset_required)
+    },
+    summary: {
+      fetched_events: Number(payload.summary?.fetched_events || 0),
+      unique_events: Number(payload.summary?.unique_events || 0),
+      duplicate_events: Number(payload.summary?.duplicate_events || 0),
+      actionable_events: Number(payload.summary?.actionable_events || 0),
+      recommendations: Number(payload.summary?.recommendations || 0),
+      playbooks: {
+        total: Number(summaryPlaybooks.total || 0),
+        actionable: Number(summaryPlaybooks.actionable || 0),
+        blocked: Number(summaryPlaybooks.blocked || 0),
+        observe: Number(summaryPlaybooks.observe || 0)
+      }
+    },
+    recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
+    playbooks,
+    warnings: Array.isArray(payload.warnings) ? payload.warnings.slice() : []
+  };
+}
+
+async function fetchCoordination(api, { after, limit, playbookId }) {
+  const normalizedAfter = normalizeCursor(after);
+  const normalizedLimit = normalizeLimit(limit);
+  const params = new URLSearchParams({ limit: String(normalizedLimit) });
+  if (normalizedAfter) params.set("after", normalizedAfter);
+  if (playbookId) params.set("playbook_id", playbookId);
 
   try {
-    const payload = await executeControlAction(api, candidate.action, {});
-    result.applied.attempted = true;
-    result.applied.action = candidate.action;
-    result.applied.response = payload?.data ?? payload;
-
-    try {
-      const latestOverviewPayload = await fetchOverview(api, limit);
-      result.applied.result = "applied";
-      result.applied.reason = null;
-      result.applied.latest_overview = latestOverviewPayload?.data || {};
-    } catch (error) {
-      result.applied.result = "error";
-      result.applied.reason = `post_apply_overview_failed:${error.message}`;
-    }
+    const payload = await requestJson(api, `/api/coordination?${params.toString()}`);
+    return {
+      kind: "service",
+      data: normalizeCoordinationPayload(payload?.data || {})
+    };
   } catch (error) {
-    result.applied.attempted = true;
-    result.applied.action = candidate.action;
-    result.applied.result = "error";
-    result.applied.reason = error.message;
+    if (isUnsupportedCoordinationError(error)) {
+      return { kind: "unsupported", error };
+    }
+    return { kind: "failed", error };
+  }
+}
+
+function isUnsupportedCoordinationError(error) {
+  return error?.status === 404 || error?.status === 405 || error?.reason === "not_found";
+}
+
+function coordinationStatusFromPlaybooks(playbooks) {
+  if (playbooks.some((playbook) => playbook.status === "actionable")) return "actionable";
+  if (playbooks.some((playbook) => playbook.status === "blocked")) return "blocked";
+  if (playbooks.some((playbook) => playbook.status === "observe")) return "observe";
+  return "idle";
+}
+
+function dedupeWarnings(warnings) {
+  return [...new Set((Array.isArray(warnings) ? warnings : []).filter(Boolean))];
+}
+
+function serviceApplyInvariantFailure(result, { after, playbookId }) {
+  if (after) {
+    if (result?.cursor?.requested_after !== after) return "service_coordination_cursor_mismatch";
+    if (result?.cursor?.reset_required) return "service_coordination_reset_required";
+    if (result?.cursor?.cursor_found !== true) return "service_coordination_cursor_not_confirmed";
   }
 
-  return result;
+  if (playbookId) {
+    if (result?.selected_playbook_id !== playbookId) return "service_coordination_playbook_mismatch";
+    if ((result.recommendations || []).some((recommendation) => recommendation.playbook_id !== playbookId)) {
+      return "service_coordination_playbook_mismatch";
+    }
+    if ((result.playbooks || []).some((playbook) => playbook.id !== playbookId)) {
+      return "service_coordination_playbook_mismatch";
+    }
+  }
+
+  return null;
 }
 
 function firstApplyBlocker({ after, eventsWindow, cursorFound, replayTruncated }) {
@@ -496,6 +760,13 @@ function firstApplyBlocker({ after, eventsWindow, cursorFound, replayTruncated }
   if (eventsWindow.source === "overview_fallback") return "events_api_unavailable";
   if (cursorFound === false) return "cursor_not_found_reset_required";
   if (replayTruncated) return "replay_truncated_reset_required";
+  return null;
+}
+
+function firstApplyBlockerFromResult(result) {
+  if (!result?.cursor?.requested_after) return "apply_requires_after_cursor";
+  if (result.cursor.cursor_found === false) return "cursor_not_found_reset_required";
+  if (result.cursor.truncated) return "replay_truncated_reset_required";
   return null;
 }
 
@@ -744,7 +1015,11 @@ async function requestJson(api, path, opts = {}) {
 
     if (!response.ok || !payload?.ok) {
       const reason = payload?.error?.reason || payload?.error?.message || response.statusText || `HTTP ${response.status}`;
-      throw new Error(`Forgeloop request failed (${response.status}): ${reason}`);
+      const error = new Error(`Forgeloop request failed (${response.status}): ${reason}`);
+      error.status = response.status;
+      error.reason = payload?.error?.reason || null;
+      error.payload = payload;
+      throw error;
     }
 
     return payload;

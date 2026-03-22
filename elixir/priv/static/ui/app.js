@@ -23,6 +23,7 @@ const refs = {
   runtimeBody: document.getElementById("runtime-body"),
   providerBody: document.getElementById("provider-body"),
   backlogBody: document.getElementById("backlog-body"),
+  coordinationBody: document.getElementById("coordination-body"),
   trackerBody: document.getElementById("tracker-body"),
   workflowsBody: document.getElementById("workflows-body"),
   questionsBody: document.getElementById("questions-body"),
@@ -172,6 +173,7 @@ function applySnapshot(snapshot) {
   renderRuntime(snapshot.runtime_state, snapshot.babysitter, snapshot.control_flags);
   renderProviders(snapshot.provider_health);
   renderBacklog(snapshot.backlog);
+  renderCoordination(snapshot.coordination);
   renderTracker(snapshot.tracker);
   renderWorkflows(snapshot.workflows || {});
   renderQuestions(snapshot.questions || []);
@@ -339,6 +341,87 @@ function renderBacklog(backlog) {
       <h3>${escapeHtml(item.text || item.raw_line || "Untitled item")}</h3>
     </article>
   `).join("")}`;
+}
+
+function renderCoordination(coordination) {
+  if (!coordination) {
+    refs.coordinationBody.className = "stack empty";
+    refs.coordinationBody.textContent = "No coordination advisory has been derived yet.";
+    return;
+  }
+
+  const warnings = Array.isArray(coordination.warnings) ? coordination.warnings : [];
+  const playbooks = Array.isArray(coordination.playbooks) ? coordination.playbooks : [];
+  const counts = coordination.summary && coordination.summary.playbooks ? coordination.summary.playbooks : {};
+  const cursor = coordination.cursor || {};
+  const statusClass = coordinationStatusClass(coordination.status);
+  const summaryCard = `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge(`status ${coordination.status || "idle"}`, statusClass)}
+        ${badge(`${counts.actionable || 0} actionable`, (counts.actionable || 0) > 0 ? "good" : "info")}
+        ${badge(`${counts.blocked || 0} blocked`, (counts.blocked || 0) > 0 ? "bad" : "info")}
+        ${badge(`${counts.observe || 0} observe`, (counts.observe || 0) > 0 ? "warn" : "info")}
+      </div>
+      <p class="subtle-copy">Shared read-only coordination derived by the loopback service from canonical runtime state, control flags, and replayable events. Apply any suggested action via the operator controls above or OpenClaw.</p>
+      <div class="metric-grid compact-grid">
+        ${metric("Event source", coordination.event_source || "events_api")}
+        ${metric("Next cursor", cursor.next_after || "—")}
+        ${metric("Requested cursor", cursor.requested_after || "—")}
+        ${metric("Recommendations", String(coordination.summary?.recommendations || 0))}
+      </div>
+      ${warnings.length ? `<div class="badges">${warnings.map((warning) => badge(warning.replaceAll("_", " "), "warn")).join("")}</div>` : ""}
+    </article>
+  `;
+
+  if (!playbooks.length) {
+    refs.coordinationBody.className = "stack empty";
+    refs.coordinationBody.innerHTML = `${summaryCard}<p>No playbooks are currently triggered for the latest bounded event window.</p>`;
+    return;
+  }
+
+  refs.coordinationBody.className = "stack";
+  refs.coordinationBody.innerHTML = summaryCard + playbooks.map((playbook) => {
+    const evidence = Array.isArray(playbook.evidence) ? playbook.evidence : [];
+    const steps = Array.isArray(playbook.steps) ? playbook.steps : [];
+    const blockedBy = Array.isArray(playbook.blocked_by) ? playbook.blocked_by : [];
+
+    return `
+      <article class="list-card coordination-card">
+        <div class="panel-head compact-head">
+          <div>
+            <h3>${escapeHtml(playbook.title || playbook.id || "Playbook")}</h3>
+            <p class="subtle-copy">${escapeHtml(playbook.goal || playbook.reason || "")}</p>
+          </div>
+          <div class="badges">
+            ${badge(playbook.status || "idle", coordinationStatusClass(playbook.status))}
+            ${playbook.recommended_action ? badge(`recommend ${playbook.recommended_action}`, playbook.apply_eligible ? "good" : "warn") : badge("manual review", "info")}
+          </div>
+        </div>
+        <p>${escapeHtml(playbook.reason || "No coordination reason available.")}</p>
+        ${blockedBy.length ? `<div class="badges">${blockedBy.map((reason) => badge(reason.replaceAll("_", " "), "bad")).join("")}</div>` : ""}
+        ${evidence.length ? `<div class="stack">${evidence.map((item) => `
+          <div class="coordination-evidence">
+            <strong>${escapeHtml(item.event_code || "event")}</strong>
+            <span class="subtle">${escapeHtml(item.occurred_at || "unknown")}</span>
+            ${item.action ? `<span class="subtle">action=${escapeHtml(item.action)}</span>` : ""}
+          </div>
+        `).join("")}</div>` : ""}
+        <div class="stack">
+          ${steps.map((step) => `
+            <article class="coordination-step">
+              <div class="list-meta">
+                ${badge(step.kind || "step", step.kind === "control_action" ? "purple" : "info")}
+                ${step.action ? badge(step.action, step.apply_eligible ? "good" : "warn") : ""}
+              </div>
+              <strong>${escapeHtml(step.title || "Step")}</strong>
+              <p class="subtle-copy">${escapeHtml(step.detail || "")}</p>
+            </article>
+          `).join("")}
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderTracker(tracker) {
@@ -870,6 +953,13 @@ function badgeClass(kind) {
   if (["available", "pending", "answered", "resolved", "idle", "running", "completed"].includes(kind)) return "good";
   if (["awaiting-response", "awaiting_response", "awaiting-human", "awaiting_human", "auth_failed", "rate_limited", "paused", "recovered", "stopping"].includes(kind)) return "warn";
   if (["disabled", "blocked", "spin", "failed", "error"].includes(kind)) return "bad";
+  return "info";
+}
+
+function coordinationStatusClass(status) {
+  if (status === "actionable") return "good";
+  if (status === "blocked") return "bad";
+  if (status === "observe") return "warn";
   return "info";
 }
 

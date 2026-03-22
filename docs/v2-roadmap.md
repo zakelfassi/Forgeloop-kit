@@ -19,7 +19,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
   - local JSONL event history with bounded tail/replay readers and live subscriptions for the control plane
 - a loopback-only control-plane service for runtime plus the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), a read-only repo-local tracker projection, and questions/escalations/events/workflows/provider health plus babysitter control
 - a static repo-local operator UI with replayable SSE-backed live updates, interactive control mutations, and no Node asset pipeline
-- a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including one-window bounded event-reactive playbooks/recommendations and conservative optional one-action apply
+- a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including a shared service-owned coordination read model for HUD/OpenClaw, one-window bounded playbooks/recommendations, and conservative optional one-action apply
 
 ## Coexistence Rule
 
@@ -83,7 +83,7 @@ These are still out of scope for the current phase:
 - Postgres-backed event storage
 - event compaction/indexed search beyond the current bounded replay/tail API
 - long-lived worktree orchestration beyond the current managed daemon launcher
-- daemon-integrated UI/OpenClaw orchestration beyond the current single-window bounded OpenClaw playbook/reaction seam plus `[WORKFLOW]` request
+- daemon-integrated UI/OpenClaw orchestration beyond the current shared coordination read model, single-window bounded OpenClaw playbook/apply seam, and `[WORKFLOW]` request
 - checkpoint-resume semantics and broader workflow orchestration beyond the current bounded history sidecar
 - graph workflows
 - exact checkpoint/resume

@@ -85,7 +85,12 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["tracker"]["counts"]["backlog"] == 1
     assert payload["data"]["tracker"]["counts"]["workflows"] == 1
     assert Enum.any?(payload["data"]["tracker"]["issues"], &(&1["workflow_state"] == "plan_item"))
-    assert Enum.any?(payload["data"]["tracker"]["issues"], &(&1["workflow_state"] == "workflow_pack"))
+
+    assert Enum.any?(
+             payload["data"]["tracker"]["issues"],
+             &(&1["workflow_state"] == "workflow_pack")
+           )
+
     assert Enum.at(payload["data"]["questions"], 0)["id"] == "Q-1"
     assert Enum.at(payload["data"]["escalations"], 0)["id"] == "E-1"
     assert Enum.any?(payload["data"]["events"], &(&1["event_type"] == "daemon_tick"))
@@ -93,7 +98,11 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["events_meta"]["returned_count"] >= 2
     assert Enum.at(payload["data"]["workflows"]["workflows"], 0)["entry"]["name"] == "alpha"
     assert payload["data"]["babysitter"]["running?"] == false
-    assert Enum.any?(payload["data"]["provider_health"]["providers"], &(&1["name"] == "claude" and &1["status"] == "auth_failed"))
+
+    assert Enum.any?(
+             payload["data"]["provider_health"]["providers"],
+             &(&1["name"] == "claude" and &1["status"] == "auth_failed")
+           )
 
     providers = get_json!(base_url <> "/api/providers")
     assert providers["ok"] == true
@@ -192,7 +201,9 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["control_flags"]["workflow_target"]["name"] == "alpha"
     assert payload["data"]["control_flags"]["workflow_target"]["action"] == "launch"
     assert payload["data"]["control_flags"]["workflow_target"]["mode"] == nil
-    assert payload["data"]["control_flags"]["workflow_target"]["error"] == "invalid_daemon_workflow_action"
+
+    assert payload["data"]["control_flags"]["workflow_target"]["error"] ==
+             "invalid_daemon_workflow_action"
   end
 
   test "service tracker endpoint exposes repo-local projected issues" do
@@ -217,14 +228,25 @@ defmodule ForgeloopV2.ServiceTest do
     assert tracker_payload["data"]["counts"]["total"] == 2
     assert tracker_payload["data"]["sources"]["backlog"]["kind"] == "implementation_plan"
     assert tracker_payload["data"]["sources"]["workflows"]["kind"] == "workflow_catalog"
-    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "plan:2" and &1["workflow_state"] == "plan_item"))
-    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "workflow:alpha" and &1["workflow_state"] == "workflow_pack"))
+
+    assert Enum.any?(
+             tracker_payload["data"]["issues"],
+             &(&1["id"] == "plan:2" and &1["workflow_state"] == "plan_item")
+           )
+
+    assert Enum.any?(
+             tracker_payload["data"]["issues"],
+             &(&1["id"] == "workflow:alpha" and &1["workflow_state"] == "workflow_pack")
+           )
   end
 
   test "service backlog stays fail-closed when the configured plan path is unreadable" do
     repo = create_repo_fixture!()
     layout = create_ui_layout!(repo.repo_root)
-    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0, plan_file: ".")
+
+    config =
+      config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0, plan_file: ".")
+
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
@@ -238,7 +260,11 @@ defmodule ForgeloopV2.ServiceTest do
     assert backlog_payload["data"]["source"]["path"] == repo.repo_root
     assert tracker_payload["ok"] == true
     assert tracker_payload["data"]["counts"]["blocked"] == 1
-    assert Enum.any?(tracker_payload["data"]["issues"], &(&1["id"] == "plan:alert" and &1["workflow_state"] == "backlog_alert"))
+
+    assert Enum.any?(
+             tracker_payload["data"]["issues"],
+             &(&1["id"] == "plan:alert" and &1["workflow_state"] == "backlog_alert")
+           )
   end
 
   test "pause, replan, question answer, and resolve endpoints mutate canonical files safely" do
@@ -317,7 +343,9 @@ defmodule ForgeloopV2.ServiceTest do
     assert second_payload["ok"] == true
     assert second_payload["data"]["cleared?"] == false
 
-    {:ok, daemon_pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    {:ok, daemon_pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
     Daemon.run_once(daemon_pid)
     wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
 
@@ -359,7 +387,9 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, service_pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(service_pid, :shutdown) end)
 
-    {:ok, daemon_pid} = Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+    {:ok, daemon_pid} =
+      Daemon.start_link(config: config, driver: ForgeloopV2.WorkDrivers.Noop, schedule: false)
+
     Daemon.run_once(daemon_pid)
     wait_until(fn -> not Daemon.snapshot(daemon_pid).running? end)
     assert RuntimeStateStore.status(config) == "awaiting-human"
@@ -497,6 +527,7 @@ defmodule ForgeloopV2.ServiceTest do
         plan_content: "- [ ] build\n",
         loop_script_body: "#!/usr/bin/env bash\nset -euo pipefail\necho noop\n"
       )
+
     create_workflow_package!(repo.repo_root, "alpha")
     layout = create_ui_layout!(repo.repo_root)
 
@@ -559,8 +590,13 @@ defmodule ForgeloopV2.ServiceTest do
     assert workflow_payload["active_run"]["runtime_surface"] == "ui"
     assert is_binary(workflow_payload["active_run"]["run_id"])
 
-    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end, 4_000)
-    assert File.read!(Path.join([config.runtime_dir, "workflows", "alpha", "last-preflight.txt"])) =~ "ok:preflight:alpha"
+    wait_until(
+      fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end,
+      4_000
+    )
+
+    assert File.read!(Path.join([config.runtime_dir, "workflows", "alpha", "last-preflight.txt"])) =~
+             "ok:preflight:alpha"
 
     completed_payload = get_json!(base_url <> "/api/workflows/alpha")["data"]
     assert completed_payload["history"]["status"] == "available"
@@ -586,7 +622,9 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
-    invalid_runner_args = post_json_response!(base_url <> "/api/workflows/alpha/run", %{"runner_args" => [1]})
+    invalid_runner_args =
+      post_json_response!(base_url <> "/api/workflows/alpha/run", %{"runner_args" => [1]})
+
     assert invalid_runner_args.status == 400
     assert invalid_runner_args.body["error"]["reason"] == "invalid_runner_args"
 
@@ -612,7 +650,9 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
-    start_payload = post_json!(base_url <> "/api/control/run", %{"mode" => "build", "surface" => "openclaw"})
+    start_payload =
+      post_json!(base_url <> "/api/control/run", %{"mode" => "build", "surface" => "openclaw"})
+
     assert start_payload["ok"] == true
     assert start_payload["data"]["surface"] == "openclaw"
 
@@ -659,7 +699,10 @@ defmodule ForgeloopV2.ServiceTest do
     assert start_payload["ok"] == true
     assert start_payload["data"]["surface"] == "ui"
 
-    wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end, 4_000)
+    wait_until(
+      fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end,
+      4_000
+    )
 
     assert File.read!(config.requests_file) =~ "[PAUSE]"
     assert File.read!(config.questions_file) =~ "## Q-"
@@ -670,6 +713,56 @@ defmodule ForgeloopV2.ServiceTest do
     assert state.surface == "ui"
   end
 
+  test "coordination endpoint exposes shared advisory state and overview embeds it" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "clear_pause",
+        "recorded_at" => "2026-03-21T10:10:00Z"
+      })
+
+    coordination_payload = get_json!(base_url <> "/api/coordination?limit=5")
+    assert coordination_payload["ok"] == true
+    assert coordination_payload["data"]["schema_version"] == 1
+    assert coordination_payload["data"]["status"] == "actionable"
+    assert coordination_payload["data"]["event_source"] == "events_api"
+    assert coordination_payload["data"]["summary"]["recommendations"] == 1
+
+    assert coordination_payload["data"]["playbooks"] |> Enum.at(0) |> Map.fetch!("id") ==
+             "post_clear_pause_rebuild"
+
+    assert coordination_payload["data"]["cursor"]["requested_after"] == nil
+
+    overview_payload = get_json!(base_url <> "/api/overview?limit=5")
+    assert overview_payload["ok"] == true
+    assert overview_payload["data"]["coordination"]["status"] == "actionable"
+
+    assert overview_payload["data"]["coordination"]["cursor"]["next_after"] ==
+             overview_payload["data"]["events_meta"]["latest_event_id"]
+
+    assert overview_payload["data"]["coordination"]["summary"]["playbooks"]["actionable"] == 1
+  end
+
+  test "coordination endpoint rejects invalid playbook filters" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    response = get_response_raw!(base_url <> "/api/coordination?playbook_id=not-a-playbook")
+    assert response.status == 400
+    assert response.body["ok"] == false
+    assert response.body["error"]["reason"] == "invalid_coordination_playbook"
+  end
+
   test "events endpoint exposes bounded tail and replay metadata" do
     repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
     layout = create_ui_layout!(repo.repo_root)
@@ -678,9 +771,23 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
-    :ok = Events.emit(config, :daemon_tick, %{"action" => "first", "recorded_at" => "2026-03-21T10:00:00Z"})
-    :ok = Events.emit(config, :operator_action, %{"action" => "second", "recorded_at" => "2026-03-21T10:01:00Z"})
-    :ok = Events.emit(config, :operator_action, %{"action" => "third", "recorded_at" => "2026-03-21T10:02:00Z"})
+    :ok =
+      Events.emit(config, :daemon_tick, %{
+        "action" => "first",
+        "recorded_at" => "2026-03-21T10:00:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "second",
+        "recorded_at" => "2026-03-21T10:01:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "third",
+        "recorded_at" => "2026-03-21T10:02:00Z"
+      })
 
     tail_payload = get_json!(base_url <> "/api/events?limit=2")
     assert tail_payload["ok"] == true
@@ -689,7 +796,10 @@ defmodule ForgeloopV2.ServiceTest do
     assert tail_payload["meta"]["truncated?"] == true
 
     replay_cursor = Enum.at(tail_payload["data"], 0)["event_id"]
-    replay_payload = get_json!(base_url <> "/api/events?after=#{URI.encode_www_form(replay_cursor)}&limit=5")
+
+    replay_payload =
+      get_json!(base_url <> "/api/events?after=#{URI.encode_www_form(replay_cursor)}&limit=5")
+
     assert replay_payload["ok"] == true
     assert replay_payload["meta"]["cursor_found?"] == true
     assert Enum.map(replay_payload["data"], & &1["action"]) == ["third"]
@@ -714,7 +824,11 @@ defmodule ForgeloopV2.ServiceTest do
     assert first =~ "event: snapshot"
     assert first =~ "pending task"
 
-    :ok = Events.emit(config, :operator_action, %{"action" => "stream_probe", "recorded_at" => "2026-03-21T10:03:00Z"})
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "stream_probe",
+        "recorded_at" => "2026-03-21T10:03:00Z"
+      })
 
     second = recv_until(socket, "stream_probe", 4_000)
     assert second =~ "event: event"
@@ -730,13 +844,28 @@ defmodule ForgeloopV2.ServiceTest do
     {:ok, pid, base_url} = start_service!(config)
     on_exit(fn -> Process.exit(pid, :shutdown) end)
 
-    :ok = Events.emit(config, :operator_action, %{"action" => "resume_probe_one", "recorded_at" => "2026-03-21T10:04:00Z"})
-    :ok = Events.emit(config, :operator_action, %{"action" => "resume_probe_two", "recorded_at" => "2026-03-21T10:05:00Z"})
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "resume_probe_one",
+        "recorded_at" => "2026-03-21T10:04:00Z"
+      })
+
+    :ok =
+      Events.emit(config, :operator_action, %{
+        "action" => "resume_probe_two",
+        "recorded_at" => "2026-03-21T10:05:00Z"
+      })
 
     events_payload = get_json!(base_url <> "/api/events?limit=5")
-    after_cursor = Enum.find(events_payload["data"], &(&1["action"] == "resume_probe_one"))["event_id"]
 
-    {:ok, socket} = open_stream_socket(base_url <> "/api/stream?limit=5&after=#{URI.encode_www_form(after_cursor)}")
+    after_cursor =
+      Enum.find(events_payload["data"], &(&1["action"] == "resume_probe_one"))["event_id"]
+
+    {:ok, socket} =
+      open_stream_socket(
+        base_url <> "/api/stream?limit=5&after=#{URI.encode_www_form(after_cursor)}"
+      )
+
     on_exit(fn -> :gen_tcp.close(socket) end)
 
     replay = recv_until(socket, "resume_probe_two", 4_000)
@@ -746,7 +875,15 @@ defmodule ForgeloopV2.ServiceTest do
   end
 
   defp start_service!(config) do
-    {:ok, pid} = Service.start_link(config: config, port: config.service_port, host: config.service_host, name: nil, control_plane_name: nil)
+    {:ok, pid} =
+      Service.start_link(
+        config: config,
+        port: config.service_port,
+        host: config.service_host,
+        name: nil,
+        control_plane_name: nil
+      )
+
     %{base_url: base_url} = Service.snapshot(pid)
     {:ok, pid, base_url}
   end
@@ -759,9 +896,13 @@ defmodule ForgeloopV2.ServiceTest do
   end
 
   defp get_response!(url) do
-    response = request!(:get, url, nil)
+    response = get_response_raw!(url)
     assert response.status == 200
     response
+  end
+
+  defp get_response_raw!(url) do
+    request!(:get, url, nil)
   end
 
   defp post_json!(url, payload) do
@@ -782,7 +923,10 @@ defmodule ForgeloopV2.ServiceTest do
       :gen_tcp.send(
         socket,
         [
-          "GET ", uri.path || "/", query_suffix(uri.query), " HTTP/1.1\r\n",
+          "GET ",
+          uri.path || "/",
+          query_suffix(uri.query),
+          " HTTP/1.1\r\n",
           "host: 127.0.0.1\r\n",
           "connection: close\r\n\r\n"
         ]
@@ -801,10 +945,15 @@ defmodule ForgeloopV2.ServiceTest do
       :gen_tcp.send(
         socket,
         [
-          "POST ", uri.path || "/", query_suffix(uri.query), " HTTP/1.1\r\n",
+          "POST ",
+          uri.path || "/",
+          query_suffix(uri.query),
+          " HTTP/1.1\r\n",
           "host: 127.0.0.1\r\n",
           "content-type: application/json\r\n",
-          "content-length: ", Integer.to_string(byte_size(body)), "\r\n",
+          "content-length: ",
+          Integer.to_string(byte_size(body)),
+          "\r\n",
           "connection: close\r\n\r\n",
           body
         ]
@@ -823,7 +972,10 @@ defmodule ForgeloopV2.ServiceTest do
       :gen_tcp.send(
         socket,
         [
-          "GET ", uri.path || "/", query_suffix(uri.query), " HTTP/1.1\r\n",
+          "GET ",
+          uri.path || "/",
+          query_suffix(uri.query),
+          " HTTP/1.1\r\n",
           "host: 127.0.0.1\r\n",
           "accept: text/event-stream\r\n",
           "connection: keep-alive\r\n\r\n"
@@ -838,8 +990,11 @@ defmodule ForgeloopV2.ServiceTest do
       acc
     else
       case :gen_tcp.recv(socket, 0, timeout_ms) do
-        {:ok, chunk} -> recv_until(socket, needle, timeout_ms, acc <> chunk)
-        {:error, reason} -> raise "stream closed before #{inspect(needle)}: #{inspect(reason)}\n#{acc}"
+        {:ok, chunk} ->
+          recv_until(socket, needle, timeout_ms, acc <> chunk)
+
+        {:error, reason} ->
+          raise "stream closed before #{inspect(needle)}: #{inspect(reason)}\n#{acc}"
       end
     end
   end

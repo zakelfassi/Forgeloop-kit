@@ -123,6 +123,25 @@ Format:
     - hidden plugin-side cursor persistence
     - autonomous run/workflow/question mutation fan-out from the plugin
 
+- [x] Add a shared service-owned coordination advisory for HUD and OpenClaw
+  - Acceptance:
+    - The service exposes a shared coordination read model at `/api/coordination` and embeds the same payload in `overview.coordination`.
+    - The HUD renders that shared advisory read-only instead of re-implementing OpenClaw orchestration logic in browser JS.
+    - `forgeloop_orchestrate` prefers `/api/coordination` when available, falls back to local `/api/events` + `/api/overview` evaluation only for older services, and blocks apply if the shared coordination endpoint fails unexpectedly.
+    - Canonical repo files, runtime state, and loopback control endpoints remain the only source of truth and mutation path.
+  - REQUIRED TESTS:
+    - `tests/openclaw-plugin.test.sh`
+    - `elixir/test/forgeloop_v2/coordination_advisor_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+  - Shipped behavior:
+    - `ForgeloopV2.CoordinationAdvisor` now derives the existing playbooks/recommendations from canonical runtime state, control flags, questions, babysitter state, and replayable events without adding new persistence or daemon behavior.
+    - `/api/coordination` now serves that shared advisory contract, `/api/overview` embeds the same advisory, and the loopback HUD now renders a read-only coordination panel from the service payload.
+    - The OpenClaw plugin now prefers the shared advisory for `forgeloop_orchestrate`, keeps the prior local evaluator only as a compatibility fallback for older services, and still caps apply at one bounded pause / clear-pause / replan mutation.
+  - Deferred after this slice:
+    - daemon-side autonomous playbook execution
+    - hidden plugin-side cursor persistence
+    - long-lived `/api/stream`-driven OpenClaw loops beyond the current invocation-scoped advisory/apply seam
+
 - [x] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
     - JSONL remains the durable source of truth.

@@ -11,6 +11,21 @@ assert_file_exists() {
   fi
 }
 
+wait_for_file() {
+  local path="$1"
+  local timeout_seconds="${2:-10}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while (( SECONDS < deadline )); do
+    if [[ -f "$path" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  assert_file_exists "$path"
+}
+
 prepare_repo_root_layout() {
   local target_root="$1"
   cp -R "$ROOT_DIR/bin" "$target_root/bin"
@@ -54,6 +69,10 @@ EOF
     echo "FAIL: daemon exited during bootstrap smoke test: $daemon_cmd" >&2
     exit 1
   fi
+
+  wait_for_file "$runtime_dir/daemon.log"
+  wait_for_file "$runtime_dir/v2/active-runtime.json"
+  wait_for_file "$runtime_dir/runtime-state.json"
 
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true

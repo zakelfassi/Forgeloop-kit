@@ -25,7 +25,9 @@ defmodule ForgeloopV2.ControlPlane do
     Config,
     ControlFiles,
     Coordination,
+    CoordinationAdvisor,
     Events,
+    Orchestrator,
     PlanStore,
     ProviderHealth,
     RunSpec,
@@ -35,8 +37,7 @@ defmodule ForgeloopV2.ControlPlane do
     WorkflowCatalog,
     WorkflowHistory,
     WorkflowService,
-    Worktree,
-    Orchestrator
+    Worktree
   }
 
   alias ForgeloopV2.ControlPlane.State
@@ -53,35 +54,49 @@ defmodule ForgeloopV2.ControlPlane do
   def snapshot(server \\ __MODULE__), do: GenServer.call(server, :snapshot)
 
   @spec overview(GenServer.server(), keyword()) :: {:ok, map()} | {:error, term()}
-  def overview(server \\ __MODULE__, opts \\ []), do: GenServer.call(server, {:overview, opts}, :infinity)
+  def overview(server \\ __MODULE__, opts \\ []),
+    do: GenServer.call(server, {:overview, opts}, :infinity)
 
-  @spec runtime(GenServer.server()) :: {:ok, ForgeloopV2.RuntimeState.t() | nil} | {:error, term()}
+  @spec runtime(GenServer.server()) ::
+          {:ok, ForgeloopV2.RuntimeState.t() | nil} | {:error, term()}
   def runtime(server \\ __MODULE__), do: GenServer.call(server, :runtime)
 
   @spec backlog(GenServer.server()) :: {:ok, PlanStore.Backlog.t()} | {:error, term()}
   def backlog(server \\ __MODULE__), do: GenServer.call(server, :backlog)
 
-  @spec questions(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Question.t()]} | {:error, term()}
+  @spec questions(GenServer.server()) ::
+          {:ok, [ForgeloopV2.Coordination.Question.t()]} | {:error, term()}
   def questions(server \\ __MODULE__), do: GenServer.call(server, :questions)
 
-  @spec tracker(GenServer.server()) :: {:ok, ForgeloopV2.Tracker.RepoLocal.Overview.t()} | {:error, term()}
+  @spec tracker(GenServer.server()) ::
+          {:ok, ForgeloopV2.Tracker.RepoLocal.Overview.t()} | {:error, term()}
   def tracker(server \\ __MODULE__), do: GenServer.call(server, :tracker)
 
-  @spec escalations(GenServer.server()) :: {:ok, [ForgeloopV2.Coordination.Escalation.t()]} | {:error, term()}
+  @spec escalations(GenServer.server()) ::
+          {:ok, [ForgeloopV2.Coordination.Escalation.t()]} | {:error, term()}
   def escalations(server \\ __MODULE__), do: GenServer.call(server, :escalations)
 
   @spec provider_health(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def provider_health(server \\ __MODULE__), do: GenServer.call(server, :provider_health)
 
-  @spec events(GenServer.server(), keyword()) :: {:ok, %{items: [map()], meta: map()}} | {:error, term()}
+  @spec events(GenServer.server(), keyword()) ::
+          {:ok, %{items: [map()], meta: map()}} | {:error, term()}
   def events(server \\ __MODULE__, opts \\ []), do: GenServer.call(server, {:events, opts})
 
-  @spec workflow_overview(GenServer.server(), keyword()) :: {:ok, ForgeloopV2.WorkflowService.Overview.t()} | {:error, term()}
-  def workflow_overview(server \\ __MODULE__, opts \\ []), do: GenServer.call(server, {:workflow_overview, opts})
+  @spec coordination(GenServer.server(), keyword()) ::
+          {:ok, ForgeloopV2.CoordinationAdvisor.Result.t()} | {:error, term()}
+  def coordination(server \\ __MODULE__, opts \\ []),
+    do: GenServer.call(server, {:coordination, opts})
+
+  @spec workflow_overview(GenServer.server(), keyword()) ::
+          {:ok, ForgeloopV2.WorkflowService.Overview.t()} | {:error, term()}
+  def workflow_overview(server \\ __MODULE__, opts \\ []),
+    do: GenServer.call(server, {:workflow_overview, opts})
 
   @spec workflow_fetch(GenServer.server(), String.t(), keyword()) ::
           {:ok, ForgeloopV2.WorkflowService.WorkflowSummary.t()} | :missing | {:error, term()}
-  def workflow_fetch(server \\ __MODULE__, name, opts \\ []), do: GenServer.call(server, {:workflow_fetch, name, opts})
+  def workflow_fetch(server \\ __MODULE__, name, opts \\ []),
+    do: GenServer.call(server, {:workflow_fetch, name, opts})
 
   @spec babysitter(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def babysitter(server \\ __MODULE__), do: GenServer.call(server, :babysitter)
@@ -95,27 +110,32 @@ defmodule ForgeloopV2.ControlPlane do
   @spec clear_pause(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def clear_pause(server \\ __MODULE__), do: GenServer.call(server, :clear_pause, :infinity)
 
-  @spec answer_question(GenServer.server(), String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec answer_question(GenServer.server(), String.t(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
   def answer_question(server \\ __MODULE__, question_id, answer, opts \\ []) do
     GenServer.call(server, {:answer_question, question_id, answer, opts}, :infinity)
   end
 
-  @spec resolve_question(GenServer.server(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec resolve_question(GenServer.server(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
   def resolve_question(server \\ __MODULE__, question_id, opts \\ []) do
     GenServer.call(server, {:resolve_question, question_id, opts}, :infinity)
   end
 
-  @spec start_run(GenServer.server(), :plan | :build | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec start_run(GenServer.server(), :plan | :build | String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
   def start_run(server \\ __MODULE__, mode, opts \\ []) do
     GenServer.call(server, {:start_run, mode, opts}, :infinity)
   end
 
-  @spec start_workflow(GenServer.server(), String.t(), :preflight | :run | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec start_workflow(GenServer.server(), String.t(), :preflight | :run | String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
   def start_workflow(server \\ __MODULE__, workflow_name, action, opts \\ []) do
     GenServer.call(server, {:start_workflow, workflow_name, action, opts}, :infinity)
   end
 
-  @spec stop_run(GenServer.server(), :pause | :kill | String.t()) :: {:ok, map()} | {:error, term()}
+  @spec stop_run(GenServer.server(), :pause | :kill | String.t()) ::
+          {:ok, map()} | {:error, term()}
   def stop_run(server \\ __MODULE__, reason \\ :pause) do
     GenServer.call(server, {:stop_run, reason}, :infinity)
   end
@@ -167,11 +187,11 @@ defmodule ForgeloopV2.ControlPlane do
     {:reply,
      %{
        started_at: state.started_at,
-         last_action: state.last_action,
-         last_result: state.last_result,
-         babysitter_mode: mode_from_run_spec(state.babysitter_run_spec),
-         babysitter_branch: state.babysitter_branch,
-         babysitter_runtime_surface: state.babysitter_runtime_surface
+       last_action: state.last_action,
+       last_result: state.last_result,
+       babysitter_mode: mode_from_run_spec(state.babysitter_run_spec),
+       babysitter_branch: state.babysitter_branch,
+       babysitter_runtime_surface: state.babysitter_runtime_surface
      }, state}
   end
 
@@ -186,7 +206,21 @@ defmodule ForgeloopV2.ControlPlane do
            {:ok, workflow_overview} <- WorkflowService.overview(state.config),
            {:ok, tracker} <- read_tracker(state.config, backlog, workflow_overview),
            {:ok, event_result} <- read_events(state.config, opts),
-           {:ok, babysitter} <- babysitter_status(state, Keyword.get(opts, :include_active_run?, true)) do
+           {:ok, babysitter} <-
+             babysitter_status(state, Keyword.get(opts, :include_active_run?, true)),
+           {:ok, coordination} <-
+             evaluate_coordination(
+               %{
+                 runtime_state: runtime_state,
+                 backlog: backlog,
+                 control_flags: control_flags,
+                 questions: questions,
+                 babysitter: babysitter,
+                 events: event_result.items,
+                 events_meta: event_result.meta
+               },
+               opts
+             ) do
         {:ok,
          %{
            runtime_state: runtime_state,
@@ -198,6 +232,7 @@ defmodule ForgeloopV2.ControlPlane do
            provider_health: provider_health,
            events: event_result.items,
            events_meta: event_result.meta,
+           coordination: coordination,
            workflows: workflow_overview,
            babysitter: babysitter
          }}
@@ -234,6 +269,10 @@ defmodule ForgeloopV2.ControlPlane do
     {:reply, read_events(state.config, opts), state}
   end
 
+  def handle_call({:coordination, opts}, _from, %State{} = state) do
+    {:reply, read_coordination_snapshot(state, opts), state}
+  end
+
   def handle_call({:workflow_overview, opts}, _from, %State{} = state) do
     {:reply, WorkflowService.overview(state.config, opts), state}
   end
@@ -265,7 +304,8 @@ defmodule ForgeloopV2.ControlPlane do
         {:reply, {:ok, %{requested?: true}}, %{state | last_action: :replan, last_result: :ok}}
 
       {:error, reason} ->
-        {:reply, {:error, reason}, %{state | last_action: :replan_failed, last_result: {:error, reason}}}
+        {:reply, {:error, reason},
+         %{state | last_action: :replan_failed, last_result: {:error, reason}}}
     end
   end
 
@@ -289,7 +329,8 @@ defmodule ForgeloopV2.ControlPlane do
         {:reply, {:ok, result}, %{state | last_action: :answer_question, last_result: :ok}}
 
       {:error, reason} ->
-        {:reply, {:error, reason}, %{state | last_action: :answer_question_failed, last_result: {:error, reason}}}
+        {:reply, {:error, reason},
+         %{state | last_action: :answer_question_failed, last_result: {:error, reason}}}
     end
   end
 
@@ -306,7 +347,8 @@ defmodule ForgeloopV2.ControlPlane do
         {:reply, {:ok, result}, %{state | last_action: :resolve_question, last_result: :ok}}
 
       {:error, reason} ->
-        {:reply, {:error, reason}, %{state | last_action: :resolve_question_failed, last_result: {:error, reason}}}
+        {:reply, {:error, reason},
+         %{state | last_action: :resolve_question_failed, last_result: {:error, reason}}}
     end
   end
 
@@ -355,7 +397,8 @@ defmodule ForgeloopV2.ControlPlane do
         "recorded_at" => iso_now()
       })
 
-      {:ok, %{requested?: true, babysitter: updated_snapshot}, %{state | last_action: :pause, last_result: :ok}}
+      {:ok, %{requested?: true, babysitter: updated_snapshot},
+       %{state | last_action: :pause, last_result: :ok}}
     else
       {:error, reason} ->
         {:error, reason, %{state | last_action: :pause_failed, last_result: {:error, reason}}}
@@ -373,22 +416,24 @@ defmodule ForgeloopV2.ControlPlane do
           "recorded_at" => iso_now()
         })
 
-        {:ok,
-         %{cleared?: pause_requested?, pause_requested?: false},
+        {:ok, %{cleared?: pause_requested?, pause_requested?: false},
          %{state | last_action: :clear_pause, last_result: :ok}}
 
       {:error, reason} ->
-        {:error, reason, %{state | last_action: :clear_pause_failed, last_result: {:error, reason}}}
+        {:error, reason,
+         %{state | last_action: :clear_pause_failed, last_result: {:error, reason}}}
     end
   end
 
   defp do_start_run(%State{} = state, mode, opts) do
     with {:ok, normalized_mode} <- normalize_mode(mode),
          {:ok, run_spec} <- RunSpec.checklist(normalized_mode),
-         {:ok, runtime_surface} <- normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
+         {:ok, runtime_surface} <-
+           normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
          {:ok, babysitter} <- babysitter_status(state, true),
          :ok <- ensure_start_allowed(babysitter),
-         {:ok, payload, next_state} <- do_start_managed_run(state, run_spec, runtime_surface, opts) do
+         {:ok, payload, next_state} <-
+           do_start_managed_run(state, run_spec, runtime_surface, opts) do
       {:ok, payload, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
     else
       {:error, reason} ->
@@ -398,29 +443,47 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp do_start_workflow(%State{} = state, workflow_name, action, opts) do
     with {:ok, run_spec} <- normalize_workflow_run_spec(action, workflow_name),
-         {:ok, runtime_surface} <- normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "workflow")),
+         {:ok, runtime_surface} <-
+           normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "workflow")),
          {:ok, runner_args} <- normalize_runner_args(Keyword.get(opts, :runner_args, [])),
          {:ok, babysitter} <- babysitter_status(state, true),
          :ok <- ensure_start_allowed(babysitter),
          :ok <- ensure_workflow_exists(state.config, workflow_name) do
-      run_opts = workflow_start_opts(run_spec, runtime_surface, Keyword.put(opts, :runner_args, runner_args))
+      run_opts =
+        workflow_start_opts(
+          run_spec,
+          runtime_surface,
+          Keyword.put(opts, :runner_args, runner_args)
+        )
 
       case do_start_managed_run(state, run_spec, runtime_surface, run_opts) do
         {:ok, payload, next_state} ->
-          {:ok, payload, %{next_state | last_action: {:start_workflow, action, workflow_name}, last_result: :ok}}
+          {:ok, payload,
+           %{next_state | last_action: {:start_workflow, action, workflow_name}, last_result: :ok}}
 
         {:error, reason, next_state} ->
-          _ = record_workflow_start_failure(state.config, run_spec, run_opts, runtime_surface, reason)
-          {:error, reason, %{next_state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
+          _ =
+            record_workflow_start_failure(
+              state.config,
+              run_spec,
+              run_opts,
+              runtime_surface,
+              reason
+            )
+
+          {:error, reason,
+           %{next_state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
       end
     else
       {:error, reason} ->
-        {:error, reason, %{state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
+        {:error, reason,
+         %{state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
     end
   end
 
   defp do_start_managed_run(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
-    with {:ok, next_state, pid} <- ensure_babysitter_instance(state, run_spec, runtime_surface, opts),
+    with {:ok, next_state, pid} <-
+           ensure_babysitter_instance(state, run_spec, runtime_surface, opts),
          :ok <- Babysitter.start_run(pid, start_run_opts(opts)),
          {:ok, updated_babysitter} <- babysitter_status(next_state, true) do
       Events.emit(state.config, :operator_action, %{
@@ -459,12 +522,15 @@ defmodule ForgeloopV2.ControlPlane do
         "recorded_at" => iso_now()
       })
 
-      {:ok, %{stopped?: true, babysitter: updated_babysitter}, %{state | last_action: {:stop_run, normalized_reason}, last_result: :ok}}
+      {:ok, %{stopped?: true, babysitter: updated_babysitter},
+       %{state | last_action: {:stop_run, normalized_reason}, last_result: :ok}}
     else
       {:error, reason} ->
         {:error, reason, %{state | last_action: :stop_run_failed, last_result: {:error, reason}}}
+
       false ->
-        {:error, :babysitter_not_running, %{state | last_action: :stop_run_failed, last_result: {:error, :babysitter_not_running}}}
+        {:error, :babysitter_not_running,
+         %{state | last_action: :stop_run_failed, last_result: {:error, :babysitter_not_running}}}
     end
   end
 
@@ -501,11 +567,16 @@ defmodule ForgeloopV2.ControlPlane do
        ingest_logs_requested?: ControlFiles.has_flag?(config, "INGEST_LOGS"),
        workflow_requested?: workflow_request.requested?,
        workflow_target: %{
-         configured?: is_binary(config.daemon_workflow_name) and config.daemon_workflow_name != "",
+         configured?:
+           is_binary(config.daemon_workflow_name) and config.daemon_workflow_name != "",
          valid?: match?(%RunSpec{}, workflow_run_spec),
          name: config.daemon_workflow_name,
          action: config.daemon_workflow_action,
-         mode: if(match?(%RunSpec{}, workflow_run_spec), do: RunSpec.runtime_mode(workflow_run_spec), else: nil),
+         mode:
+           if(match?(%RunSpec{}, workflow_run_spec),
+             do: RunSpec.runtime_mode(workflow_run_spec),
+             else: nil
+           ),
          error: workflow_request_error_code(workflow_request.error)
        }
      }}
@@ -538,13 +609,69 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  defp read_coordination_snapshot(%State{} = state, opts) do
+    with {:ok, runtime_state} <- read_runtime_state(state.config),
+         {:ok, backlog} <- read_backlog(state.config),
+         {:ok, control_flags} <- read_control_flags(state.config),
+         {:ok, questions} <- read_questions(state.config),
+         {:ok, event_result} <- read_events(state.config, opts),
+         {:ok, babysitter} <-
+           babysitter_status(state, Keyword.get(opts, :include_active_run?, true)) do
+      evaluate_coordination(
+        %{
+          runtime_state: runtime_state,
+          backlog: backlog,
+          control_flags: control_flags,
+          questions: questions,
+          babysitter: babysitter,
+          events: event_result.items,
+          events_meta: event_result.meta
+        },
+        opts
+      )
+    end
+  end
+
+  defp evaluate_coordination(snapshot, opts) when is_map(snapshot) do
+    with {:ok, playbook_id} <- normalize_coordination_playbook_id(opts) do
+      CoordinationAdvisor.evaluate_snapshot(snapshot,
+        after: Keyword.get(opts, :after),
+        playbook_id: playbook_id
+      )
+    end
+  end
+
+  defp normalize_coordination_playbook_id(opts) do
+    provided? = Keyword.get(opts, :playbook_provided?, false)
+    raw_playbook_id = Keyword.get(opts, :playbook_id)
+
+    cond do
+      not provided? and is_nil(raw_playbook_id) ->
+        {:ok, nil}
+
+      is_binary(raw_playbook_id) ->
+        normalized = String.trim(raw_playbook_id)
+
+        if normalized in CoordinationAdvisor.playbook_ids() do
+          {:ok, normalized}
+        else
+          {:error, {:invalid_coordination_playbook, raw_playbook_id}}
+        end
+
+      true ->
+        {:error, {:invalid_coordination_playbook, raw_playbook_id}}
+    end
+  end
+
   defp normalize_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 500)
+
   defp normalize_limit(limit) when is_binary(limit) do
     case Integer.parse(limit) do
       {int, ""} when int > 0 -> min(int, 500)
       _ -> 50
     end
   end
+
   defp normalize_limit(_), do: 50
 
   defp normalize_after_cursor(nil), do: nil
@@ -580,9 +707,12 @@ defmodule ForgeloopV2.ControlPlane do
      %{
        managed?: not is_nil(managed_snapshot),
        lane: lane_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "lane"),
-       action: action_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "action"),
+       action:
+         action_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "action"),
        mode: mode_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "mode"),
-       workflow_name: workflow_name_from_run_spec(state.babysitter_run_spec) || Map.get(active_run || %{}, "workflow_name"),
+       workflow_name:
+         workflow_name_from_run_spec(state.babysitter_run_spec) ||
+           Map.get(active_run || %{}, "workflow_name"),
        branch: state.babysitter_branch || Map.get(active_run || %{}, "branch"),
        runtime_surface:
          state.babysitter_runtime_surface ||
@@ -595,15 +725,22 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   defp babysitter_running?(%{running?: true}, _active_run), do: true
-  defp babysitter_running?(_managed_snapshot, %{"status" => status}) when status in ["running", "stopping"], do: true
+
+  defp babysitter_running?(_managed_snapshot, %{"status" => status})
+       when status in ["running", "stopping"], do: true
+
   defp babysitter_running?(_, _), do: false
 
   defp maybe_pause_runtime(_config, %{running?: true, managed?: false}), do: :ok
-  defp maybe_pause_runtime(_config, %{active_run: %{"status" => status}}) when status in ["running", "stopping"], do: :ok
+
+  defp maybe_pause_runtime(_config, %{active_run: %{"status" => status}})
+       when status in ["running", "stopping"], do: :ok
 
   defp maybe_pause_runtime(config, _babysitter) do
     case RuntimeStateStore.status(config) do
-      status when status in ["running", "paused", "awaiting-human"] -> :ok
+      status when status in ["running", "paused", "awaiting-human"] ->
+        :ok
+
       _ ->
         case RuntimeLifecycle.transition(config, :paused_by_operator, :service, %{
                surface: "service",
@@ -627,8 +764,12 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp maybe_stop_managed_babysitter(_state, _babysitter), do: :ok
 
-  defp ensure_start_allowed(%{running?: true, managed?: true}), do: {:error, :babysitter_already_running}
-  defp ensure_start_allowed(%{running?: true, active_run: active_run}), do: {:error, {:babysitter_unmanaged_active, active_run}}
+  defp ensure_start_allowed(%{running?: true, managed?: true}),
+    do: {:error, :babysitter_already_running}
+
+  defp ensure_start_allowed(%{running?: true, active_run: active_run}),
+    do: {:error, {:babysitter_unmanaged_active, active_run}}
+
   defp ensure_start_allowed(_), do: :ok
 
   defp ensure_babysitter_instance(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
@@ -665,12 +806,14 @@ defmodule ForgeloopV2.ControlPlane do
         ref = Process.monitor(pid)
 
         {:ok,
-         %{state |
-           babysitter_pid: pid,
-           babysitter_ref: ref,
-           babysitter_run_spec: run_spec,
-           babysitter_branch: branch,
-           babysitter_runtime_surface: runtime_surface}, pid}
+         %{
+           state
+           | babysitter_pid: pid,
+             babysitter_ref: ref,
+             babysitter_run_spec: run_spec,
+             babysitter_branch: branch,
+             babysitter_runtime_surface: runtime_surface
+         }, pid}
 
       {:error, reason} ->
         {:error, reason}
@@ -694,7 +837,9 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp reusable_babysitter?(_, _, _, _), do: false
 
-  defp driver_for_run_spec(ForgeloopV2.WorkDrivers.Noop, %RunSpec{lane: :workflow}), do: ForgeloopV2.WorkDrivers.ShellLoop
+  defp driver_for_run_spec(ForgeloopV2.WorkDrivers.Noop, %RunSpec{lane: :workflow}),
+    do: ForgeloopV2.WorkDrivers.ShellLoop
+
   defp driver_for_run_spec(driver, _run_spec), do: driver
 
   defp managed_babysitter_pid(%State{babysitter_pid: pid}) when is_pid(pid) do
@@ -771,7 +916,13 @@ defmodule ForgeloopV2.ControlPlane do
     |> Keyword.put(:runtime_surface, runtime_surface)
   end
 
-  defp record_workflow_start_failure(%Config{} = config, %RunSpec{} = run_spec, opts, runtime_surface, reason) do
+  defp record_workflow_start_failure(
+         %Config{} = config,
+         %RunSpec{} = run_spec,
+         opts,
+         runtime_surface,
+         reason
+       ) do
     WorkflowHistory.record_terminal_outcome(config, run_spec,
       run_id: Keyword.fetch!(opts, :run_id),
       outcome: :start_failed,
@@ -779,7 +930,8 @@ defmodule ForgeloopV2.ControlPlane do
       branch: Keyword.get(opts, :branch, config.default_branch),
       started_at: Keyword.get(opts, :started_at),
       finished_at: iso_now(),
-      summary: "Managed #{RunSpec.runtime_mode(run_spec)} failed before loop start: #{inspect(reason)}",
+      summary:
+        "Managed #{RunSpec.runtime_mode(run_spec)} failed before loop start: #{inspect(reason)}",
       requested_action: RunSpec.requested_action(run_spec, config.failure_escalation_action),
       runtime_status: nil,
       failure_kind: RunSpec.runtime_mode(run_spec),
@@ -811,9 +963,16 @@ defmodule ForgeloopV2.ControlPlane do
   defp workflow_name_from_run_spec(%RunSpec{} = run_spec), do: run_spec.workflow_name
 
   defp workflow_request_error_code(nil), do: nil
-  defp workflow_request_error_code(:missing_daemon_workflow_name), do: "missing_daemon_workflow_name"
-  defp workflow_request_error_code({:invalid_daemon_workflow_action, _value}), do: "invalid_daemon_workflow_action"
-  defp workflow_request_error_code({:invalid_workflow_name, _workflow_name}), do: "invalid_workflow_name"
+
+  defp workflow_request_error_code(:missing_daemon_workflow_name),
+    do: "missing_daemon_workflow_name"
+
+  defp workflow_request_error_code({:invalid_daemon_workflow_action, _value}),
+    do: "invalid_daemon_workflow_action"
+
+  defp workflow_request_error_code({:invalid_workflow_name, _workflow_name}),
+    do: "invalid_workflow_name"
+
   defp workflow_request_error_code(reason), do: inspect(reason)
 
   defp default_driver(config) do
@@ -835,6 +994,17 @@ defmodule ForgeloopV2.ServiceJSON do
   @moduledoc false
 
   alias ForgeloopV2.Coordination.{Escalation, Question}
+  alias ForgeloopV2.CoordinationAdvisor
+
+  alias ForgeloopV2.CoordinationAdvisor.{
+    Cursor,
+    Playbook,
+    PlaybookCounts,
+    Recommendation,
+    Result,
+    Summary
+  }
+
   alias ForgeloopV2.PlanStore
   alias ForgeloopV2.PlanStore.Item
   alias ForgeloopV2.RuntimeState
@@ -856,10 +1026,28 @@ defmodule ForgeloopV2.ServiceJSON do
       provider_health: provider_health(payload.provider_health),
       events: payload.events,
       events_meta: Map.get(payload, :events_meta) || Map.get(payload, "events_meta"),
+      coordination:
+        coordination(Map.get(payload, :coordination) || Map.get(payload, "coordination")),
       workflows: workflow_overview(payload.workflows),
       babysitter: babysitter(payload.babysitter)
     }
   end
+
+  def coordination(%Result{} = result) do
+    %{
+      schema_version: result.schema_version,
+      status: result.status,
+      selected_playbook_id: result.selected_playbook_id,
+      event_source: result.event_source,
+      cursor: coordination_cursor(result.cursor),
+      summary: coordination_summary(result.summary),
+      recommendations: Enum.map(result.recommendations, &coordination_recommendation/1),
+      playbooks: Enum.map(result.playbooks, &coordination_playbook/1),
+      warnings: result.warnings
+    }
+  end
+
+  def coordination(nil), do: nil
 
   def runtime_state(nil), do: nil
   def runtime_state(%RuntimeState{} = state), do: RuntimeState.to_map(state)
@@ -873,7 +1061,13 @@ defmodule ForgeloopV2.ServiceJSON do
     }
   end
 
-  defp backlog_source(%{kind: kind, label: label, path: path, canonical?: canonical?, phase: phase}) do
+  defp backlog_source(%{
+         kind: kind,
+         label: label,
+         path: path,
+         canonical?: canonical?,
+         phase: phase
+       }) do
     %{
       kind: Atom.to_string(kind),
       label: label,
@@ -901,9 +1095,72 @@ defmodule ForgeloopV2.ServiceJSON do
     }
   end
 
+  defp coordination_cursor(%Cursor{} = cursor) do
+    %{
+      requested_after: cursor.requested_after,
+      next_after: cursor.next_after,
+      cursor_found: cursor.cursor_found,
+      truncated: cursor.truncated,
+      reset_required: cursor.reset_required
+    }
+  end
+
+  defp coordination_summary(%Summary{} = summary) do
+    %{
+      fetched_events: summary.fetched_events,
+      unique_events: summary.unique_events,
+      duplicate_events: summary.duplicate_events,
+      actionable_events: summary.actionable_events,
+      recommendations: summary.recommendations,
+      playbooks: coordination_playbook_counts(summary.playbooks)
+    }
+  end
+
+  defp coordination_playbook_counts(%PlaybookCounts{} = counts) do
+    %{
+      total: counts.total,
+      actionable: counts.actionable,
+      blocked: counts.blocked,
+      observe: counts.observe
+    }
+  end
+
+  defp coordination_recommendation(%Recommendation{} = recommendation) do
+    %{
+      rule: recommendation.rule,
+      action: recommendation.action,
+      playbook_id: recommendation.playbook_id,
+      event_id: recommendation.event_id,
+      event_code: recommendation.event_code,
+      event_action: recommendation.event_action,
+      event_occurred_at: recommendation.event_occurred_at,
+      reason: recommendation.reason,
+      apply_eligible: recommendation.apply_eligible,
+      blocked_by: recommendation.blocked_by
+    }
+  end
+
+  defp coordination_playbook(%Playbook{} = playbook) do
+    %{
+      id: playbook.id,
+      title: playbook.title,
+      goal: playbook.goal,
+      status: playbook.status,
+      reason: playbook.reason,
+      evidence: sanitize(playbook.evidence),
+      recommended_action: playbook.recommended_action,
+      apply_eligible: playbook.apply_eligible,
+      blocked_by: playbook.blocked_by,
+      steps: sanitize(playbook.steps)
+    }
+  end
+
   def tracker_overview(%TrackerOverview{} = overview) do
     %{
-      sources: %{backlog: backlog_source(overview.sources.backlog), workflows: backlog_source(overview.sources.workflows)},
+      sources: %{
+        backlog: backlog_source(overview.sources.backlog),
+        workflows: backlog_source(overview.sources.workflows)
+      },
       counts: overview.counts,
       issues: Enum.map(overview.issues, &tracker_issue/1)
     }
@@ -977,7 +1234,18 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def provider_health(payload) when is_map(payload), do: sanitize(payload)
 
-  def babysitter(%{managed?: managed?, lane: lane, action: action, mode: mode, workflow_name: workflow_name, branch: branch, runtime_surface: runtime_surface, snapshot: snapshot, active_run: active_run, running?: running?}) do
+  def babysitter(%{
+        managed?: managed?,
+        lane: lane,
+        action: action,
+        mode: mode,
+        workflow_name: workflow_name,
+        branch: branch,
+        runtime_surface: runtime_surface,
+        snapshot: snapshot,
+        active_run: active_run,
+        running?: running?
+      }) do
     %{
       managed?: managed?,
       lane: lane,
@@ -1173,7 +1441,8 @@ defmodule ForgeloopV2.Service do
   @impl true
   def init(opts) do
     with {:ok, config} <- load_config(opts),
-         {:ok, {host, ip}} <- normalize_loopback_host(Keyword.get(opts, :host, config.service_host)),
+         {:ok, {host, ip}} <-
+           normalize_loopback_host(Keyword.get(opts, :host, config.service_host)),
          :ok <- UIAssets.validate!(config),
          {:ok, listener} <- listen(ip, Keyword.get(opts, :port, config.service_port)),
          {:ok, port} <- listener_port(listener) do
@@ -1282,7 +1551,9 @@ defmodule ForgeloopV2.Service do
 
   defp start_control_plane(config, opts) do
     case Keyword.get(opts, :control_plane_pid) do
-      pid when is_pid(pid) -> {:ok, pid, false}
+      pid when is_pid(pid) ->
+        {:ok, pid, false}
+
       _ ->
         case ControlPlane.start_link(
                config: config,
@@ -1297,7 +1568,9 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp normalize_loopback_host(host) when host in [nil, "", "localhost"], do: {:ok, {"127.0.0.1", {127, 0, 0, 1}}}
+  defp normalize_loopback_host(host) when host in [nil, "", "localhost"],
+    do: {:ok, {"127.0.0.1", {127, 0, 0, 1}}}
+
   defp normalize_loopback_host("127.0.0.1"), do: {:ok, {"127.0.0.1", {127, 0, 0, 1}}}
 
   defp normalize_loopback_host(host) when is_binary(host) do
@@ -1335,7 +1608,9 @@ defmodule ForgeloopV2.Service do
   end
 
   defp start_accept_loop(listener, config, control_plane_pid, owner_pid) do
-    Task.Supervisor.start_child(ForgeloopV2.TaskSupervisor, fn -> accept_loop(listener, config, control_plane_pid, owner_pid) end)
+    Task.Supervisor.start_child(ForgeloopV2.TaskSupervisor, fn ->
+      accept_loop(listener, config, control_plane_pid, owner_pid)
+    end)
   end
 
   defp accept_loop(listener, config, control_plane_pid, owner_pid) do
@@ -1363,8 +1638,11 @@ defmodule ForgeloopV2.Service do
         case route(request, config, control_plane_pid) do
           {:stream, stream_opts} ->
             case stream_events(socket, config, control_plane_pid, stream_opts) do
-              :ok -> :ok
-              {:error, reason} -> send_body_response(socket, error_response(status_for_error(reason), reason))
+              :ok ->
+                :ok
+
+              {:error, reason} ->
+                send_body_response(socket, error_response(status_for_error(reason), reason))
             end
 
           response ->
@@ -1378,7 +1656,8 @@ defmodule ForgeloopV2.Service do
     :gen_tcp.close(socket)
   end
 
-  defp route(%{method: "GET", path: path}, config, _control_plane_pid) when path in ["/", "/index.html", "/assets/app.css", "/assets/app.js"] do
+  defp route(%{method: "GET", path: path}, config, _control_plane_pid)
+       when path in ["/", "/index.html", "/assets/app.css", "/assets/app.js"] do
     static_asset_response(config, path)
   end
 
@@ -1395,12 +1674,19 @@ defmodule ForgeloopV2.Service do
 
   defp route(%{method: "GET", path: "/api/providers"}, _config, control_plane_pid) do
     case ControlPlane.provider_health(control_plane_pid) do
-      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.provider_health(payload)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:ok, payload} ->
+        json_response(200, %{ok: true, data: ServiceJSON.provider_health(payload)})
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
     end
   end
 
-  defp route(%{method: "GET", path: "/api/stream", query: query, headers: headers}, _config, _control_plane_pid) do
+  defp route(
+         %{method: "GET", path: "/api/stream", query: query, headers: headers},
+         _config,
+         _control_plane_pid
+       ) do
     {:stream,
      %{
        limit: Map.get(query, "limit", 50),
@@ -1424,22 +1710,31 @@ defmodule ForgeloopV2.Service do
 
   defp route(%{method: "GET", path: "/api/tracker"}, _config, control_plane_pid) do
     case ControlPlane.tracker(control_plane_pid) do
-      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.tracker_overview(payload)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:ok, payload} ->
+        json_response(200, %{ok: true, data: ServiceJSON.tracker_overview(payload)})
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
     end
   end
 
   defp route(%{method: "GET", path: "/api/questions"}, _config, control_plane_pid) do
     case ControlPlane.questions(control_plane_pid) do
-      {:ok, questions} -> json_response(200, %{ok: true, data: Enum.map(questions, &ServiceJSON.question/1)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:ok, questions} ->
+        json_response(200, %{ok: true, data: Enum.map(questions, &ServiceJSON.question/1)})
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
     end
   end
 
   defp route(%{method: "GET", path: "/api/escalations"}, _config, control_plane_pid) do
     case ControlPlane.escalations(control_plane_pid) do
-      {:ok, escalations} -> json_response(200, %{ok: true, data: Enum.map(escalations, &ServiceJSON.escalation/1)})
-      {:error, reason} -> error_response(status_for_error(reason), reason)
+      {:ok, escalations} ->
+        json_response(200, %{ok: true, data: Enum.map(escalations, &ServiceJSON.escalation/1)})
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
     end
   end
 
@@ -1453,20 +1748,51 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: "GET", path: "/api/workflows", query: query}, _config, control_plane_pid) do
-    case ControlPlane.workflow_overview(control_plane_pid, include_output?: truthy?(Map.get(query, "include_output"))) do
-      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.workflow_overview(payload)})
+  defp route(
+         %{method: "GET", path: "/api/coordination", query: query},
+         _config,
+         control_plane_pid
+       ) do
+    playbook_id = Map.get(query, "playbook_id", Map.get(query, "playbookId"))
+
+    case ControlPlane.coordination(control_plane_pid,
+           limit: Map.get(query, "limit", 50),
+           after: Map.get(query, "after"),
+           playbook_id: playbook_id,
+           playbook_provided?:
+             Map.has_key?(query, "playbook_id") or Map.has_key?(query, "playbookId")
+         ) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.coordination(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
+  defp route(%{method: "GET", path: "/api/workflows", query: query}, _config, control_plane_pid) do
+    case ControlPlane.workflow_overview(control_plane_pid,
+           include_output?: truthy?(Map.get(query, "include_output"))
+         ) do
+      {:ok, payload} ->
+        json_response(200, %{ok: true, data: ServiceJSON.workflow_overview(payload)})
+
+      {:error, reason} ->
+        error_response(status_for_error(reason), reason)
     end
   end
 
   defp route(%{method: "GET", path: path, query: query}, _config, control_plane_pid) do
     case String.split(path, "/", trim: true) do
       ["api", "workflows", name] ->
-        case ControlPlane.workflow_fetch(control_plane_pid, URI.decode(name), include_output?: truthy?(Map.get(query, "include_output"))) do
-          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.workflow_summary(payload)})
-          :missing -> error_response(404, :not_found)
-          {:error, reason} -> error_response(status_for_error(reason), reason)
+        case ControlPlane.workflow_fetch(control_plane_pid, URI.decode(name),
+               include_output?: truthy?(Map.get(query, "include_output"))
+             ) do
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.workflow_summary(payload)})
+
+          :missing ->
+            error_response(404, :not_found)
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       ["api", "babysitter"] ->
@@ -1513,7 +1839,11 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: "POST", path: "/api/babysitter/start", json: body}, _config, control_plane_pid) do
+  defp route(
+         %{method: "POST", path: "/api/babysitter/start", json: body},
+         _config,
+         control_plane_pid
+       ) do
     case ControlPlane.start_run(
            control_plane_pid,
            Map.get(body, "mode"),
@@ -1525,7 +1855,11 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: "POST", path: "/api/babysitter/stop", json: body}, _config, control_plane_pid) do
+  defp route(
+         %{method: "POST", path: "/api/babysitter/stop", json: body},
+         _config,
+         control_plane_pid
+       ) do
     case ControlPlane.stop_run(control_plane_pid, Map.get(body, "reason", "pause")) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> error_response(status_for_error(reason), reason)
@@ -1542,8 +1876,11 @@ defmodule ForgeloopV2.Service do
                branch: Map.get(body, "branch"),
                runtime_surface: Map.get(body, "surface", "ui")
              ) do
-          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-          {:error, reason} -> error_response(status_for_error(reason), reason)
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       ["api", "workflows", workflow_name, "run"] ->
@@ -1555,8 +1892,11 @@ defmodule ForgeloopV2.Service do
                runtime_surface: Map.get(body, "surface", "ui"),
                runner_args: Map.get(body, "runner_args", [])
              ) do
-          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-          {:error, reason} -> error_response(status_for_error(reason), reason)
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       ["api", "questions", question_id, "answer"] ->
@@ -1566,8 +1906,11 @@ defmodule ForgeloopV2.Service do
                Map.get(body, "answer", ""),
                expected_revision: Map.get(body, "expected_revision")
              ) do
-          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-          {:error, reason} -> error_response(status_for_error(reason), reason)
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       ["api", "questions", question_id, "resolve"] ->
@@ -1576,8 +1919,11 @@ defmodule ForgeloopV2.Service do
           |> maybe_put_answer(Map.get(body, "answer"))
 
         case ControlPlane.resolve_question(control_plane_pid, URI.decode(question_id), opts) do
-          {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
-          {:error, reason} -> error_response(status_for_error(reason), reason)
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       _ ->
@@ -1717,6 +2063,7 @@ defmodule ForgeloopV2.Service do
   defp error_code({:invalid_workflow_action, _}), do: "invalid_workflow_action"
   defp error_code({:invalid_workflow_name, _}), do: "invalid_workflow_name"
   defp error_code({:invalid_runner_args, _}), do: "invalid_runner_args"
+  defp error_code({:invalid_coordination_playbook, _}), do: "invalid_coordination_playbook"
   defp error_code({:workflow_not_found, _}), do: "workflow_not_found"
   defp error_code({:invalid_runtime_surface, _}), do: "invalid_runtime_surface"
   defp error_code({:invalid_stop_reason, _}), do: "invalid_stop_reason"
@@ -1736,6 +2083,7 @@ defmodule ForgeloopV2.Service do
   defp status_for_error({:invalid_workflow_action, _}), do: 400
   defp status_for_error({:invalid_workflow_name, _}), do: 400
   defp status_for_error({:invalid_runner_args, _}), do: 400
+  defp status_for_error({:invalid_coordination_playbook, _}), do: 400
   defp status_for_error({:invalid_runtime_surface, _}), do: 400
   defp status_for_error({:invalid_stop_reason, _}), do: 400
   defp status_for_error(:invalid_json_body), do: 400
@@ -1771,9 +2119,15 @@ defmodule ForgeloopV2.Service do
   defp send_body_response(socket, {:body, status, headers, body}) do
     response =
       [
-        "HTTP/1.1 ", Integer.to_string(status), " ", reason_phrase(status), "\r\n",
+        "HTTP/1.1 ",
+        Integer.to_string(status),
+        " ",
+        reason_phrase(status),
+        "\r\n",
         Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end),
-        "content-length: ", Integer.to_string(byte_size(body)), "\r\n",
+        "content-length: ",
+        Integer.to_string(byte_size(body)),
+        "\r\n",
         "connection: close\r\n",
         "\r\n",
         body
@@ -1791,7 +2145,8 @@ defmodule ForgeloopV2.Service do
     case send_sse_headers(socket) do
       :ok ->
         with :ok <- Events.subscribe(config),
-             {:ok, handoff} <- send_initial_stream_payload(socket, control_plane_pid, limit, after_cursor),
+             {:ok, handoff} <-
+               send_initial_stream_payload(socket, control_plane_pid, limit, after_cursor),
              :ok <- flush_buffered_events(socket, event_log_path, handoff.delivered_ids) do
           try do
             stream_loop(socket, event_log_path, 0)
@@ -1881,12 +2236,16 @@ defmodule ForgeloopV2.Service do
     :gen_tcp.send(
       socket,
       [
-        "HTTP/1.1 200 ", reason_phrase(200), "\r\n",
+        "HTTP/1.1 200 ",
+        reason_phrase(200),
+        "\r\n",
         "content-type: text/event-stream\r\n",
         "cache-control: no-cache\r\n",
         "connection: close\r\n",
         "\r\n",
-        "retry: ", Integer.to_string(@stream_retry_ms), "\n\n"
+        "retry: ",
+        Integer.to_string(@stream_retry_ms),
+        "\n\n"
       ]
     )
   end
@@ -1913,8 +2272,11 @@ defmodule ForgeloopV2.Service do
           flush_buffered_events(socket, event_log_path, delivered_ids)
         else
           case send_event(socket, event) do
-            :ok -> flush_buffered_events(socket, event_log_path, MapSet.put(delivered_ids, event_id))
-            {:error, reason} -> {:error, reason}
+            :ok ->
+              flush_buffered_events(socket, event_log_path, MapSet.put(delivered_ids, event_id))
+
+            {:error, reason} ->
+              {:error, reason}
           end
         end
     after
