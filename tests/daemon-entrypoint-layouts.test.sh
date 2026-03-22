@@ -35,7 +35,7 @@ prepare_repo_root_layout() {
   chmod +x "$target_root/bin/daemon.sh" "$target_root/bin/forgeloop-daemon.sh"
 }
 
-run_daemon_smoke() {
+run_elixir_daemon_smoke() {
   local repo_dir="$1"
   local daemon_cmd="$2"
   local runtime_dir="$repo_dir/.forgeloop-smoke"
@@ -59,7 +59,7 @@ EOF
     FORGELOOP_RUNTIME_DIR="$runtime_dir" \
     FORGELOOP_DAEMON_LOCK_FILE="$runtime_dir/daemon.lock" \
     FORGELOOP_DAEMON_LOG_FILE="$runtime_dir/daemon.log" \
-    bash -lc "$daemon_cmd"
+    exec bash -lc "exec $daemon_cmd"
   ) >"$out_file" 2>&1 &
   local pid=$!
 
@@ -71,15 +71,65 @@ EOF
   fi
 
   wait_for_file "$runtime_dir/daemon.log"
-  wait_for_file "$runtime_dir/v2/active-runtime.json"
   wait_for_file "$runtime_dir/runtime-state.json"
 
+  pkill -TERM -P "$pid" 2>/dev/null || true
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
 
   assert_file_exists "$runtime_dir/daemon.log"
-  assert_file_exists "$runtime_dir/v2/active-runtime.json"
   assert_file_exists "$runtime_dir/runtime-state.json"
+}
+
+run_bash_daemon_ownership_smoke() {
+  local repo_dir="$1"
+  local daemon_cmd="$2"
+  local runtime_dir="$repo_dir/.forgeloop-smoke-bash"
+  local out_file="$runtime_dir/daemon.out"
+  local shim_dir="$runtime_dir/shims"
+  local claim_file="$runtime_dir/v2/active-runtime.json"
+
+  mkdir -p "$runtime_dir" "$shim_dir"
+  printf '[DEPLOY]\n' > "$repo_dir/REQUESTS.md"
+  : > "$repo_dir/IMPLEMENTATION_PLAN.md"
+
+  cat > "$shim_dir/flock" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$shim_dir/flock"
+
+  (
+    cd "$repo_dir"
+    PATH="$shim_dir:$PATH" \
+    FORGELOOP_DAEMON_RUNTIME=bash \
+    FORGELOOP_RUNTIME_DIR="$runtime_dir" \
+    FORGELOOP_DAEMON_LOCK_FILE="$runtime_dir/daemon.lock" \
+    FORGELOOP_DAEMON_LOG_FILE="$runtime_dir/daemon.log" \
+    FORGELOOP_DEPLOY_CMD='sleep 2' \
+    exec bash -lc "exec $daemon_cmd"
+  ) >"$out_file" 2>&1 &
+  local pid=$!
+
+  wait_for_file "$claim_file"
+  grep -q '"owner": "bash"' "$claim_file"
+
+  local deadline=$((SECONDS + 10))
+  while (( SECONDS < deadline )); do
+    if [[ ! -f "$claim_file" ]]; then
+      pkill -TERM -P "$pid" 2>/dev/null || true
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  pkill -TERM -P "$pid" 2>/dev/null || true
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  echo "FAIL: bash daemon claim persisted after deploy window: $claim_file" >&2
+  exit 1
 }
 
 tmp_root="$(mktemp -d)"
@@ -87,9 +137,11 @@ tmp_target="$(mktemp -d)"
 trap 'rm -rf "$tmp_root" "$tmp_target"' EXIT
 
 prepare_repo_root_layout "$tmp_root"
-run_daemon_smoke "$tmp_root" './bin/daemon.sh 1'
+run_elixir_daemon_smoke "$tmp_root" './bin/daemon.sh 1'
+run_bash_daemon_ownership_smoke "$tmp_root" './bin/forgeloop-daemon.sh 1'
 
 "$ROOT_DIR/install.sh" "$tmp_target" --force --wrapper >/dev/null
-run_daemon_smoke "$tmp_target" './forgeloop.sh daemon 1'
+run_elixir_daemon_smoke "$tmp_target" './forgeloop.sh daemon 1'
+run_bash_daemon_ownership_smoke "$tmp_target" './forgeloop.sh daemon 1'
 
 echo "ok: daemon entrypoint layouts"

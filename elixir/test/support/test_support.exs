@@ -60,11 +60,17 @@ defmodule ForgeloopV2.TestSupport do
     File.mkdir_p!(package_root)
 
     if Keyword.get(opts, :graph?, true) do
-      File.write!(Path.join(package_root, "workflow.dot"), Keyword.get(opts, :graph_content, "digraph Test {}\n"))
+      File.write!(
+        Path.join(package_root, "workflow.dot"),
+        Keyword.get(opts, :graph_content, "digraph Test {}\n")
+      )
     end
 
     if Keyword.get(opts, :config?, true) do
-      File.write!(Path.join(package_root, "workflow.toml"), Keyword.get(opts, :config_content, "version = 1\n"))
+      File.write!(
+        Path.join(package_root, "workflow.toml"),
+        Keyword.get(opts, :config_content, "version = 1\n")
+      )
     end
 
     if Keyword.get(opts, :prompts?, false) do
@@ -86,7 +92,10 @@ defmodule ForgeloopV2.TestSupport do
       write_executable!(Path.join(repo.repo_root, "bin/loop.sh"), loop_script_body)
     end
 
-    File.write!(Path.join(repo.repo_root, ".gitignore"), Keyword.get(opts, :gitignore, ".forgeloop-test/\n"))
+    File.write!(
+      Path.join(repo.repo_root, ".gitignore"),
+      Keyword.get(opts, :gitignore, ".forgeloop-test/\n")
+    )
 
     run_git!(repo.repo_root, ["init", "-b", Keyword.get(opts, :branch, "main")])
     run_git!(repo.repo_root, ["config", "user.name", "Forgeloop Test"])
@@ -94,7 +103,13 @@ defmodule ForgeloopV2.TestSupport do
     run_git!(repo.repo_root, ["config", "commit.gpgsign", "false"])
     run_git!(repo.repo_root, ["config", "tag.gpgsign", "false"])
     run_git!(repo.repo_root, ["add", "."])
-    run_git!(repo.repo_root, ["commit", "-m", Keyword.get(opts, :commit_message, "initial fixture")])
+
+    run_git!(repo.repo_root, [
+      "commit",
+      "-m",
+      Keyword.get(opts, :commit_message, "initial fixture")
+    ])
+
     repo
   end
 
@@ -108,7 +123,12 @@ defmodule ForgeloopV2.TestSupport do
     ui_root = Path.join([forgeloop_root, "elixir", "priv", "static", "ui"])
     File.mkdir_p!(ui_root)
     File.write!(Path.join(forgeloop_root, "config.sh"), "# test config\n")
-    File.write!(Path.join(ui_root, "index.html"), "<!doctype html><html><body>hud</body></html>\n")
+
+    File.write!(
+      Path.join(ui_root, "index.html"),
+      "<!doctype html><html><body>hud</body></html>\n"
+    )
+
     File.write!(Path.join(ui_root, "app.css"), "body { color: #fff; }\n")
     File.write!(Path.join(ui_root, "app.js"), "console.log('hud');\n")
 
@@ -162,8 +182,11 @@ defmodule ForgeloopV2.TestSupport do
 
   def run_git!(repo_root, args) do
     case System.cmd("git", ["-C", repo_root | args], stderr_to_stdout: true) do
-      {output, 0} -> output
-      {output, status} -> raise "git command failed status=#{status}: git -C #{repo_root} #{Enum.join(args, " ")}\n#{output}"
+      {output, 0} ->
+        output
+
+      {output, status} ->
+        raise "git command failed status=#{status}: git -C #{repo_root} #{Enum.join(args, " ")}\n#{output}"
     end
   end
 
@@ -173,7 +196,9 @@ defmodule ForgeloopV2.TestSupport do
       {:ok, run_spec} = ForgeloopV2.RunSpec.workflow(action, workflow_name)
 
       :ok =
-        ForgeloopV2.WorkflowHistory.record_terminal_outcome(config, run_spec,
+        ForgeloopV2.WorkflowHistory.record_terminal_outcome(
+          config,
+          run_spec,
           attrs
           |> Keyword.delete(:action)
           |> Keyword.put_new(:run_id, ForgeloopV2.WorkflowHistory.generate_run_id(run_spec))
@@ -183,13 +208,42 @@ defmodule ForgeloopV2.TestSupport do
     end)
   end
 
+  def write_runtime_claim!(config, attrs \\ []) do
+    {:ok, claim} =
+      ForgeloopV2.ActiveRuntime.claim(
+        config,
+        attrs
+        |> Enum.into(%{})
+        |> Map.put_new(:owner, "bash")
+        |> Map.put_new(:surface, "loop")
+        |> Map.put_new(:mode, "build")
+        |> Map.put_new(:branch, config.default_branch)
+      )
+
+    claim
+  end
+
+  def write_legacy_runtime_claim!(config, owner \\ "bash", updated_at \\ nil) do
+    File.mkdir_p!(config.v2_state_dir)
+
+    File.write!(
+      ForgeloopV2.ActiveRuntime.path(config),
+      Jason.encode!(
+        %{"owner" => owner, "updated_at" => updated_at || now!() |> DateTime.to_iso8601()},
+        pretty: true
+      ) <> "\n"
+    )
+  end
+
   def now! do
     DateTime.utc_now()
     |> DateTime.truncate(:second)
   end
 
   defp normalize_workflow_action!(action) when action in [:preflight, :run], do: action
-  defp normalize_workflow_action!(action) when is_binary(action), do: String.to_existing_atom(action)
+
+  defp normalize_workflow_action!(action) when is_binary(action),
+    do: String.to_existing_atom(action)
 
   defp do_wait_until(fun, deadline) do
     if fun.() do

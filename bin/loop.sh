@@ -160,6 +160,18 @@ export FORGELOOP_RUNTIME_SURFACE="loop"
 export FORGELOOP_RUNTIME_MODE="$MODE"
 export FORGELOOP_RUNTIME_BRANCH="$CURRENT_BRANCH"
 
+ACTIVE_RUNTIME_CLAIM_ID=""
+cleanup_active_runtime_claim() {
+    forgeloop_core__active_runtime_claim_end "$REPO_DIR" "${ACTIVE_RUNTIME_CLAIM_ID:-}" || true
+}
+
+if ! ACTIVE_RUNTIME_CLAIM_ID=$(forgeloop_core__active_runtime_claim_begin "$REPO_DIR" "bash" "loop" "$MODE" "$CURRENT_BRANCH"); then
+    echo "Error: another active runtime owner is holding this repo" >&2
+    exit 1
+fi
+export FORGELOOP_ACTIVE_RUNTIME_CLAIM_ID="$ACTIVE_RUNTIME_CLAIM_ID"
+trap cleanup_active_runtime_claim EXIT
+
 cd "$REPO_DIR"
 forgeloop_llm__load_state "$STATE_FILE"
 forgeloop_core__write_runtime_state "$REPO_DIR" "starting" "loop" "Initializing $MODE loop" \

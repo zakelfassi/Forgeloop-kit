@@ -241,6 +241,225 @@ forgeloop_core__write_runtime_state() {
     forgeloop_core__set_runtime_state "$repo_dir" "$normalized_status" "$surface" "$mode" "$summary" "$transition" "$requested_action" "$branch"
 }
 
+# Resolve the runtime ownership claim path used by bash/Elixir coexistence guards.
+# Usage: claim_path=$(forgeloop_core__active_runtime_path "$REPO_DIR")
+forgeloop_core__active_runtime_path() {
+    local repo_dir="$1"
+    local runtime_dir
+    runtime_dir=$(forgeloop_core__ensure_runtime_dirs "$repo_dir")
+    local claim_path="$runtime_dir/v2/active-runtime.json"
+    mkdir -p "$(dirname "$claim_path")"
+    echo "$claim_path"
+}
+
+forgeloop_core__active_runtime_lock_dir() {
+    local repo_dir="$1"
+    local claim_path="${2:-$(forgeloop_core__active_runtime_path "$repo_dir")}"
+    local v2_dir hash
+    v2_dir="$(dirname "$claim_path")"
+
+    if command -v python3 >/dev/null 2>&1; then
+        hash=$(python3 - "$claim_path" <<'PY'
+import hashlib
+import sys
+print(hashlib.sha256(sys.argv[1].encode("utf-8")).hexdigest())
+PY
+)
+    else
+        hash=$(printf '%s' "$claim_path" | shasum -a 256 | awk '{print $1}')
+    fi
+
+    mkdir -p "$v2_dir/locks"
+    echo "$v2_dir/locks/$hash.lock"
+}
+
+forgeloop_core__active_runtime_lock_acquire() {
+    local lock_dir="$1"
+    local timeout_ms="${2:-2000}"
+    local poll_interval="0.025"
+    local start_seconds="$SECONDS"
+
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        local elapsed_ms=$(( (SECONDS - start_seconds) * 1000 ))
+        if (( elapsed_ms >= timeout_ms )); then
+            return 1
+        fi
+        sleep "$poll_interval"
+    done
+
+    return 0
+}
+
+forgeloop_core__active_runtime_lock_release() {
+    local lock_dir="$1"
+    rm -rf "$lock_dir" 2>/dev/null || true
+}
+
+# Claim runtime ownership for a bash entrypoint.
+# Prints claim_id on success; returns non-zero when a live conflicting owner exists.
+# Usage: claim_id=$(forgeloop_core__active_runtime_claim_begin "$REPO_DIR" "bash" "loop" "$MODE" "$BRANCH")
+forgeloop_core__active_runtime_claim_begin() {
+    local repo_dir="$1"
+    local owner="${2:-bash}"
+    local surface="${3:-unknown}"
+    local mode="${4:-unknown}"
+    local branch="${5:-}"
+    local claim_path lock_dir timeout_ms host claim_id
+
+    claim_path=$(forgeloop_core__active_runtime_path "$repo_dir")
+    lock_dir=$(forgeloop_core__active_runtime_lock_dir "$repo_dir" "$claim_path")
+    timeout_ms="${FORGELOOP_CONTROL_LOCK_TIMEOUT_MS:-2000}"
+    if command -v python3 >/dev/null 2>&1; then
+        host=$(python3 - <<'PY'
+import socket
+value = socket.gethostname().split('.')[0].strip().lower()
+print(value or 'unknown')
+PY
+)
+    else
+        host=$(hostname 2>/dev/null | awk -F. '{print tolower($1)}')
+        host="${host:-unknown}"
+    fi
+
+    if ! forgeloop_core__active_runtime_lock_acquire "$lock_dir" "$timeout_ms"; then
+        return 1
+    fi
+
+    claim_id=$(python3 - "$claim_path" "$owner" "$surface" "$mode" "$branch" "$$" "$host" <<'PY'
+import datetime as dt
+import json
+import os
+import sys
+import time
+
+path, owner, surface, mode, branch, pid_text, host = sys.argv[1:8]
+pid = int(pid_text)
+
+
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+
+
+def load_payload():
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            payload = json.load(fh)
+        return payload if isinstance(payload, dict) else None
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+
+
+def pid_alive(value):
+    try:
+        os.kill(int(value), 0)
+        return True
+    except Exception:
+        return False
+
+
+current = load_payload()
+claim_id = None
+started_at = now_iso()
+
+if current:
+    current_owner = current.get('owner')
+    current_claim_id = current.get('claim_id')
+    current_host = current.get('host')
+    current_pid = current.get('pid')
+    legacy = not isinstance(current_claim_id, str) or not current_claim_id
+    same_process = current_owner == owner and current_host == host and current_pid == pid
+    reclaimable = legacy or (current_host == host and isinstance(current_pid, int) and not pid_alive(current_pid))
+
+    if same_process:
+        claim_id = current_claim_id
+        started_at = current.get('started_at') or started_at
+    elif not reclaimable:
+        print(f"active runtime owned by {current_owner}", file=sys.stderr)
+        sys.exit(2)
+
+if not claim_id:
+    claim_id = f"rt-bash-{pid}-{int(time.time() * 1_000_000)}"
+
+payload = {
+    'schema_version': 2,
+    'claim_id': claim_id,
+    'owner': owner,
+    'surface': surface,
+    'mode': mode,
+    'branch': branch,
+    'pid': pid,
+    'process_pid': None,
+    'host': host,
+    'started_at': started_at,
+    'updated_at': now_iso(),
+}
+
+os.makedirs(os.path.dirname(path), exist_ok=True)
+tmp_path = f"{path}.tmp"
+with open(tmp_path, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, indent=2, sort_keys=True)
+    fh.write('\n')
+os.replace(tmp_path, path)
+print(claim_id)
+PY
+)
+    local status=$?
+    forgeloop_core__active_runtime_lock_release "$lock_dir"
+
+    if [[ $status -ne 0 ]]; then
+        return $status
+    fi
+
+    printf '%s\n' "$claim_id"
+}
+
+# Release a bash runtime ownership claim if it still matches the active claim.
+# Usage: forgeloop_core__active_runtime_claim_end "$REPO_DIR" "$claim_id"
+forgeloop_core__active_runtime_claim_end() {
+    local repo_dir="$1"
+    local claim_id="${2:-}"
+
+    if [[ -z "$claim_id" ]]; then
+        return 0
+    fi
+
+    local claim_path lock_dir timeout_ms
+    claim_path=$(forgeloop_core__active_runtime_path "$repo_dir")
+    lock_dir=$(forgeloop_core__active_runtime_lock_dir "$repo_dir" "$claim_path")
+    timeout_ms="${FORGELOOP_CONTROL_LOCK_TIMEOUT_MS:-2000}"
+
+    if ! forgeloop_core__active_runtime_lock_acquire "$lock_dir" "$timeout_ms"; then
+        return 1
+    fi
+
+    python3 - "$claim_path" "$claim_id" <<'PY'
+import json
+import os
+import sys
+
+path, claim_id = sys.argv[1:3]
+
+try:
+    with open(path, 'r', encoding='utf-8') as fh:
+        current = json.load(fh)
+except FileNotFoundError:
+    sys.exit(0)
+except Exception:
+    sys.exit(0)
+
+if isinstance(current, dict) and current.get('claim_id') == claim_id:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+PY
+    local status=$?
+    forgeloop_core__active_runtime_lock_release "$lock_dir"
+    return $status
+}
+
 # Initialize session context (knowledge + experts) if available.
 # Usage: session_context=$(forgeloop_core__init_session_context "$REPO_DIR" "$FORGELOOP_DIR" "$RUNTIME_DIR")
 forgeloop_core__init_session_context() {

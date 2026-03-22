@@ -338,8 +338,24 @@ Format:
     - `ForgeloopV2.Tracker.RepoLocal` now projects phase-1 canonical backlog items and workflow packs into read-only `Tracker.Issue` structs, with adapter-compatible fetch helpers plus explicit `:read_only_tracker` responses for mutation calls.
     - The loopback service now exposes `/api/tracker` and includes the same projection in `/api/overview`, and the HUD + OpenClaw overview summarize that repo-local tracker view.
     - README/docs/site copy now describe the projection as additive, read-only, and still separate from later tracker/`prd.json` unification.
+- [x] Harden run-boundary runtime ownership across Elixir and bash
+  - Acceptance:
+    - Managed Elixir runs claim `.forgeloop/v2/active-runtime.json` with structured ownership metadata and release it on terminal paths.
+    - Service-managed starts reject live conflicting runtime owners through the same control-plane contract surfaced in `/api/overview`.
+    - Bash `loop.sh` and the legacy bash daemon participate in the same ownership file via boundary claim/write/clear behavior.
+    - Docs stay explicit that this hardens run-boundary coexistence, not full daemon-session split-brain prevention.
+  - REQUIRED TESTS:
+    - `tests/daemon-entrypoint-layouts.test.sh`
+    - `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs`
+    - `elixir/test/forgeloop_v2/loop_test.exs`
+    - `elixir/test/forgeloop_v2/service_test.exs`
+    - `elixir/test/forgeloop_v2/babysitter_test.exs`
+  - Shipped behavior:
+    - `ForgeloopV2.ActiveRuntime` now persists structured claims with `claim_id`, owner/surface/mode metadata, and cross-runtime read/status/release helpers, while legacy claims are reclaimable.
+    - `Loop.run/3` is now the authoritative Elixir claim boundary; redundant babysitter and daemon-tick claims were removed.
+    - `/api/overview` now exposes additive `runtime_owner` state, and service-managed starts reject live conflicting owners before launching new work.
+    - Bash `bin/loop.sh` and `bin/forgeloop-daemon.sh` now write and clear the same active-runtime claim on lifecycle boundaries.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
-- [ ] Decide whether bash should participate in `.forgeloop/v2/active-runtime.json` before making stronger split-brain-prevention claims
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 
 ## Checkpoint Cadence

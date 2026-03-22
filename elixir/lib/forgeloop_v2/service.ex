@@ -21,6 +21,7 @@ defmodule ForgeloopV2.ControlPlane do
   use GenServer
 
   alias ForgeloopV2.{
+    ActiveRuntime,
     Babysitter,
     Config,
     ControlFiles,
@@ -198,6 +199,7 @@ defmodule ForgeloopV2.ControlPlane do
   def handle_call({:overview, opts}, _from, %State{} = state) do
     reply =
       with {:ok, runtime_state} <- read_runtime_state(state.config),
+           {:ok, runtime_owner} <- read_runtime_owner(state.config),
            {:ok, backlog} <- read_backlog(state.config),
            {:ok, control_flags} <- read_control_flags(state.config),
            {:ok, questions} <- read_questions(state.config),
@@ -224,6 +226,7 @@ defmodule ForgeloopV2.ControlPlane do
         {:ok,
          %{
            runtime_state: runtime_state,
+           runtime_owner: runtime_owner_state(runtime_owner, babysitter),
            backlog: backlog,
            control_flags: control_flags,
            tracker: tracker,
@@ -430,8 +433,9 @@ defmodule ForgeloopV2.ControlPlane do
          {:ok, run_spec} <- RunSpec.checklist(normalized_mode),
          {:ok, runtime_surface} <-
            normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "babysitter")),
+         {:ok, runtime_owner} <- read_runtime_owner(state.config),
          {:ok, babysitter} <- babysitter_status(state, true),
-         :ok <- ensure_start_allowed(babysitter),
+         :ok <- ensure_start_allowed(runtime_owner, babysitter),
          {:ok, payload, next_state} <-
            do_start_managed_run(state, run_spec, runtime_surface, opts) do
       {:ok, payload, %{next_state | last_action: {:start_run, normalized_mode}, last_result: :ok}}
@@ -446,8 +450,9 @@ defmodule ForgeloopV2.ControlPlane do
          {:ok, runtime_surface} <-
            normalize_runtime_surface(Keyword.get(opts, :runtime_surface, "workflow")),
          {:ok, runner_args} <- normalize_runner_args(Keyword.get(opts, :runner_args, [])),
+         {:ok, runtime_owner} <- read_runtime_owner(state.config),
          {:ok, babysitter} <- babysitter_status(state, true),
-         :ok <- ensure_start_allowed(babysitter),
+         :ok <- ensure_start_allowed(runtime_owner, babysitter),
          :ok <- ensure_workflow_exists(state.config, workflow_name) do
       run_opts =
         workflow_start_opts(
@@ -541,6 +546,8 @@ defmodule ForgeloopV2.ControlPlane do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp read_runtime_owner(config), do: ActiveRuntime.status(config)
 
   defp read_backlog(config), do: PlanStore.summary(config)
 
@@ -764,13 +771,16 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp maybe_stop_managed_babysitter(_state, _babysitter), do: :ok
 
-  defp ensure_start_allowed(%{running?: true, managed?: true}),
+  defp ensure_start_allowed(_runtime_owner, %{running?: true, managed?: true}),
     do: {:error, :babysitter_already_running}
 
-  defp ensure_start_allowed(%{running?: true, active_run: active_run}),
+  defp ensure_start_allowed(_runtime_owner, %{running?: true, active_run: active_run}),
     do: {:error, {:babysitter_unmanaged_active, active_run}}
 
-  defp ensure_start_allowed(_), do: :ok
+  defp ensure_start_allowed(%{live?: true, current: current}, _babysitter) when is_map(current),
+    do: {:error, {:active_runtime_owned_by, current}}
+
+  defp ensure_start_allowed(_runtime_owner, _babysitter), do: :ok
 
   defp ensure_babysitter_instance(%State{} = state, %RunSpec{} = run_spec, runtime_surface, opts) do
     branch = opts[:branch] || state.config.default_branch
@@ -983,6 +993,19 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  defp runtime_owner_state(runtime_owner, babysitter) do
+    Map.put(runtime_owner, :start_allowed?, start_allowed?(runtime_owner, babysitter))
+  end
+
+  defp start_allowed?(%{live?: true}, _babysitter), do: false
+  defp start_allowed?(_runtime_owner, %{running?: true}), do: false
+
+  defp start_allowed?(_runtime_owner, %{active_run: %{"status" => status}})
+       when status in ["running", "stopping"],
+       do: false
+
+  defp start_allowed?(_runtime_owner, _babysitter), do: true
+
   defp iso_now do
     DateTime.utc_now()
     |> DateTime.truncate(:second)
@@ -1019,6 +1042,7 @@ defmodule ForgeloopV2.ServiceJSON do
   def overview(payload) do
     %{
       runtime_state: runtime_state(payload.runtime_state),
+      runtime_owner: runtime_owner(payload.runtime_owner),
       backlog: backlog(payload.backlog),
       control_flags: control_flags(payload.control_flags),
       tracker: tracker_overview(payload.tracker),
@@ -1054,6 +1078,19 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def runtime_state(nil), do: nil
   def runtime_state(%RuntimeState{} = state), do: RuntimeState.to_map(state)
+
+  def runtime_owner(nil), do: nil
+
+  def runtime_owner(owner) when is_map(owner) do
+    %{
+      current: Map.get(owner, :current) || Map.get(owner, "current"),
+      live?: Map.get(owner, :live?) || Map.get(owner, "live?") || false,
+      stale?: Map.get(owner, :stale?) || Map.get(owner, "stale?") || false,
+      reclaimable?: Map.get(owner, :reclaimable?) || Map.get(owner, "reclaimable?") || false,
+      legacy?: Map.get(owner, :legacy?) || Map.get(owner, "legacy?") || false,
+      start_allowed?: Map.get(owner, :start_allowed?) || Map.get(owner, "start_allowed?") || false
+    }
+  end
 
   def backlog(%PlanStore.Backlog{} = backlog) do
     %{
@@ -2066,6 +2103,14 @@ defmodule ForgeloopV2.Service do
     }
   end
 
+  defp error_payload({:active_runtime_owned_by, current}) when is_map(current) do
+    %{
+      reason: "active_runtime_owned_by",
+      detail: inspect({:active_runtime_owned_by, current}),
+      details: current
+    }
+  end
+
   defp error_payload(reason) do
     %{
       reason: error_code(reason),
@@ -2085,6 +2130,7 @@ defmodule ForgeloopV2.Service do
   defp error_code({:invalid_runtime_surface, _}), do: "invalid_runtime_surface"
   defp error_code({:invalid_stop_reason, _}), do: "invalid_stop_reason"
   defp error_code({:babysitter_unmanaged_active, _}), do: "babysitter_unmanaged_active"
+  defp error_code({:active_runtime_owned_by, _}), do: "active_runtime_owned_by"
   defp error_code(:babysitter_already_running), do: "babysitter_already_running"
   defp error_code(:babysitter_not_running), do: "babysitter_not_running"
   defp error_code(:babysitter_not_managed), do: "babysitter_not_managed"
@@ -2111,6 +2157,7 @@ defmodule ForgeloopV2.Service do
   defp status_for_error(:not_found), do: 404
   defp status_for_error({:question_conflict, _, _}), do: 409
   defp status_for_error({:babysitter_unmanaged_active, _}), do: 409
+  defp status_for_error({:active_runtime_owned_by, _}), do: 409
   defp status_for_error(:babysitter_already_running), do: 409
   defp status_for_error(:babysitter_not_running), do: 409
   defp status_for_error(:babysitter_not_managed), do: 409

@@ -26,8 +26,8 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
 - Bash remains the default runtime for this phase.
 - Elixir shares the same repo-local artifact contract and runtime-state shape.
 - Running bash and Elixir as simultaneous active controllers for the same repo is unsupported.
-- Elixir now records an active-runtime claim under `.forgeloop/v2/active-runtime.json` and treats conflicting ownership as a stop condition at claim time.
-- This is currently an Elixir-side coexistence guard, not a full cross-runtime lock or split-brain-prevention guarantee unless bash participates in the same ownership signal.
+- Bash `loop.sh` / legacy bash daemon and managed Elixir runs now participate in the same `.forgeloop/v2/active-runtime.json` claim file at run boundaries.
+- Live conflicting ownership now blocks new managed starts at those run boundaries, but this still stops short of a full daemon-session lock or split-brain-prevention guarantee.
 
 ## Current Workflow-Pack Lane
 

@@ -136,7 +136,7 @@ Important current limits:
 
 - the public daemon launcher now prefers the managed Elixir backend, but `FORGELOOP_DAEMON_RUNTIME=bash` still drops back to the legacy bash daemon implementation and its older shell loop
 - bounded `[WORKFLOW]` scheduling only works when that managed daemon backend is active
-- the current `.forgeloop/v2/active-runtime.json` claim is still not worktree-aware or cross-runtime; it remains the current Elixir-side coexistence guard
+- `.forgeloop/v2/active-runtime.json` is now a shared run-boundary ownership guard across bash + Elixir entrypoints, but it is still not a full daemon-session lock or split-brain-prevention guarantee
 
 ## Loopback JSON control-plane service (experimental Elixir v2)
 
@@ -209,6 +209,6 @@ The current coexistence rule is intentionally narrow:
 - bash remains the default runtime
 - Elixir is opt-in and experimental
 - simultaneous bash and Elixir active control of one repo is unsupported for this phase
-- Elixir records its active-runtime claim under `.forgeloop/v2/active-runtime.json`
-- Elixir stops when that file already names a different owner at claim time
-- this is an Elixir-side coexistence guard, not a full cross-runtime lock or split-brain-prevention guarantee
+- bash `loop.sh` / legacy bash daemon and managed Elixir runs now write/read the same active-runtime claim under `.forgeloop/v2/active-runtime.json`
+- live conflicting ownership blocks new managed starts at those run boundaries, and the loopback service now exposes additive `runtime_owner` visibility via `/api/overview`
+- this is a stronger run-boundary coexistence guard, not a full daemon-session lock or split-brain-prevention guarantee

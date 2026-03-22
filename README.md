@@ -183,10 +183,11 @@ Elixir now ships three experimental operator/runtime surfaces in `elixir/`: `mix
 
 Current coexistence rule:
 
-- simultaneous bash + Elixir active control of one repo is unsupported
-- Elixir records and checks an active-runtime claim under `.forgeloop/v2/active-runtime.json`
-- conflicting ownership currently stops Elixir at claim time
-- this is an Elixir-side guard, not a full cross-runtime lock or split-brain-prevention guarantee
+- simultaneous bash + Elixir active control of one repo is still unsupported
+- bash `loop.sh` / legacy bash daemon and managed Elixir runs now all participate in `.forgeloop/v2/active-runtime.json`
+- managed Elixir runs claim/release that file at the real run boundary, and service-managed starts surface additive `runtime_owner` visibility through `/api/overview`
+- conflicting live ownership now blocks new managed starts across both runtimes at those run boundaries
+- this hardens run-boundary coexistence, but it is still not a full daemon-session lock or split-brain-prevention guarantee
 
 Current scope:
 

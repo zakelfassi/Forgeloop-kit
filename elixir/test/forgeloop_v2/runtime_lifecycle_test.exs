@@ -44,12 +44,59 @@ defmodule ForgeloopV2.RuntimeLifecycleTest do
              })
   end
 
-  test "active runtime claims reject conflicting owner" do
+  test "active runtime claims reject conflicting live owner and release matching claim ids" do
     repo = create_repo_fixture!()
     config = config_for!(repo.repo_root)
-    File.mkdir_p!(config.v2_state_dir)
-    File.write!(ActiveRuntime.path(config), Jason.encode!(%{"owner" => "bash"}) <> "\n")
+    bash_claim = write_runtime_claim!(config, owner: "bash", mode: "daemon")
 
-    assert {:error, {:active_runtime_owned_by, "bash"}} = ActiveRuntime.claim(config, "elixir")
+    assert {:error, {:active_runtime_owned_by, current}} =
+             ActiveRuntime.claim(config, owner: "elixir", surface: "daemon", mode: "build")
+
+    assert current["owner"] == "bash"
+    assert current["claim_id"] == bash_claim["claim_id"]
+
+    assert {:error, {:active_runtime_claim_mismatch, current}} =
+             ActiveRuntime.release(config, "rt-other")
+
+    assert current["claim_id"] == bash_claim["claim_id"]
+    assert :ok = ActiveRuntime.release(config, bash_claim["claim_id"])
+    assert :missing = ActiveRuntime.read(config)
+  end
+
+  test "recent legacy runtime claims block conservatively until stale" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+    write_legacy_runtime_claim!(config)
+
+    assert {:ok, %{legacy?: true, reclaimable?: false, live?: true, stale?: false}} =
+             ActiveRuntime.status(config)
+
+    assert {:error, {:active_runtime_owned_by, current}} =
+             ActiveRuntime.claim(config, owner: "elixir", surface: "loop", mode: "build")
+
+    assert current["owner"] == "bash"
+  end
+
+  test "stale legacy runtime claims are reclaimable" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+
+    stale_timestamp =
+      DateTime.utc_now()
+      |> DateTime.add(-300, :second)
+      |> DateTime.truncate(:second)
+      |> DateTime.to_iso8601()
+
+    write_legacy_runtime_claim!(config, "bash", stale_timestamp)
+
+    assert {:ok, %{legacy?: true, reclaimable?: true, live?: false, stale?: true}} =
+             ActiveRuntime.status(config)
+
+    assert {:ok, claim} =
+             ActiveRuntime.claim(config, owner: "elixir", surface: "loop", mode: "build")
+
+    assert claim["schema_version"] == 2
+    assert claim["owner"] == "elixir"
+    assert claim["claim_id"] != nil
   end
 end

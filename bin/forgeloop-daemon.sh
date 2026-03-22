@@ -336,6 +336,10 @@ run_build() {
 }
 
 run_deploy() {
+    run_with_active_runtime_claim "deploy" run_deploy_body
+}
+
+run_deploy_body() {
     if [ -z "${FORGELOOP_DEPLOY_CMD:-}" ]; then
         log "DEPLOY requested but FORGELOOP_DEPLOY_CMD not set; skipping"
         notify "⚠️" "Forgeloop Deploy" "DEPLOY requested but no deploy command configured"
@@ -374,7 +378,7 @@ run_deploy() {
     fi
 
     if [[ "${FORGELOOP_POST_DEPLOY_INGEST_LOGS:-false}" == "true" ]]; then
-        run_ingest_logs || true
+        run_ingest_logs_body || true
     fi
 
     forgeloop_core__clear_failure_state "$REPO_DIR"
@@ -384,6 +388,10 @@ run_deploy() {
 }
 
 run_ingest_logs() {
+    run_with_active_runtime_claim "ingest_logs" run_ingest_logs_body
+}
+
+run_ingest_logs_body() {
     local ingest_script="$REPO_DIR/forgeloop/bin/ingest-logs.sh"
     if [[ ! -x "$ingest_script" ]]; then
         log "INGEST_LOGS requested but ingest-logs.sh not found/executable; skipping"
@@ -411,6 +419,22 @@ run_ingest_logs() {
     log "Running log ingest..."
     notify "📥" "Forgeloop Log Ingest" "Analyzing logs into REQUESTS"
     (cd "$REPO_DIR" && "$ingest_script" "${args[@]}") || true
+}
+
+run_with_active_runtime_claim() {
+    local mode="$1"
+    shift
+
+    local claim_id=""
+    if ! claim_id=$(forgeloop_core__active_runtime_claim_begin "$REPO_DIR" "bash" "daemon" "$mode" "$CURRENT_BRANCH"); then
+        log "Another active runtime owner is holding this repo. Skipping $mode."
+        return 1
+    fi
+
+    local rc=0
+    "$@" || rc=$?
+    forgeloop_core__active_runtime_claim_end "$REPO_DIR" "$claim_id" || true
+    return "$rc"
 }
 
 main_loop() {

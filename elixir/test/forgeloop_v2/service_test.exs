@@ -64,6 +64,9 @@ defmodule ForgeloopV2.ServiceTest do
     payload = get_json!(base_url <> "/api/overview")
     assert payload["ok"] == true
     assert payload["data"]["runtime_state"]["status"] == "running"
+    assert payload["data"]["runtime_owner"]["current"] == nil
+    assert payload["data"]["runtime_owner"]["live?"] == false
+    assert payload["data"]["runtime_owner"]["start_allowed?"] == true
     assert payload["data"]["backlog"]["needs_build?"] == true
     assert payload["data"]["backlog"]["exists?"] == true
     assert payload["data"]["backlog"]["source"]["kind"] == "implementation_plan"
@@ -481,6 +484,27 @@ defmodule ForgeloopV2.ServiceTest do
     stop_payload = post_json!(base_url <> "/api/babysitter/stop", %{"reason" => "kill"})
     assert stop_payload["ok"] == true
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end)
+  end
+
+  test "service run endpoint rejects a live conflicting runtime owner" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+    claim = write_runtime_claim!(config, owner: "bash", mode: "daemon")
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["runtime_owner"]["live?"] == true
+    assert overview["data"]["runtime_owner"]["start_allowed?"] == false
+    assert overview["data"]["runtime_owner"]["current"]["owner"] == "bash"
+    assert overview["data"]["runtime_owner"]["current"]["claim_id"] == claim["claim_id"]
+
+    conflict = post_json_response!(base_url <> "/api/control/run", %{"mode" => "build"})
+    assert conflict.status == 409
+    assert conflict.body["error"]["reason"] == "active_runtime_owned_by"
+    assert conflict.body["error"]["details"]["owner"] == "bash"
   end
 
   test "idle managed babysitters are replaced when mode or runtime surface changes" do
