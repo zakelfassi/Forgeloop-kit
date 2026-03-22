@@ -73,7 +73,7 @@ defmodule ForgeloopV2.ControlPlane do
   @spec provider_health(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def provider_health(server \\ __MODULE__), do: GenServer.call(server, :provider_health)
 
-  @spec events(GenServer.server(), keyword()) :: {:ok, [map()]}
+  @spec events(GenServer.server(), keyword()) :: {:ok, %{items: [map()], meta: map()}} | {:error, term()}
   def events(server \\ __MODULE__, opts \\ []), do: GenServer.call(server, {:events, opts})
 
   @spec workflow_overview(GenServer.server(), keyword()) :: {:ok, ForgeloopV2.WorkflowService.Overview.t()} | {:error, term()}
@@ -185,6 +185,7 @@ defmodule ForgeloopV2.ControlPlane do
            {:ok, provider_health} <- read_provider_health(state.config),
            {:ok, workflow_overview} <- WorkflowService.overview(state.config),
            {:ok, tracker} <- read_tracker(state.config, backlog, workflow_overview),
+           {:ok, event_result} <- read_events(state.config, opts),
            {:ok, babysitter} <- babysitter_status(state, Keyword.get(opts, :include_active_run?, true)) do
         {:ok,
          %{
@@ -195,7 +196,8 @@ defmodule ForgeloopV2.ControlPlane do
            questions: questions,
            escalations: escalations,
            provider_health: provider_health,
-           events: limited_events(state.config, opts),
+           events: event_result.items,
+           events_meta: event_result.meta,
            workflows: workflow_overview,
            babysitter: babysitter
          }}
@@ -229,7 +231,7 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   def handle_call({:events, opts}, _from, %State{} = state) do
-    {:reply, {:ok, limited_events(state.config, opts)}, state}
+    {:reply, read_events(state.config, opts), state}
   end
 
   def handle_call({:workflow_overview, opts}, _from, %State{} = state) do
@@ -527,9 +529,13 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp read_provider_health(config), do: {:ok, ProviderHealth.read(config)}
 
-  defp limited_events(config, opts) do
+  defp read_events(config, opts) do
     limit = opts |> Keyword.get(:limit, 50) |> normalize_limit()
-    config |> Events.read_all() |> Enum.take(-limit)
+
+    case normalize_after_cursor(Keyword.get(opts, :after)) do
+      nil -> Events.tail(config, limit: limit)
+      cursor -> Events.replay(config, after: cursor, limit: limit)
+    end
   end
 
   defp normalize_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 500)
@@ -540,6 +546,17 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
   defp normalize_limit(_), do: 50
+
+  defp normalize_after_cursor(nil), do: nil
+
+  defp normalize_after_cursor(cursor) when is_binary(cursor) do
+    case String.trim(cursor) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_after_cursor(_), do: nil
 
   defp babysitter_status(%State{} = state, include_active_run?) do
     managed_snapshot =
@@ -838,6 +855,7 @@ defmodule ForgeloopV2.ServiceJSON do
       escalations: Enum.map(payload.escalations, &escalation/1),
       provider_health: provider_health(payload.provider_health),
       events: payload.events,
+      events_meta: Map.get(payload, :events_meta) || Map.get(payload, "events_meta"),
       workflows: workflow_overview(payload.workflows),
       babysitter: babysitter(payload.babysitter)
     }
@@ -1138,7 +1156,6 @@ defmodule ForgeloopV2.Service do
   alias ForgeloopV2.{Config, ControlPlane, Events, Service.State, ServiceJSON, UIAssets}
 
   @recv_timeout_ms 5_000
-  @stream_poll_interval_ms 1_000
   @stream_heartbeat_interval_ms 15_000
   @stream_retry_ms 2_000
 
@@ -1344,8 +1361,8 @@ defmodule ForgeloopV2.Service do
     case read_request(socket) do
       {:ok, request} ->
         case route(request, config, control_plane_pid) do
-          {:stream, limit} ->
-            case stream_snapshots(socket, control_plane_pid, stream_limit(limit)) do
+          {:stream, stream_opts} ->
+            case stream_events(socket, config, control_plane_pid, stream_opts) do
               :ok -> :ok
               {:error, reason} -> send_body_response(socket, error_response(status_for_error(reason), reason))
             end
@@ -1383,8 +1400,12 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp route(%{method: "GET", path: "/api/stream", query: query}, _config, _control_plane_pid) do
-    {:stream, Map.get(query, "limit", 50)}
+  defp route(%{method: "GET", path: "/api/stream", query: query, headers: headers}, _config, _control_plane_pid) do
+    {:stream,
+     %{
+       limit: Map.get(query, "limit", 50),
+       after: stream_after_cursor(query, headers)
+     }}
   end
 
   defp route(%{method: "GET", path: "/api/runtime"}, _config, control_plane_pid) do
@@ -1423,8 +1444,11 @@ defmodule ForgeloopV2.Service do
   end
 
   defp route(%{method: "GET", path: "/api/events", query: query}, _config, control_plane_pid) do
-    case ControlPlane.events(control_plane_pid, limit: Map.get(query, "limit", 50)) do
-      {:ok, events} -> json_response(200, %{ok: true, data: events})
+    case ControlPlane.events(control_plane_pid,
+           limit: Map.get(query, "limit", 50),
+           after: Map.get(query, "after")
+         ) do
+      {:ok, result} -> json_response(200, %{ok: true, data: result.items, meta: result.meta})
       {:error, reason} -> error_response(status_for_error(reason), reason)
     end
   end
@@ -1759,18 +1783,37 @@ defmodule ForgeloopV2.Service do
     :gen_tcp.send(socket, response)
   end
 
-  defp stream_snapshots(socket, control_plane_pid, limit) do
-    case overview_json(control_plane_pid, limit) do
-      {:ok, initial_json} ->
-        case send_sse_headers(socket) do
-          :ok ->
-            case send_snapshot(socket, initial_json) do
-              :ok -> stream_loop(socket, control_plane_pid, limit, initial_json, 0)
-              {:error, _reason} -> :ok
-            end
+  defp stream_events(socket, config, control_plane_pid, stream_opts) do
+    limit = stream_limit(Map.get(stream_opts, :limit, 50))
+    after_cursor = normalize_stream_after(Map.get(stream_opts, :after))
+    event_log_path = Events.event_log_path(config)
 
-          {:error, _reason} ->
-            :ok
+    case send_sse_headers(socket) do
+      :ok ->
+        with :ok <- Events.subscribe(config),
+             {:ok, handoff} <- send_initial_stream_payload(socket, control_plane_pid, limit, after_cursor),
+             :ok <- flush_buffered_events(socket, event_log_path, handoff.delivered_ids) do
+          try do
+            stream_loop(socket, event_log_path, 0)
+          after
+            Events.unsubscribe(config)
+          end
+        else
+          {:error, _reason} -> :ok
+        end
+
+      {:error, _reason} ->
+        :ok
+    end
+  end
+
+  defp send_initial_stream_payload(socket, control_plane_pid, limit, nil) do
+    case overview_payload(control_plane_pid, limit) do
+      {:ok, payload} ->
+        json = Jason.encode!(%{ok: true, data: payload})
+
+        with :ok <- send_snapshot(socket, json) do
+          {:ok, %{delivered_ids: delivered_event_ids(payload.events || [])}}
         end
 
       {:error, reason} ->
@@ -1778,35 +1821,56 @@ defmodule ForgeloopV2.Service do
     end
   end
 
-  defp stream_loop(socket, control_plane_pid, limit, last_json, idle_ms) do
+  defp send_initial_stream_payload(socket, control_plane_pid, limit, after_cursor) do
+    case events_result(control_plane_pid, after_cursor, limit) do
+      {:ok, %{items: items, meta: %{cursor_found?: true, truncated?: false}}} ->
+        with :ok <- send_replay_events(socket, items) do
+          {:ok, %{delivered_ids: delivered_event_ids(items)}}
+        end
+
+      {:ok, %{meta: %{cursor_found?: false}}} ->
+        send_initial_stream_payload(socket, control_plane_pid, limit, nil)
+
+      {:ok, %{meta: %{truncated?: true}}} ->
+        send_initial_stream_payload(socket, control_plane_pid, limit, nil)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp stream_loop(socket, event_log_path, idle_ms) do
     receive do
+      {:forgeloop_v2_event, path, event} ->
+        if path == event_log_path do
+          case send_event(socket, event) do
+            :ok -> stream_loop(socket, event_log_path, 0)
+            {:error, _reason} -> :ok
+          end
+        else
+          stream_loop(socket, event_log_path, idle_ms)
+        end
     after
-      @stream_poll_interval_ms ->
-        case overview_json(control_plane_pid, limit) do
-          {:ok, json} when json != last_json ->
-            case send_snapshot(socket, json) do
-              :ok -> stream_loop(socket, control_plane_pid, limit, json, 0)
-              {:error, _reason} -> :ok
-            end
-
-          {:ok, _json} when idle_ms + @stream_poll_interval_ms >= @stream_heartbeat_interval_ms ->
-            case :gen_tcp.send(socket, ": keepalive\n\n") do
-              :ok -> stream_loop(socket, control_plane_pid, limit, last_json, 0)
-              {:error, _reason} -> :ok
-            end
-
-          {:ok, _json} ->
-            stream_loop(socket, control_plane_pid, limit, last_json, idle_ms + @stream_poll_interval_ms)
-
-          {:error, _reason} ->
-            :ok
+      @stream_heartbeat_interval_ms ->
+        case :gen_tcp.send(socket, ": keepalive\n\n") do
+          :ok -> stream_loop(socket, event_log_path, idle_ms + @stream_heartbeat_interval_ms)
+          {:error, _reason} -> :ok
         end
     end
   end
 
-  defp overview_json(control_plane_pid, limit) do
+  defp overview_payload(control_plane_pid, limit) do
     case ControlPlane.overview(control_plane_pid, limit: limit) do
-      {:ok, payload} -> {:ok, Jason.encode!(%{ok: true, data: ServiceJSON.overview(payload)})}
+      {:ok, payload} -> {:ok, ServiceJSON.overview(payload)}
+      {:error, reason} -> {:error, reason}
+    end
+  catch
+    :exit, _reason -> {:error, :control_plane_unavailable}
+  end
+
+  defp events_result(control_plane_pid, after_cursor, limit) do
+    case ControlPlane.events(control_plane_pid, after: after_cursor, limit: limit) do
+      {:ok, payload} -> {:ok, payload}
       {:error, reason} -> {:error, reason}
     end
   catch
@@ -1831,6 +1895,57 @@ defmodule ForgeloopV2.Service do
     :gen_tcp.send(socket, ["event: snapshot\n", "data: ", json, "\n\n"])
   end
 
+  defp send_replay_events(socket, items) do
+    Enum.reduce_while(items, :ok, fn event, _acc ->
+      case send_event(socket, event) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp flush_buffered_events(socket, event_log_path, delivered_ids) do
+    receive do
+      {:forgeloop_v2_event, path, event} when path == event_log_path ->
+        event_id = event["event_id"]
+
+        if MapSet.member?(delivered_ids, event_id) do
+          flush_buffered_events(socket, event_log_path, delivered_ids)
+        else
+          case send_event(socket, event) do
+            :ok -> flush_buffered_events(socket, event_log_path, MapSet.put(delivered_ids, event_id))
+            {:error, reason} -> {:error, reason}
+          end
+        end
+    after
+      0 -> :ok
+    end
+  end
+
+  defp delivered_event_ids(events) do
+    events
+    |> Enum.reduce(MapSet.new(), fn event, acc ->
+      case event["event_id"] do
+        id when is_binary(id) -> MapSet.put(acc, id)
+        _ -> acc
+      end
+    end)
+  end
+
+  defp send_event(socket, event) do
+    json = Jason.encode!(%{ok: true, data: event})
+
+    :gen_tcp.send(socket, [
+      "id: ",
+      to_string(event["event_id"] || ""),
+      "\n",
+      "event: event\n",
+      "data: ",
+      json,
+      "\n\n"
+    ])
+  end
+
   defp reason_phrase(200), do: "OK"
   defp reason_phrase(400), do: "Bad Request"
   defp reason_phrase(404), do: "Not Found"
@@ -1852,6 +1967,21 @@ defmodule ForgeloopV2.Service do
   end
 
   defp stream_limit(_), do: 50
+
+  defp stream_after_cursor(query, headers) do
+    normalize_stream_after(Map.get(query, "after") || Map.get(headers, "last-event-id"))
+  end
+
+  defp normalize_stream_after(nil), do: nil
+
+  defp normalize_stream_after(cursor) when is_binary(cursor) do
+    case String.trim(cursor) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_stream_after(_), do: nil
 
   defp maybe_put_answer(opts, nil), do: opts
   defp maybe_put_answer(opts, answer), do: Keyword.put(opts, :answer, answer)

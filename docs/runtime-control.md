@@ -152,11 +152,11 @@ That service reuses the same file-first control plane rather than introducing a 
 - runtime state
 - the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`)
 - questions and escalations
-- recent JSONL events
+- recent JSONL events through `/api/events` tail/replay
 - workflow status snapshots plus managed workflow actions
 - provider health derived from the existing provider-state file + provider events
 - babysitter status plus manual babysitter `plan` / `build` start/stop
-- a live SSE snapshot stream for browser updates
+- a live SSE stream that bootstraps with one snapshot and then replays/live-streams canonical events
 - interactive UI controls for pause, clear-pause, replan, question answer/resolve, and one-off `plan` / `build`
 
 Operator mutations still go through the same helpers and runtime-state transitions:
@@ -171,6 +171,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - the same service/HUD/OpenClaw plane now also exposes a read-only repo-local tracker projection for canonical backlog items + workflow packs without mutating external trackers yet
 - manual workflow `preflight` / `run` actions now flow through the same babysitter/worktree/runtime-state path as other managed runs instead of bypassing it
 - `/api/overview` now exposes whether `[WORKFLOW]` is queued plus the configured daemon workflow target so the HUD/OpenClaw seam can show the one-shot daemon request clearly
+- `/api/events` now supports bounded tails plus replay-after-cursor semantics over the canonical JSONL log, and `/api/stream` now uses that same event seam for SSE resume/live delivery
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:

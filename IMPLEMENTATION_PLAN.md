@@ -89,7 +89,7 @@ Format:
     - The plugin targets `./forgeloop.sh serve` / the loopback JSON API instead of bypassing repo-local state.
     - Manual runs launched through the plugin use `surface: "openclaw"` while keeping the same babysitter/worktree/runtime-state path.
 
-- [ ] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
+- [x] Extend `ForgeloopV2.Events` with replay/tail/subscribe behavior and add operator event types
   - Acceptance:
     - JSONL remains the durable source of truth.
     - Subscribers receive new daemon/loop/operator events.
@@ -97,7 +97,13 @@ Format:
   - REQUIRED TESTS:
     - event subscription test
     - replay/tail ordering test
+    - service `/api/events` replay + SSE stream tests
     - existing event tests stay green
+  - Shipped behavior:
+    - `.forgeloop/v2/events.log` remains the canonical JSONL event store, now with stable `event_id` / `event_code` / `occurred_at` fields plus legacy aliases for existing consumers.
+    - `ForgeloopV2.Events` now exposes bounded tail/replay helpers and live in-process subscriptions, while preserving fail-closed runtime behavior when event writes fail.
+    - `/api/events` now serves bounded tails/replay metadata and `/api/stream` now bootstraps with a snapshot then replays/live-streams canonical events for the HUD.
+    - The HUD and OpenClaw seam now consume the first-class event surface instead of relying only on overview-embedded event snapshots.
 
 - [x] Converge the public daemon launcher onto the managed Elixir daemon path with explicit legacy fallback
   - Acceptance:

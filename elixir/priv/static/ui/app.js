@@ -1,7 +1,12 @@
+const STREAM_EVENT_LIMIT = 50;
+const OVERVIEW_REFRESH_DEBOUNCE_MS = 250;
+
 const state = {
   stream: null,
   hasSnapshot: false,
   snapshot: null,
+  latestEventId: null,
+  refreshTimer: null,
   questionDrafts: {},
   questionDraftRevisions: {},
   questionErrors: {},
@@ -122,7 +127,7 @@ function connectStream() {
     state.stream.close();
   }
 
-  const stream = new EventSource("/api/stream?limit=50");
+  const stream = new EventSource(`/api/stream?limit=${STREAM_EVENT_LIMIT}`);
   state.stream = stream;
 
   stream.addEventListener("snapshot", (event) => {
@@ -138,6 +143,19 @@ function connectStream() {
     }
   });
 
+  stream.addEventListener("event", (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload.ok && payload.data) {
+        applyLiveEvent(payload.data);
+        state.hasSnapshot = true;
+        setConnectionState("live", "Live stream connected");
+      }
+    } catch (error) {
+      console.error("failed to parse stream event", error);
+    }
+  });
+
   stream.onerror = () => {
     setConnectionState(
       state.hasSnapshot ? "reconnecting" : "offline",
@@ -148,6 +166,7 @@ function connectStream() {
 
 function applySnapshot(snapshot) {
   reconcileQuestionDrafts(snapshot.questions || []);
+  state.latestEventId = eventCursorFromSnapshot(snapshot);
   state.snapshot = snapshot;
   renderControls(snapshot);
   renderRuntime(snapshot.runtime_state, snapshot.babysitter, snapshot.control_flags);
@@ -512,15 +531,15 @@ function renderEvents(events) {
   refs.eventsBody.className = "stack";
   refs.eventsBody.innerHTML = events.slice().reverse().map((event) => {
     const details = Object.entries(event)
-      .filter(([key]) => key !== "event_type" && key !== "recorded_at")
+      .filter(([key]) => !["event_id", "event_code", "event_type", "occurred_at", "recorded_at"].includes(key))
       .map(([key, value]) => `<div><span class="meta-label">${escapeHtml(key)}</span> <span class="subtle">${escapeHtml(formatValue(value))}</span></div>`)
       .join("");
 
     return `
       <article class="event-item">
         <div class="event-head">
-          <strong>${escapeHtml(event.event_type || "event")}</strong>
-          <span class="event-time">${escapeHtml(event.recorded_at || "unknown")}</span>
+          <strong>${escapeHtml(event.event_code || event.event_type || "event")}</strong>
+          <span class="event-time">${escapeHtml(event.occurred_at || event.recorded_at || "unknown")}</span>
         </div>
         <div class="stack">${details || '<p>No extra payload.</p>'}</div>
       </article>
@@ -592,6 +611,63 @@ async function handleControlClick(event) {
       conflictText: "A babysitter run is already active. Wait for it to finish before launching another workflow action."
     });
   }
+}
+
+function applyLiveEvent(event) {
+  if (!event || !state.snapshot) {
+    scheduleOverviewRefresh();
+    return;
+  }
+
+  const currentEvents = Array.isArray(state.snapshot.events) ? state.snapshot.events : [];
+  const mergedEvents = mergeLiveEvent(currentEvents, event, STREAM_EVENT_LIMIT);
+
+  state.latestEventId = event.event_id || state.latestEventId;
+  state.snapshot = {
+    ...state.snapshot,
+    events: mergedEvents,
+    events_meta: {
+      ...(state.snapshot.events_meta || {}),
+      latest_event_id: state.latestEventId,
+      returned_count: mergedEvents.length,
+      limit: STREAM_EVENT_LIMIT,
+      "truncated?": (state.snapshot.events_meta && state.snapshot.events_meta["truncated?"]) || false
+    }
+  };
+
+  renderEvents(mergedEvents);
+  scheduleOverviewRefresh();
+}
+
+function mergeLiveEvent(events, incomingEvent, limit) {
+  const eventId = incomingEvent && incomingEvent.event_id;
+  const withoutDuplicate = eventId ? events.filter((event) => event.event_id !== eventId) : events.slice();
+  return withoutDuplicate.concat([incomingEvent]).slice(-limit);
+}
+
+function scheduleOverviewRefresh() {
+  if (state.refreshTimer) {
+    clearTimeout(state.refreshTimer);
+  }
+
+  state.refreshTimer = setTimeout(async () => {
+    state.refreshTimer = null;
+
+    try {
+      await refreshOverview();
+    } catch (error) {
+      console.error("failed to refresh overview after live event", error);
+    }
+  }, OVERVIEW_REFRESH_DEBOUNCE_MS);
+}
+
+function eventCursorFromSnapshot(snapshot) {
+  const metaCursor = snapshot && snapshot.events_meta ? snapshot.events_meta.latest_event_id : null;
+  if (metaCursor) return metaCursor;
+
+  const events = snapshot && Array.isArray(snapshot.events) ? snapshot.events : [];
+  const latest = events[events.length - 1];
+  return latest ? latest.event_id || null : null;
 }
 
 function handleQuestionInput(event) {

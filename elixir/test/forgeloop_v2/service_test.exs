@@ -89,6 +89,8 @@ defmodule ForgeloopV2.ServiceTest do
     assert Enum.at(payload["data"]["questions"], 0)["id"] == "Q-1"
     assert Enum.at(payload["data"]["escalations"], 0)["id"] == "E-1"
     assert Enum.any?(payload["data"]["events"], &(&1["event_type"] == "daemon_tick"))
+    assert is_binary(payload["data"]["events_meta"]["latest_event_id"])
+    assert payload["data"]["events_meta"]["returned_count"] >= 2
     assert Enum.at(payload["data"]["workflows"]["workflows"], 0)["entry"]["name"] == "alpha"
     assert payload["data"]["babysitter"]["running?"] == false
     assert Enum.any?(payload["data"]["provider_health"]["providers"], &(&1["name"] == "claude" and &1["status"] == "auth_failed"))
@@ -668,7 +670,37 @@ defmodule ForgeloopV2.ServiceTest do
     assert state.surface == "ui"
   end
 
-  test "stream endpoint emits bootstrap and follow-up snapshots when overview changes" do
+  test "events endpoint exposes bounded tail and replay metadata" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    :ok = Events.emit(config, :daemon_tick, %{"action" => "first", "recorded_at" => "2026-03-21T10:00:00Z"})
+    :ok = Events.emit(config, :operator_action, %{"action" => "second", "recorded_at" => "2026-03-21T10:01:00Z"})
+    :ok = Events.emit(config, :operator_action, %{"action" => "third", "recorded_at" => "2026-03-21T10:02:00Z"})
+
+    tail_payload = get_json!(base_url <> "/api/events?limit=2")
+    assert tail_payload["ok"] == true
+    assert Enum.map(tail_payload["data"], & &1["action"]) == ["second", "third"]
+    assert tail_payload["meta"]["returned_count"] == 2
+    assert tail_payload["meta"]["truncated?"] == true
+
+    replay_cursor = Enum.at(tail_payload["data"], 0)["event_id"]
+    replay_payload = get_json!(base_url <> "/api/events?after=#{URI.encode_www_form(replay_cursor)}&limit=5")
+    assert replay_payload["ok"] == true
+    assert replay_payload["meta"]["cursor_found?"] == true
+    assert Enum.map(replay_payload["data"], & &1["action"]) == ["third"]
+
+    missing_payload = get_json!(base_url <> "/api/events?after=evt-missing&limit=5")
+    assert missing_payload["ok"] == true
+    assert missing_payload["meta"]["cursor_found?"] == false
+    assert missing_payload["data"] == []
+  end
+
+  test "stream endpoint emits a bootstrap snapshot and then live event frames" do
     repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
     layout = create_ui_layout!(repo.repo_root)
     config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
@@ -682,10 +714,35 @@ defmodule ForgeloopV2.ServiceTest do
     assert first =~ "event: snapshot"
     assert first =~ "pending task"
 
-    :ok = Events.emit(config, :operator_action, %{"action" => "stream_probe"})
+    :ok = Events.emit(config, :operator_action, %{"action" => "stream_probe", "recorded_at" => "2026-03-21T10:03:00Z"})
 
     second = recv_until(socket, "stream_probe", 4_000)
+    assert second =~ "event: event"
+    assert second =~ "id: evt-"
     assert second =~ "stream_probe"
+  end
+
+  test "stream endpoint replays missed events when a cursor is supplied" do
+    repo = create_repo_fixture!(plan_content: "- [ ] pending task\n")
+    layout = create_ui_layout!(repo.repo_root)
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    :ok = Events.emit(config, :operator_action, %{"action" => "resume_probe_one", "recorded_at" => "2026-03-21T10:04:00Z"})
+    :ok = Events.emit(config, :operator_action, %{"action" => "resume_probe_two", "recorded_at" => "2026-03-21T10:05:00Z"})
+
+    events_payload = get_json!(base_url <> "/api/events?limit=5")
+    after_cursor = Enum.find(events_payload["data"], &(&1["action"] == "resume_probe_one"))["event_id"]
+
+    {:ok, socket} = open_stream_socket(base_url <> "/api/stream?limit=5&after=#{URI.encode_www_form(after_cursor)}")
+    on_exit(fn -> :gen_tcp.close(socket) end)
+
+    replay = recv_until(socket, "resume_probe_two", 4_000)
+    refute replay =~ "event: snapshot"
+    assert replay =~ "event: event"
+    assert replay =~ "resume_probe_two"
   end
 
   defp start_service!(config) do
@@ -787,10 +844,13 @@ defmodule ForgeloopV2.ServiceTest do
     end
   end
 
-  defp recv_all(socket, acc) do
-    case :gen_tcp.recv(socket, 0, 1_000) do
-      {:ok, chunk} -> recv_all(socket, acc <> chunk)
+  defp recv_all(socket, acc, retries \\ 3) do
+    case :gen_tcp.recv(socket, 0, 5_000) do
+      {:ok, chunk} -> recv_all(socket, acc <> chunk, 3)
       {:error, :closed} -> acc
+      {:error, :timeout} when acc != "" -> acc
+      {:error, :timeout} when retries > 0 -> recv_all(socket, acc, retries - 1)
+      {:error, reason} -> raise "socket read failed: #{inspect(reason)}\n#{acc}"
     end
   end
 

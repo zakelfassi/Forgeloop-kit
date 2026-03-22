@@ -129,4 +129,62 @@ defmodule ForgeloopV2.EventsTest do
     assert "babysitter_completed" in event_types
     assert "worktree_cleaned" in event_types
   end
+
+  test "tail and replay return stable ids in append order" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+
+    :ok = Events.emit(config, :daemon_tick, %{"action" => "first", "recorded_at" => "2026-03-21T10:00:00Z"})
+    :ok = Events.emit(config, :daemon_tick, %{"action" => "second", "recorded_at" => "2026-03-21T10:01:00Z"})
+    :ok = Events.emit(config, :operator_action, %{"action" => "third", "recorded_at" => "2026-03-21T10:02:00Z"})
+
+    assert {:ok, tail} = Events.tail(config, limit: 2)
+    assert Enum.map(tail.items, & &1["action"]) == ["second", "third"]
+    assert tail.meta.returned_count == 2
+    assert tail.meta["truncated?"] || tail.meta[:truncated?]
+    assert Enum.all?(tail.items, &(is_binary(&1["event_id"]) and is_binary(&1["event_code"])))
+
+    second_id = Enum.at(tail.items, 0)["event_id"]
+
+    assert {:ok, replay} = Events.replay(config, after: second_id, limit: 5)
+    assert replay.meta["cursor_found?"] || replay.meta[:cursor_found?]
+    assert Enum.map(replay.items, & &1["action"]) == ["third"]
+
+    assert {:ok, missing} = Events.replay(config, after: "evt-missing", limit: 5)
+    refute missing.meta["cursor_found?"] || missing.meta[:cursor_found?]
+    assert missing.items == []
+  end
+
+  test "read_all normalizes legacy lines, preserves specific daemon codes, and skips corrupt lines" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+    path = Events.event_log_path(config)
+    File.mkdir_p!(Path.dirname(path))
+
+    File.write!(path, Jason.encode!(%{"event_type" => "daemon_ingest_logs_completed", "recorded_at" => "2026-03-21T11:00:00Z", "skipped" => true}) <> "\n")
+    File.write!(path, "not-json\n", [:append])
+
+    [event] = Events.read_all(config)
+    assert event["event_type"] == "daemon_ingest_logs_completed"
+    assert event["event_code"] == "daemon_ingest_logs_completed"
+    assert event["occurred_at"] == "2026-03-21T11:00:00Z"
+    assert event["recorded_at"] == "2026-03-21T11:00:00Z"
+    assert event["event_id"] =~ "legacy:1:"
+  end
+
+  test "subscribe delivers appended events after durable write" do
+    repo = create_repo_fixture!()
+    config = config_for!(repo.repo_root)
+    path = Events.event_log_path(config)
+
+    assert :ok = Events.subscribe(config)
+    on_exit(fn -> Events.unsubscribe(config) end)
+
+    assert :ok = Events.emit(config, :operator_action, %{"action" => "subscribed", "recorded_at" => "2026-03-21T12:00:00Z"})
+
+    assert_receive {:forgeloop_v2_event, ^path, event}, 1_000
+    assert event["event_code"] == "operator_action"
+    assert event["action"] == "subscribed"
+    assert is_binary(event["event_id"])
+  end
 end

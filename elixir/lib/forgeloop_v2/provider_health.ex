@@ -63,17 +63,28 @@ defmodule ForgeloopV2.ProviderHealth do
 
   defp last_attempted_at(events, name) do
     Enum.find_value(Enum.reverse(events), fn
-      %{"event_type" => "provider_attempted", "provider" => ^name, "recorded_at" => recorded_at} -> recorded_at
-      _ -> nil
+      %{"provider" => ^name} = event ->
+        if event_code(event) == "provider_attempted", do: event_timestamp(event), else: nil
+
+      _ ->
+        nil
     end)
   end
 
   defp last_failover(events, name) do
     Enum.find_value(Enum.reverse(events), {nil, nil}, fn
-      %{"event_type" => "provider_failed_over", "from_provider" => ^name} = event ->
-        {Map.get(event, "recorded_at"), Map.get(event, "reason")}
+      %{"from_provider" => ^name} = event ->
+        if event_code(event) == "provider_failed_over" do
+          {event_timestamp(event), Map.get(event, "reason")}
+        else
+          nil
+        end
 
-      _ -> nil
+      _ ->
+        nil
     end)
   end
+
+  defp event_code(event), do: Map.get(event, "event_code") || Map.get(event, "event_type")
+  defp event_timestamp(event), do: Map.get(event, "occurred_at") || Map.get(event, "recorded_at")
 end

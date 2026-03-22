@@ -16,7 +16,8 @@ defmodule ForgeloopV2.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Task.Supervisor, name: ForgeloopV2.TaskSupervisor}
+      {Task.Supervisor, name: ForgeloopV2.TaskSupervisor},
+      {Registry, keys: :duplicate, name: ForgeloopV2.EventsRegistry}
     ]
 
     Supervisor.start_link(children,

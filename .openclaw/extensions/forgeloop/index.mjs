@@ -28,13 +28,14 @@ function buildOverviewTool(api) {
       const limit = normalizeLimit(params.limit);
       const payload = await requestJson(api, `/api/overview?limit=${limit}`);
       const data = payload?.data || {};
+      const eventsPayload = await requestEvents(api, limit, data.events || []);
       const runtime = data.runtime_state || {};
       const backlog = data.backlog || {};
       const questions = Array.isArray(data.questions) ? data.questions : [];
       const escalations = Array.isArray(data.escalations) ? data.escalations : [];
       const tracker = data.tracker || {};
       const trackerIssues = Array.isArray(tracker.issues) ? tracker.issues : [];
-      const events = Array.isArray(data.events) ? data.events : [];
+      const events = Array.isArray(eventsPayload.data) ? eventsPayload.data : [];
       const workflows = data.workflows?.workflows || [];
       const activeWorkflowCount = workflows.filter((workflow) => workflow.active_run).length;
       const workflowOutcomeCounts = workflows.reduce((acc, workflow) => {
@@ -71,6 +72,7 @@ function buildOverviewTool(api) {
           return `Workflow ${workflow.entry?.name || "workflow"}: ${latestText}`;
         }),
         `Recent events: ${events.length}`,
+        ...events.slice(-Math.min(events.length, 5)).map((event) => `Event ${eventCode(event)} @ ${eventTimestamp(event) || "unknown"}`),
         "",
         JSON.stringify(data, null, 2),
       ].join("\n");
@@ -219,6 +221,14 @@ async function currentRevision(api, questionId) {
   return question.revision;
 }
 
+async function requestEvents(api, limit, fallbackEvents = []) {
+  try {
+    return await requestJson(api, `/api/events?limit=${limit}`);
+  } catch (_error) {
+    return { ok: true, data: fallbackEvents, meta: null };
+  }
+}
+
 async function requestJson(api, path, opts = {}) {
   const url = new URL(path, serviceBaseUrl(api));
   const timeoutMs = requestTimeout(api);
@@ -289,6 +299,14 @@ function pendingCount(items) {
 
 function boolFlag(value) {
   return value ? "yes" : "no";
+}
+
+function eventCode(event) {
+  return event?.event_code || event?.event_type || "event";
+}
+
+function eventTimestamp(event) {
+  return event?.occurred_at || event?.recorded_at || null;
 }
 
 function compact(object) {

@@ -204,6 +204,13 @@ defmodule ForgeloopV2.BabysitterTest do
     assert :ok = Babysitter.stop_child(pid, :pause)
     wait_until(fn -> not Babysitter.snapshot(pid).running? end)
 
+    lifecycle_events =
+      Events.read_all(config)
+      |> Enum.filter(&(&1["event_code"] in ["babysitter_started", "babysitter_stopped"]))
+
+    assert Enum.any?(lifecycle_events, &(&1["run_id"] == "wf-alpha-stop-1" and &1["event_code"] == "babysitter_started"))
+    assert Enum.any?(lifecycle_events, &(&1["run_id"] == "wf-alpha-stop-1" and &1["event_code"] == "babysitter_stopped"))
+
     assert {:ok, history} = WorkflowHistory.fetch(config, "alpha")
     assert history.status == :available
     assert history.latest.run_id == "wf-alpha-stop-1"

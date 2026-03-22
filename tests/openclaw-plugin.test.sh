@@ -75,6 +75,16 @@ globalThis.fetch = async (url, options = {}) => {
     });
   }
 
+  if (String(url).endsWith("/api/events?limit=9")) {
+    return okJson({
+      data: [
+        { event_id: "evt-1", event_code: "daemon_tick", occurred_at: "2026-03-21T00:00:01Z" },
+        { event_id: "evt-2", event_code: "operator_action", occurred_at: "2026-03-21T00:00:02Z", action: "replan_requested" }
+      ],
+      meta: { latest_event_id: "evt-2", returned_count: 2, limit: 9, "truncated?": false }
+    });
+  }
+
   if (String(url).endsWith("/api/control/run")) {
     return okJson({ data: { mode: "build", surface: "openclaw" } });
   }
@@ -104,9 +114,13 @@ assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPL
 assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
 assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active, failed=1, escalated=0, start_failed=0\)/);
 assert.match(overviewResult.content[0].text, /Workflow alpha: run failed @ 2026-03-21T00:00:02Z/);
+assert.match(overviewResult.content[0].text, /Recent events: 2/);
+assert.match(overviewResult.content[0].text, /Event daemon_tick @ 2026-03-21T00:00:01Z/);
+assert.match(overviewResult.content[0].text, /Event operator_action @ 2026-03-21T00:00:02Z/);
 
 const controlResult = await controlTool.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);
+assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/events?limit=9")).url, "http://127.0.0.1:4010/api/events?limit=9");
 assert.equal(fetchCalls.find((entry) => entry.url.endsWith("/api/control/run")).url, "http://127.0.0.1:4010/api/control/run");
 assert.deepEqual(
   JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/control/run")).options.body),

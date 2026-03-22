@@ -207,7 +207,7 @@ defmodule ForgeloopV2.Babysitter do
       run_id = Keyword.get(run_opts, :run_id) || maybe_generate_run_id(state.run_spec)
 
       with :ok <- write_active_run(state.config, active_run_payload(state, workspace, worktree, run_id, "running", started_at, started_at)),
-           :ok <- emit_started(state, workspace, worktree) do
+           :ok <- emit_started(state, workspace, worktree, run_id) do
         task =
           Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
             Loop.run(state.run_spec, state.config,
@@ -252,8 +252,9 @@ defmodule ForgeloopV2.Babysitter do
 
   defp maybe_cleanup_stale(%State{}), do: {:ok, []}
 
-  defp emit_started(%State{} = state, workspace, worktree) do
+  defp emit_started(%State{} = state, workspace, worktree, run_id) do
     Events.emit(state.config, :babysitter_started, %{
+      "run_id" => run_id,
       "workspace_id" => workspace.workspace_id,
       "lane" => lane_string(state.run_spec),
       "action" => action_string(state.run_spec),
@@ -287,6 +288,7 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, :babysitter_heartbeat, %{
       "workspace_id" => state.workspace.workspace_id,
+      "run_id" => state.run_id,
       "lane" => lane_string(state.run_spec),
       "action" => action_string(state.run_spec),
       "mode" => mode_string(state.run_spec),
@@ -324,6 +326,7 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, :babysitter_stopped, %{
       "workspace_id" => state.workspace && state.workspace.workspace_id,
+      "run_id" => state.run_id,
       "lane" => lane_string(state.run_spec),
       "action" => action_string(state.run_spec),
       "mode" => mode_string(state.run_spec),
@@ -368,6 +371,7 @@ defmodule ForgeloopV2.Babysitter do
 
     Events.emit(state.config, event_type, %{
       "workspace_id" => state.workspace && state.workspace.workspace_id,
+      "run_id" => state.run_id,
       "lane" => lane_string(state.run_spec),
       "action" => action_string(state.run_spec),
       "mode" => mode_string(state.run_spec),

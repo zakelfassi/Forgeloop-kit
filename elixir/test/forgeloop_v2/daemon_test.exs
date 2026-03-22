@@ -430,6 +430,10 @@ defmodule ForgeloopV2.DaemonTest do
     assert File.read!(config.requests_file) == ""
     assert RuntimeStateStore.status(config) == "recovered"
 
+    event_types = Events.read_all(config) |> Enum.map(& &1["event_code"])
+    assert "daemon_deploy_started" in event_types
+    assert "daemon_deploy_completed" in event_types
+
     Daemon.run_once(pid)
     wait_until(fn -> not Daemon.snapshot(pid).running? end)
     assert Daemon.snapshot(pid).last_action == :build
@@ -452,6 +456,9 @@ defmodule ForgeloopV2.DaemonTest do
     assert Daemon.snapshot(pid).last_action == :ingest_logs
     assert File.read!(config.requests_file) == ""
     assert match?({:ok, %{mode: :ingest_logs, skipped?: true}}, Daemon.snapshot(pid).last_result)
+
+    event_types = Events.read_all(config) |> Enum.map(& &1["event_code"])
+    assert "daemon_ingest_logs_completed" in event_types
   end
 
   test "session iteration caps escalate once, then honor pause on later ticks" do

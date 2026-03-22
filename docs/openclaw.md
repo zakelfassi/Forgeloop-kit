@@ -49,7 +49,7 @@ The current seam registers three tools:
 
 These map directly onto the existing loopback JSON API:
 
-- overview/status snapshots
+- overview/status snapshots plus dedicated recent-event tails from `/api/events`
 - pause / clear-pause / replan / manual plan-build / stop / workflow preflight-run
 - answer / resolve question
 
@@ -66,6 +66,6 @@ These map directly onto the existing loopback JSON API:
 - This does **not** make OpenClaw a Forgeloop runtime/provider.
 - This does **not** bypass the fail-closed repo-local artifact chain.
 - This does **not** yet add daemon-integrated OpenClaw orchestration beyond the current bounded `[WORKFLOW]` request visibility.
-- This does **not** yet add broader workflow orchestration or native graph execution beyond the current bounded workflow history view.
+- This does **not** yet add broader workflow orchestration, event compaction/search, or native graph execution beyond the current bounded workflow history and event replay view.
 
 Those are later slices.
