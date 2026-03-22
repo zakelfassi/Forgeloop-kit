@@ -175,7 +175,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 
 Still intentionally deferred here:
 
-- richer workflow history / broader workflow orchestration beyond the current one-shot `[WORKFLOW]` request + active-run/artifact view
+- broader workflow orchestration beyond the current one-shot `[WORKFLOW]` request + bounded workflow history view
 - remote/multi-host OpenClaw orchestration beyond the same-host loopback model
 
 ## Proof suite

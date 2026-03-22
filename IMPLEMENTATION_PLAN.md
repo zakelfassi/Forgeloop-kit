@@ -34,8 +34,9 @@ Format:
     - loopback service/API workflow surfaces
     - worktree-aware babysitter/supervisor integration for manual workflow actions
     - OpenClaw/plugin workflow control seam work
+    - a bounded structured workflow outcome/history sidecar under `.forgeloop/workflows/<name>/history.json`
+    - service/HUD/OpenClaw/tracker read-model visibility for recent workflow outcomes
   - Deferred after this slice:
-    - richer workflow outcome/history beyond the current active-run + artifact view
     - broader workflow orchestration beyond the current one-shot daemon request
     - native graph execution
 
@@ -132,7 +133,7 @@ Format:
     - Managed start failures now write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-*-start-error-last.txt` and flow through `FailureTracker.handle/2` with daemon surface/mode semantics.
     - `mix forgeloop_v2.babysit` now reuses `Babysitter.await_result/2`, and Elixir docs/site copy now distinguish the managed Elixir daemon path from the still-bash `./forgeloop.sh daemon` wrapper.
   - Deferred after this slice:
-    - richer workflow history / broader workflow orchestration beyond the current active-run + artifact view
+    - broader workflow orchestration beyond the current bounded workflow history view
 
 - [x] Add bounded Elixir-daemon workflow scheduling on the managed control plane
   - Acceptance:
@@ -152,13 +153,13 @@ Format:
     - Workflow request/config errors now fail closed through the existing failure tracker/escalation chain and write runtime-owned evidence under `.forgeloop/v2/babysitter/daemon-workflow-*-start-error-last.txt`.
     - `/api/overview`, the HUD, and the OpenClaw seam now expose whether `[WORKFLOW]` is queued plus the configured daemon workflow target.
   - Deferred after this slice:
-    - richer workflow history / broader workflow orchestration beyond the current one-shot daemon request
+    - broader workflow orchestration beyond the current one-shot daemon request plus bounded history view
 
 - [x] Route manual workflow-pack actions through the managed control plane
   - Acceptance:
     - `./forgeloop.sh workflow preflight|run` routes through the same babysitter/disposable-worktree/runtime-state path as other managed runs.
     - The loopback service, HUD, and OpenClaw seam can trigger workflow `preflight` / `run` and expose active workflow status without inventing a side channel.
-    - Canonical workflow artifacts (`.forgeloop/workflows/<name>/last-*.txt`) remain authoritative while richer workflow history stays explicitly deferred.
+    - Canonical workflow artifacts (`.forgeloop/workflows/<name>/last-*.txt`) remain authoritative while additive read-side workflow history stays bounded and supplemental.
   - REQUIRED TESTS:
     - `tests/workflow-lane.test.sh`
     - `tests/openclaw-plugin.test.sh`
@@ -170,7 +171,7 @@ Format:
     - `ForgeloopV2.RunSpec` now models checklist vs workflow managed runs, and `Loop` / `Babysitter` / `ShellLoop` route workflow `preflight` / `run` actions through the same disposable-worktree runtime path as other managed runs.
     - `mix forgeloop_v2.workflow --repo ..` and `./forgeloop.sh workflow preflight|run` now converge on that managed control-plane path while keeping canonical workflow artifacts at repo root.
     - The loopback service now exposes workflow start endpoints plus active workflow status, and the static HUD + OpenClaw seam can trigger managed workflow actions over the same file-first control plane.
-    - README/docs/site copy now describe workflow status/control as managed control-plane behavior while keeping richer workflow history, broader workflow orchestration, and native graph execution deferred.
+    - README/docs/site copy now describe workflow status/control as managed control-plane behavior, with canonical artifacts plus a bounded workflow history sidecar, while broader workflow orchestration and native graph execution remain deferred.
 
 - [x] Add an embedded Elixir service mode with a control-plane GenServer and loopback-only HTTP API
   - Acceptance:

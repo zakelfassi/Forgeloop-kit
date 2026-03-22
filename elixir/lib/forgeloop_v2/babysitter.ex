@@ -15,6 +15,7 @@ defmodule ForgeloopV2.Babysitter.State do
     :current_task,
     :heartbeat_timer_ref,
     :started_at,
+    :run_id,
     :running?,
     :stopping?,
     :last_result,
@@ -37,6 +38,7 @@ defmodule ForgeloopV2.Babysitter do
     Loop,
     RunSpec,
     RuntimeLifecycle,
+    WorkflowHistory,
     Worktree,
     Workspace
   }
@@ -101,6 +103,7 @@ defmodule ForgeloopV2.Babysitter do
           last_action: nil,
           last_heartbeat_at: nil,
           started_at: nil,
+          run_id: nil,
             cleanup_stale?: Keyword.get(opts, :cleanup_stale?, true)
           }
 
@@ -139,6 +142,7 @@ defmodule ForgeloopV2.Babysitter do
        action: action_string(state.run_spec),
        mode: mode_string(state.run_spec),
        workflow_name: workflow_name(state.run_spec),
+       run_id: state.run_id,
        current_task_kind: if(state.running?, do: mode_string(state.run_spec), else: nil),
        runtime_surface: state.runtime_surface,
        workspace_id: state.workspace && state.workspace.workspace_id,
@@ -199,9 +203,10 @@ defmodule ForgeloopV2.Babysitter do
          {:ok, _cleaned} <- maybe_cleanup_stale(state),
          {:ok, workspace} <- Workspace.from_config(state.config, branch: state.branch, mode: mode_string(state.run_spec), kind: workspace_kind(state.run_spec)),
          {:ok, worktree} <- Worktree.prepare(state.config, workspace) do
-      started_at = iso_now()
+      started_at = Keyword.get(run_opts, :started_at, iso_now())
+      run_id = Keyword.get(run_opts, :run_id) || maybe_generate_run_id(state.run_spec)
 
-      with :ok <- write_active_run(state.config, active_run_payload(state, workspace, worktree, "running", started_at, started_at)),
+      with :ok <- write_active_run(state.config, active_run_payload(state, workspace, worktree, run_id, "running", started_at, started_at)),
            :ok <- emit_started(state, workspace, worktree) do
         task =
           Task.Supervisor.async_nolink(ForgeloopV2.TaskSupervisor, fn ->
@@ -214,7 +219,9 @@ defmodule ForgeloopV2.Babysitter do
                 |> maybe_put_runner_args(run_opts),
               surface: state.runtime_surface,
               runtime_mode: mode_string(state.run_spec),
-              branch: state.branch
+              branch: state.branch,
+              run_id: run_id,
+              started_at: started_at
             )
           end)
 
@@ -229,7 +236,8 @@ defmodule ForgeloopV2.Babysitter do
            last_result: nil,
            last_action: :started,
            last_heartbeat_at: started_at,
-           started_at: started_at}}
+           started_at: started_at,
+           run_id: run_id}}
       else
         {:error, reason} ->
           _ = Worktree.cleanup(state.config, worktree)
@@ -270,6 +278,7 @@ defmodule ForgeloopV2.Babysitter do
           state,
           state.workspace,
           state.worktree,
+          state.run_id,
           if(state.stopping?, do: "stopping", else: "running"),
           state.started_at || heartbeat_at,
           heartbeat_at
@@ -306,6 +315,8 @@ defmodule ForgeloopV2.Babysitter do
         branch: state.branch
       })
 
+    stopped_at = iso_now()
+    _ = maybe_record_stopped_workflow(state, reason, stopped_at)
     _ = delete_active_run(state.config)
     _ = maybe_cleanup_worktree(state)
 
@@ -335,7 +346,8 @@ defmodule ForgeloopV2.Babysitter do
         last_result: if(stop_error, do: {:stop_error, stop_error}, else: {:stopped, reason}),
         last_action: :stopped,
         last_heartbeat_at: state.last_heartbeat_at,
-        started_at: nil}
+        started_at: nil,
+        run_id: nil}
 
     case stop_error do
       nil -> {:ok, next_state}
@@ -374,12 +386,14 @@ defmodule ForgeloopV2.Babysitter do
       workspace: nil,
       last_result: result,
       last_action: action,
-      started_at: nil}
+      started_at: nil,
+      run_id: nil}
   end
 
-  defp active_run_payload(%State{} = state, workspace, worktree, status, started_at, heartbeat_at) do
+  defp active_run_payload(%State{} = state, workspace, worktree, run_id, status, started_at, heartbeat_at) do
     %{
       "workspace_id" => workspace.workspace_id,
+      "run_id" => run_id,
       "lane" => lane_string(state.run_spec),
       "action" => action_string(state.run_spec),
       "mode" => mode_string(state.run_spec),
@@ -477,6 +491,28 @@ defmodule ForgeloopV2.Babysitter do
 
   defp stop_reason(:kill), do: "Babysitter killed child run"
   defp stop_reason(_reason), do: "Babysitter paused child run"
+
+  defp maybe_record_stopped_workflow(%State{run_spec: %RunSpec{lane: :workflow} = run_spec, run_id: run_id} = state, reason, finished_at)
+       when is_binary(run_id) do
+    WorkflowHistory.record_terminal_outcome(state.config, run_spec,
+      run_id: run_id,
+      outcome: :stopped,
+      runtime_surface: state.runtime_surface,
+      branch: state.branch,
+      started_at: state.started_at,
+      finished_at: finished_at,
+      summary: stop_reason(reason),
+      requested_action: RunSpec.requested_action(run_spec, state.config.failure_escalation_action),
+      runtime_status: "paused",
+      failure_kind: Atom.to_string(reason),
+      error: reason
+    )
+  end
+
+  defp maybe_record_stopped_workflow(_state, _reason, _finished_at), do: :ok
+
+  defp maybe_generate_run_id(%RunSpec{lane: :workflow} = run_spec), do: WorkflowHistory.generate_run_id(run_spec)
+  defp maybe_generate_run_id(_run_spec), do: nil
 
   defp maybe_put_runner_args(driver_opts, run_opts) do
     case Keyword.get(run_opts, :runner_args) do

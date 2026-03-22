@@ -48,6 +48,23 @@ defmodule ForgeloopV2.TrackerRepoLocalTest do
     assert workflow_issue.description =~ "Graph file: workflows/issue-to-pr/workflow.dot"
   end
 
+  test "repo-local tracker blocks workflow issues on latest failed workflow outcome" do
+    repo = create_repo_fixture!(plan_content: "- [ ] Ship tracker seam\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+    config = config_for!(repo.repo_root)
+
+    create_workflow_history!(config, "alpha", [
+      [action: :run, outcome: :failed, runtime_surface: "daemon", summary: "workflow failed"]
+    ])
+
+    assert {:ok, overview} = RepoLocal.overview(config)
+    assert overview.counts.blocked == 1
+    assert [%Issue{id: "plan:1"}, %Issue{id: "workflow:alpha"} = workflow_issue] = overview.issues
+    assert workflow_issue.state == "blocked"
+    assert "latest-outcome:failed" in workflow_issue.labels
+    assert workflow_issue.description =~ "Latest outcome: failed"
+  end
+
   test "repo-local tracker stays fail-closed when the canonical backlog is unreadable" do
     repo = create_repo_fixture!()
     config = config_for!(repo.repo_root, plan_file: ".")

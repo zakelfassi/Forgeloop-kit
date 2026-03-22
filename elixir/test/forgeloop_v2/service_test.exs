@@ -555,9 +555,16 @@ defmodule ForgeloopV2.ServiceTest do
     assert workflow_payload["active_run"]["workflow_name"] == "alpha"
     assert workflow_payload["active_run"]["action"] == "preflight"
     assert workflow_payload["active_run"]["runtime_surface"] == "ui"
+    assert is_binary(workflow_payload["active_run"]["run_id"])
 
     wait_until(fn -> get_json!(base_url <> "/api/babysitter")["data"]["running?"] == false end, 4_000)
     assert File.read!(Path.join([config.runtime_dir, "workflows", "alpha", "last-preflight.txt"])) =~ "ok:preflight:alpha"
+
+    completed_payload = get_json!(base_url <> "/api/workflows/alpha")["data"]
+    assert completed_payload["history"]["status"] == "available"
+    assert completed_payload["history"]["latest"]["outcome"] == "succeeded"
+    assert completed_payload["history"]["latest"]["action"] == "preflight"
+    assert Enum.count(completed_payload["history"]["entries"]) >= 1
   end
 
   test "workflow endpoints return stable workflow-specific error codes" do

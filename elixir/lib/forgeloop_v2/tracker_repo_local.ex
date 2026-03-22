@@ -225,7 +225,14 @@ defmodule ForgeloopV2.Tracker.RepoLocal do
 
   defp workflow_state(%WorkflowSummary{} = summary) do
     statuses = [summary.preflight.status, summary.run.status]
-    if Enum.any?(statuses, &(&1 == :error)), do: @state_blocked, else: @state_ready
+    latest_outcome = summary.history && summary.history.latest && summary.history.latest.outcome
+
+    cond do
+      summary.history && summary.history.status == :error -> @state_blocked
+      Enum.any?(statuses, &(&1 == :error)) -> @state_blocked
+      latest_outcome in [:failed, :escalated, :start_failed] -> @state_blocked
+      true -> @state_ready
+    end
   end
 
   defp plan_alert_issue(%Backlog{source: source}, title, description) do
@@ -277,6 +284,8 @@ defmodule ForgeloopV2.Tracker.RepoLocal do
       if(entry.scripts_dir, do: "Scripts dir: #{Path.relative_to(entry.scripts_dir, config.repo_root)}", else: nil),
       "Preflight artifact: #{summary.preflight.status}",
       "Run artifact: #{summary.run.status}",
+      history_line(summary),
+      latest_outcome_line(summary),
       if(summary.latest_activity_kind, do: "Latest activity: #{summary.latest_activity_kind} @ #{summary.latest_activity_at}", else: "Latest activity: none yet")
     ]
     |> Enum.reject(&is_nil/1)
@@ -300,9 +309,39 @@ defmodule ForgeloopV2.Tracker.RepoLocal do
       "workflow-pack",
       "phase1",
       "runner:#{summary.entry.runner_kind}",
-      if(summary.latest_activity_kind, do: "latest:#{summary.latest_activity_kind}", else: nil)
+      if(summary.latest_activity_kind, do: "latest:#{summary.latest_activity_kind}", else: nil),
+      latest_outcome_label(summary)
     ]
     |> Enum.reject(&is_nil/1)
+  end
+
+  defp history_line(%WorkflowSummary{} = summary) do
+    history = summary.history
+
+    cond do
+      is_nil(history) -> "History: unavailable"
+      history.status == :missing -> "History: no recorded outcomes yet"
+      history.status == :error -> "History: error (#{inspect(history.error)})"
+      true -> "History: #{history.retained_count} retained entries"
+    end
+  end
+
+  defp latest_outcome_line(%WorkflowSummary{} = summary) do
+    case summary.history && summary.history.latest do
+      %{outcome: outcome, finished_at: finished_at, started_at: started_at, runtime_surface: runtime_surface, branch: branch} ->
+        at = finished_at || started_at || "unknown"
+        "Latest outcome: #{outcome} @ #{at} via #{runtime_surface || "unknown"} on #{branch || "unknown"}"
+
+      _ ->
+        "Latest outcome: none yet"
+    end
+  end
+
+  defp latest_outcome_label(%WorkflowSummary{} = summary) do
+    case summary.history && summary.history.latest do
+      %{outcome: outcome} -> "latest-outcome:#{outcome}"
+      _ -> nil
+    end
   end
 
   defp slugify(value) do

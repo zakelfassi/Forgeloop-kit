@@ -1379,7 +1379,7 @@ flowchart LR
             <div class="card" style="grid-column: span 4">
               <h3>Workflow Lane (experimental)</h3>
               <p>
-                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog and latest workflow artifacts through the control plane, surface them in the loopback operator UI, and honor one explicit daemon <code>[WORKFLOW]</code> request against a configured target.
+                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog, latest workflow artifacts, live active-run metadata, and a bounded workflow history sidecar through the control plane, surface them in the loopback operator UI, and honor one explicit daemon <code>[WORKFLOW]</code> request against a configured target.
               </p>
               <div class="code" style="margin-top: 12px">
                 <button class="copy" data-copy="#lane-workflow">Copy</button>
@@ -1434,15 +1434,15 @@ flowchart LR
                   <td>Tracking</td>
                   <td>STATUS.md</td>
                   <td>progress.txt</td>
-                  <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt (and managed Elixir control/status visibility)</td>
+                    <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt + history.json (with managed Elixir control/status visibility)</td>
                 </tr>
               </tbody>
             </table>
             <p class="subtle" style="margin-top: 12px">
               Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. The HUD/OpenClaw plane now also
               projects a read-only repo-local tracker view from backlog items + workflow packs, can trigger managed workflow
-              <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, and shares that managed substrate
-              with Elixir-daemon checklist runs plus one explicit configured <code>[WORKFLOW]</code> request, while tracker/<code>prd.json</code> unification remains a later slice and workflow
+              <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, exposes canonical workflow artifacts plus a bounded history sidecar,
+              and shares that managed substrate with Elixir-daemon checklist runs plus one explicit configured <code>[WORKFLOW]</code> request, while tracker/<code>prd.json</code> unification remains a later slice and workflow
               metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
             </p>
           </div>

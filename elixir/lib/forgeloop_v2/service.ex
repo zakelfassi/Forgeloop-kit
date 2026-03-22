@@ -33,6 +33,7 @@ defmodule ForgeloopV2.ControlPlane do
     RuntimeStateStore,
     Tracker,
     WorkflowCatalog,
+    WorkflowHistory,
     WorkflowService,
     Worktree,
     Orchestrator
@@ -399,9 +400,17 @@ defmodule ForgeloopV2.ControlPlane do
          {:ok, runner_args} <- normalize_runner_args(Keyword.get(opts, :runner_args, [])),
          {:ok, babysitter} <- babysitter_status(state, true),
          :ok <- ensure_start_allowed(babysitter),
-         :ok <- ensure_workflow_exists(state.config, workflow_name),
-         {:ok, payload, next_state} <- do_start_managed_run(state, run_spec, runtime_surface, Keyword.put(opts, :runner_args, runner_args)) do
-      {:ok, payload, %{next_state | last_action: {:start_workflow, action, workflow_name}, last_result: :ok}}
+         :ok <- ensure_workflow_exists(state.config, workflow_name) do
+      run_opts = workflow_start_opts(run_spec, runtime_surface, Keyword.put(opts, :runner_args, runner_args))
+
+      case do_start_managed_run(state, run_spec, runtime_surface, run_opts) do
+        {:ok, payload, next_state} ->
+          {:ok, payload, %{next_state | last_action: {:start_workflow, action, workflow_name}, last_result: :ok}}
+
+        {:error, reason, next_state} ->
+          _ = record_workflow_start_failure(state.config, run_spec, run_opts, runtime_surface, reason)
+          {:error, reason, %{next_state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
+      end
     else
       {:error, reason} ->
         {:error, reason, %{state | last_action: :start_workflow_failed, last_result: {:error, reason}}}
@@ -732,11 +741,37 @@ defmodule ForgeloopV2.ControlPlane do
   defp normalize_stop_reason(other), do: {:error, {:invalid_stop_reason, other}}
 
   defp start_run_opts(opts) do
-    case Keyword.get(opts, :runner_args) do
-      runner_args when is_list(runner_args) -> [runner_args: runner_args]
-      _ -> []
-    end
+    []
+    |> maybe_put_start_opt(:runner_args, Keyword.get(opts, :runner_args))
+    |> maybe_put_start_opt(:run_id, Keyword.get(opts, :run_id))
+    |> maybe_put_start_opt(:started_at, Keyword.get(opts, :started_at))
   end
+
+  defp workflow_start_opts(%RunSpec{} = run_spec, runtime_surface, opts) do
+    opts
+    |> Keyword.put_new(:run_id, WorkflowHistory.generate_run_id(run_spec))
+    |> Keyword.put_new(:started_at, iso_now())
+    |> Keyword.put(:runtime_surface, runtime_surface)
+  end
+
+  defp record_workflow_start_failure(%Config{} = config, %RunSpec{} = run_spec, opts, runtime_surface, reason) do
+    WorkflowHistory.record_terminal_outcome(config, run_spec,
+      run_id: Keyword.fetch!(opts, :run_id),
+      outcome: :start_failed,
+      runtime_surface: runtime_surface,
+      branch: Keyword.get(opts, :branch, config.default_branch),
+      started_at: Keyword.get(opts, :started_at),
+      finished_at: iso_now(),
+      summary: "Managed #{RunSpec.runtime_mode(run_spec)} failed before loop start: #{inspect(reason)}",
+      requested_action: RunSpec.requested_action(run_spec, config.failure_escalation_action),
+      runtime_status: nil,
+      failure_kind: RunSpec.runtime_mode(run_spec),
+      error: reason
+    )
+  end
+
+  defp maybe_put_start_opt(opts, _key, nil), do: opts
+  defp maybe_put_start_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp ensure_workflow_exists(config, workflow_name) do
     case WorkflowCatalog.fetch(config, workflow_name) do
@@ -788,7 +823,8 @@ defmodule ForgeloopV2.ServiceJSON do
   alias ForgeloopV2.RuntimeState
   alias ForgeloopV2.Tracker.Issue
   alias ForgeloopV2.Tracker.RepoLocal.Overview, as: TrackerOverview
-  alias ForgeloopV2.WorkflowCatalog.Entry
+  alias ForgeloopV2.WorkflowCatalog.Entry, as: WorkflowCatalogEntry
+  alias ForgeloopV2.WorkflowHistory.{Entry, Snapshot}
   alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun, Overview, WorkflowSummary}
 
   @spec overview(map()) :: map()
@@ -914,6 +950,7 @@ defmodule ForgeloopV2.ServiceJSON do
       entry: workflow_entry(summary.entry),
       preflight: action_snapshot(summary.preflight),
       run: action_snapshot(summary.run),
+      history: workflow_history(summary.history),
       active_run: workflow_active_run(summary.active_run),
       latest_activity_kind: summary.latest_activity_kind,
       latest_activity_at: summary.latest_activity_at
@@ -943,7 +980,7 @@ defmodule ForgeloopV2.ServiceJSON do
 
   def action_result(result) when is_map(result), do: sanitize(result)
 
-  defp workflow_entry(%Entry{} = entry) do
+  defp workflow_entry(%WorkflowCatalogEntry{} = entry) do
     %{
       name: entry.name,
       root: entry.root,
@@ -971,6 +1008,7 @@ defmodule ForgeloopV2.ServiceJSON do
 
   defp workflow_active_run(%ActiveRun{} = active_run) do
     %{
+      run_id: active_run.run_id,
       workflow_name: active_run.workflow_name,
       action: active_run.action,
       mode: active_run.mode,
@@ -979,6 +1017,70 @@ defmodule ForgeloopV2.ServiceJSON do
       branch: active_run.branch,
       started_at: active_run.started_at,
       last_heartbeat_at: active_run.last_heartbeat_at
+    }
+  end
+
+  defp workflow_history(%Snapshot{} = history) do
+    %{
+      status: history.status,
+      returned_count: history.returned_count,
+      retained_count: history.retained_count,
+      has_more?: history.has_more?,
+      counts: history_counts(history.counts),
+      latest: workflow_history_entry(history.latest),
+      latest_by_action: %{
+        preflight: workflow_history_entry(history.latest_by_action.preflight),
+        run: workflow_history_entry(history.latest_by_action.run)
+      },
+      entries: Enum.map(history.entries, &workflow_history_entry/1),
+      error: serialize_error(history.error)
+    }
+  end
+
+  defp workflow_history(nil), do: nil
+
+  defp workflow_history_entry(nil), do: nil
+
+  defp workflow_history_entry(%Entry{} = entry) do
+    %{
+      run_id: entry.run_id,
+      workflow_name: entry.workflow_name,
+      action: entry.action,
+      outcome: entry.outcome,
+      runtime_surface: entry.runtime_surface,
+      branch: entry.branch,
+      started_at: entry.started_at,
+      finished_at: entry.finished_at,
+      duration_ms: entry.duration_ms,
+      summary: entry.summary,
+      requested_action: entry.requested_action,
+      runtime_status: entry.runtime_status,
+      failure_kind: entry.failure_kind,
+      error: entry.error,
+      artifact: history_artifact(entry.artifact)
+    }
+  end
+
+  defp history_artifact(nil), do: nil
+
+  defp history_artifact(artifact) when is_map(artifact) do
+    %{
+      path: artifact.path,
+      status: artifact.status,
+      updated_at: artifact.updated_at,
+      size_bytes: artifact.size_bytes,
+      error: serialize_error(artifact.error)
+    }
+  end
+
+  defp history_counts(counts) when is_map(counts) do
+    %{
+      total: Map.get(counts, :total, 0),
+      succeeded: Map.get(counts, :succeeded, 0),
+      failed: Map.get(counts, :failed, 0),
+      escalated: Map.get(counts, :escalated, 0),
+      stopped: Map.get(counts, :stopped, 0),
+      start_failed: Map.get(counts, :start_failed, 0)
     }
   end
 

@@ -40,7 +40,7 @@ Architecturally, that lane is intentionally narrow:
 - it leaves native graph execution deferred until the workflow-pack lane is proven
 - it keeps the workflow lane focused on native Forgeloop workflow packs rather than alternate product identities
 
-Elixir now routes manual workflow `preflight` / `run` actions through the same babysitter + disposable-worktree path used by other managed runs, while still delegating execution to the configured workflow runner. The loopback service, static UI, and OpenClaw seam all expose that same workflow control/status surface, and the workflow read model still includes catalog visibility plus latest canonical artifacts. The experimental Elixir daemon can also honor one explicit `[WORKFLOW]` marker to launch a single configured workflow target through that same managed path, and the public `./forgeloop.sh daemon` command now prefers that managed backend while preserving `FORGELOOP_DAEMON_RUNTIME=bash` as explicit legacy fallback. Richer workflow orchestration/history projection and native graph execution remain future work.
+Elixir now routes manual workflow `preflight` / `run` actions through the same babysitter + disposable-worktree path used by other managed runs, while still delegating execution to the configured workflow runner. The loopback service, static UI, and OpenClaw seam all expose that same workflow control/status surface, and the workflow read model now includes catalog visibility, latest canonical artifacts, live active-run metadata, and a bounded workflow outcome/history sidecar. The experimental Elixir daemon can also honor one explicit `[WORKFLOW]` marker to launch a single configured workflow target through that same managed path, and the public `./forgeloop.sh daemon` command now prefers that managed backend while preserving `FORGELOOP_DAEMON_RUNTIME=bash` as explicit legacy fallback. Broader workflow orchestration and native graph execution remain future work.
 
 See `docs/workflows.md` for the detailed operator contract.
 
@@ -83,7 +83,7 @@ These are still out of scope for the current phase:
 - Postgres-backed event storage
 - long-lived worktree orchestration beyond the current managed daemon launcher
 - daemon-integrated UI/OpenClaw orchestration beyond the current bounded `[WORKFLOW]` request
-- richer workflow history / checkpoint-resume semantics beyond the current active-run + artifact view
+- checkpoint-resume semantics and broader workflow orchestration beyond the current bounded history sidecar
 - graph workflows
 - exact checkpoint/resume
 - multi-host workers

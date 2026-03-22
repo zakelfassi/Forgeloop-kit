@@ -20,13 +20,13 @@ Current scope:
 - a small GenServer daemon whose checklist `plan` / `build` actions now route through the babysitter + disposable-worktree path
 - provider auth/rate-limit failover unit coverage
 - locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md` so pause/replan flags and question answers can be updated safely without faking runtime recovery
-- workflow package catalog discovery plus managed workflow `preflight` / `run` actions, active-run status, latest workflow preflight/run artifacts, and a bounded Elixir-daemon `[WORKFLOW]` request path in the external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
+- workflow package catalog discovery plus managed workflow `preflight` / `run` actions, active-run status, latest workflow preflight/run artifacts, a bounded workflow outcome/history sidecar, and a bounded Elixir-daemon `[WORKFLOW]` request path in the external-runner workflow lane (see `../docs/workflows.md` for the detailed contract)
 - a manual single-child babysitter/supervisor that launches `Loop.run/3` inside a disposable git worktree while keeping repo-root control artifacts canonical, and which now also backs Elixir-daemon checklist runs
 - a loopback-only control-plane service that exposes runtime, the phase-1 canonical backlog from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`), a read-only repo-local tracker projection, questions, escalations, events, workflows, provider health, and babysitter start/stop/status over the existing file-first control plane
 - a static repo-local operator UI served directly by that service, with SSE-backed live snapshots and interactive controls for pause/clear-pause/replan/question answer-resolve/manual plan-build runs plus workflow `preflight` / `run`, all still backed by the same canonical files and babysitter path
 - a repo-local OpenClaw workspace plugin seam at `../.openclaw/extensions/forgeloop/` that talks to the same loopback service, uses `surface: "openclaw"` for manual runs, and can trigger managed workflow actions over that same control plane
 
-The next integration slice is still ahead of us: stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, richer workflow outcome/history projection, and broader workflow orchestration on top of the current OpenClaw/UI/service seams.
+The next integration slice is still ahead of us: stronger ownership semantics if worktree-aware claims ever land, native graph execution beyond the current external workflow runner path, and broader workflow orchestration on top of the current OpenClaw/UI/service seams.
 
 Still intentionally deferred:
 

@@ -26,8 +26,10 @@ defmodule ForgeloopV2.TestSupport do
         RepoPaths,
         RuntimeLifecycle,
         RuntimeStateStore,
+        RunSpec,
         Service,
         UIAssets,
+        WorkflowHistory,
         Workspace,
         Worktree
       }
@@ -165,10 +167,29 @@ defmodule ForgeloopV2.TestSupport do
     end
   end
 
+  def create_workflow_history!(config, workflow_name, entries) do
+    Enum.each(entries, fn attrs ->
+      action = attrs |> Keyword.fetch!(:action) |> normalize_workflow_action!()
+      {:ok, run_spec} = ForgeloopV2.RunSpec.workflow(action, workflow_name)
+
+      :ok =
+        ForgeloopV2.WorkflowHistory.record_terminal_outcome(config, run_spec,
+          attrs
+          |> Keyword.delete(:action)
+          |> Keyword.put_new(:run_id, ForgeloopV2.WorkflowHistory.generate_run_id(run_spec))
+          |> Keyword.put_new(:started_at, now!() |> DateTime.to_iso8601())
+          |> Keyword.put_new(:finished_at, now!() |> DateTime.to_iso8601())
+        )
+    end)
+  end
+
   def now! do
     DateTime.utc_now()
     |> DateTime.truncate(:second)
   end
+
+  defp normalize_workflow_action!(action) when action in [:preflight, :run], do: action
+  defp normalize_workflow_action!(action) when is_binary(action), do: String.to_existing_atom(action)
 
   defp do_wait_until(fun, deadline) do
     if fun.() do

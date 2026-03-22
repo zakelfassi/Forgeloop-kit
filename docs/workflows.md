@@ -56,7 +56,7 @@ Runner state is exposed through:
 
 That means repeated workflow failures still pause and escalate instead of spinning.
 
-Elixir now exposes a managed control + visibility seam over this lane: workflow `preflight` / `run` actions flow through the babysitter/worktree/runtime-state path, the loopback JSON service and HUD/OpenClaw seam publish the same active-run/read-side view, and the repo-local tracker projection can map workflow packs into `Tracker.Issue`-shaped entries without widening the workflow execution contract yet.
+Elixir now exposes a managed control + visibility seam over this lane: workflow `preflight` / `run` actions flow through the babysitter/worktree/runtime-state path, the loopback JSON service and HUD/OpenClaw seam publish the same active-run/read-side view, and the repo-local tracker projection can map workflow packs into `Tracker.Issue`-shaped entries without widening the workflow execution contract yet. The read side now includes canonical `last-preflight.txt` / `last-run.txt`, live `active-run.json`, and a bounded structured history sidecar at `.forgeloop/workflows/<name>/history.json` for recent terminal outcomes.
 
 ## Current limitations
 
@@ -68,7 +68,7 @@ This lane is intentionally narrow in the current slice:
 - the public daemon honors `[WORKFLOW]` only when the managed backend is active; `FORGELOOP_DAEMON_RUNTIME=bash` keeps the legacy daemon path that ignores it
 - it wraps a **configured workflow runner** rather than interpreting `workflow.dot` natively
 - concurrent use with build/tasks/daemon is unsupported in this slice
-- workflow status is currently limited to active-run metadata plus canonical `last-preflight.txt` / `last-run.txt` artifacts; richer outcome/history remains future work
+- workflow status now comes from canonical `last-preflight.txt` / `last-run.txt`, live `active-run.json`, and a bounded `.forgeloop/workflows/<name>/history.json` sidecar for recent terminal outcomes
 - `WORKFLOW.md` remains a separate prompt/config surface in Elixir and is **not** widened to absorb graph workflow manifests
 - future tracker/task/backlog projection must stay outside `WORKFLOW.md` service-owned keys
 
@@ -105,6 +105,6 @@ The workflow lane is an execution seam, not the endpoint.
 Planned future work includes:
 
 - broader workflow orchestration beyond the current one-shot Elixir-daemon `[WORKFLOW]` request
-- richer workflow outcome/history and checkpoint semantics on top of the current active-run + artifact view
+- broader workflow orchestration and checkpoint semantics on top of the current bounded history sidecar
 - OpenClaw monitoring/piloting of the loop and the babysitter beyond the current manual control surface
 - deciding whether native graph execution belongs inside Forgeloop or remains delegated to a workflow runner

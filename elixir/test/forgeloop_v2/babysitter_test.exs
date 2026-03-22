@@ -162,6 +162,55 @@ defmodule ForgeloopV2.BabysitterTest do
     wait_until(fn -> not Babysitter.snapshot(pid).running? end)
   end
 
+  test "workflow stop records a bounded stopped outcome with the managed run id" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+
+    runner_path =
+      write_executable!(Path.join(repo.repo_root, "bin/workflow-runner"), """
+      #!/usr/bin/env bash
+      set -euo pipefail
+      sleep 30
+      """)
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow stop fixture"])
+
+    config =
+      config_for!(repo.repo_root,
+        workflow_runner: runner_path,
+        shell_driver_enabled: false,
+        babysitter_shutdown_grace_ms: 50
+      )
+
+    {:ok, run_spec} = RunSpec.workflow(:run, "alpha")
+
+    {:ok, pid} =
+      Babysitter.start_link(
+        config: config,
+        run_spec: run_spec,
+        runtime_surface: "ui",
+        heartbeat_interval_ms: 25,
+        shutdown_grace_ms: 50,
+        name: nil
+      )
+
+    assert :ok = Babysitter.start_run(pid, run_id: "wf-alpha-stop-1", started_at: "2026-03-21T00:00:00Z")
+    wait_until(fn -> Babysitter.snapshot(pid).running? and File.exists?(Worktree.active_run_path(config)) end)
+
+    active_run = Worktree.active_run_path(config) |> File.read!() |> Jason.decode!()
+    assert active_run["run_id"] == "wf-alpha-stop-1"
+
+    assert :ok = Babysitter.stop_child(pid, :pause)
+    wait_until(fn -> not Babysitter.snapshot(pid).running? end)
+
+    assert {:ok, history} = WorkflowHistory.fetch(config, "alpha")
+    assert history.status == :available
+    assert history.latest.run_id == "wf-alpha-stop-1"
+    assert history.latest.outcome == :stopped
+    assert history.latest.runtime_surface == "ui"
+  end
+
   test "stale worktree cleanup runs before a fresh babysitter child starts" do
     repo = create_git_repo_fixture!()
     config = config_for!(repo.repo_root)

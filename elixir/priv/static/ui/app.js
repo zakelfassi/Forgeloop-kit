@@ -388,10 +388,27 @@ function renderWorkflows(workflowOverview) {
     const entry = workflow.entry || {};
     const preflight = workflow.preflight || {};
     const run = workflow.run || {};
+    const history = workflow.history || {};
+    const historyEntries = Array.isArray(history.entries) ? history.entries : [];
+    const latestOutcome = history.latest || null;
     const activeRun = workflow.active_run || null;
     const workflowName = entry.name || "workflow";
     const activeBadge = activeRun ? badge(`active ${activeRun.action || "run"}`, "warn") : "";
-    const latestLabel = workflow.latest_activity_kind ? `${workflow.latest_activity_kind} @ ${workflow.latest_activity_at || "unknown"}` : "no artifacts yet";
+    const latestLabel = latestOutcome
+      ? `${latestOutcome.action || "run"} ${latestOutcome.outcome || "unknown"} @ ${latestOutcome.finished_at || latestOutcome.started_at || "unknown"}`
+      : (workflow.latest_activity_kind ? `${workflow.latest_activity_kind} @ ${workflow.latest_activity_at || "unknown"}` : "no artifacts yet");
+    const historyStatus = history.status || "missing";
+    const historyBadge = latestOutcome
+      ? badge(`latest ${latestOutcome.outcome || "unknown"}`, workflowOutcomeBadgeClass(latestOutcome.outcome))
+      : badge(historyStatus === "error" ? "history error" : "no outcomes", historyStatus === "error" ? "bad" : "info");
+    const historyMeta = historyStatus === "error"
+      ? `<p class="subtle-copy">History error: ${escapeHtml(history.error || "unknown")}</p>`
+      : historyStatus === "missing"
+        ? `<p class="subtle-copy">No recorded workflow outcomes yet.</p>`
+        : `<p class="subtle-copy">Recent outcomes: ${escapeHtml(String(history.returned_count || 0))} shown / ${escapeHtml(String(history.retained_count || 0))} retained.</p>`;
+    const historyList = historyEntries.length
+      ? `<ul>${historyEntries.map((item) => `<li><code>${escapeHtml(item.action || "run")}</code> → <strong>${escapeHtml(item.outcome || "unknown")}</strong> @ ${escapeHtml(item.finished_at || item.started_at || "unknown")}${item.runtime_surface ? ` via <code>${escapeHtml(item.runtime_surface)}</code>` : ""}</li>`).join("")}</ul>`
+      : "";
 
     return `
       <article class="list-card workflow-card">
@@ -399,12 +416,15 @@ function renderWorkflows(workflowOverview) {
           ${badge(workflowName, "info")}
           ${badge(preflight.status || "missing", badgeClass(preflight.status || "missing"))}
           ${badge(run.status || "missing", badgeClass(run.status || "missing"))}
+          ${historyBadge}
           ${activeBadge}
         </div>
         <h3>${escapeHtml(workflowName)}</h3>
         <p>Graph: <code>${escapeHtml(entry.graph_file || "workflow.dot")}</code></p>
         <p>Latest activity: ${escapeHtml(latestLabel)}</p>
-        ${activeRun ? `<p>Active via <code>${escapeHtml(activeRun.runtime_surface || "unknown")}</code> on <code>${escapeHtml(activeRun.branch || "unknown")}</code>.</p>` : ""}
+        ${activeRun ? `<p>Active via <code>${escapeHtml(activeRun.runtime_surface || "unknown")}</code> on <code>${escapeHtml(activeRun.branch || "unknown")}</code>${activeRun.run_id ? ` (<code>${escapeHtml(activeRun.run_id)}</code>)` : ""}.</p>` : ""}
+        ${historyMeta}
+        ${historyList}
         <div class="control-buttons">
           ${controlButton("workflow-preflight", "Preflight", { disabled: running || isPending(`workflow:${workflowName}:preflight`), workflowName })}
           ${controlButton("workflow-run", "Run", { disabled: running || isPending(`workflow:${workflowName}:run`), workflowName })}
@@ -774,6 +794,13 @@ function badgeClass(kind) {
   if (["available", "pending", "answered", "resolved", "idle", "running", "completed"].includes(kind)) return "good";
   if (["awaiting-response", "awaiting_response", "awaiting-human", "awaiting_human", "auth_failed", "rate_limited", "paused", "recovered", "stopping"].includes(kind)) return "warn";
   if (["disabled", "blocked", "spin", "failed", "error"].includes(kind)) return "bad";
+  return "info";
+}
+
+function workflowOutcomeBadgeClass(outcome) {
+  if (outcome === "succeeded") return "good";
+  if (["failed", "escalated", "start_failed"].includes(outcome)) return "bad";
+  if (outcome === "stopped") return "warn";
   return "info";
 }
 

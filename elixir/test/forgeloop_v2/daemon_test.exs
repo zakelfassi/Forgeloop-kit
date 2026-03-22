@@ -362,6 +362,10 @@ defmodule ForgeloopV2.DaemonTest do
     assert [_evidence_file] =
              Path.wildcard(Path.join([config.v2_state_dir, "babysitter", "daemon-workflow-*-start-error-last.txt"]))
 
+    assert {:ok, history} = WorkflowHistory.fetch(config, "alpha")
+    assert history.latest.outcome == :start_failed
+    assert history.latest.runtime_status == "awaiting-human"
+
     assert match?({:stopped, {:escalated, 1}}, Daemon.snapshot(pid).last_result)
   end
 

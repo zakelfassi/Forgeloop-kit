@@ -26,6 +26,7 @@ defmodule ForgeloopV2.WorkflowService.ActiveRun do
   @moduledoc false
 
   defstruct [
+    :run_id,
     :workflow_name,
     :action,
     :mode,
@@ -37,6 +38,7 @@ defmodule ForgeloopV2.WorkflowService.ActiveRun do
   ]
 
   @type t :: %__MODULE__{
+          run_id: String.t() | nil,
           workflow_name: String.t(),
           action: :preflight | :run,
           mode: String.t(),
@@ -52,12 +54,14 @@ defmodule ForgeloopV2.WorkflowService.WorkflowSummary do
   @moduledoc false
 
   alias ForgeloopV2.WorkflowCatalog.Entry
+  alias ForgeloopV2.WorkflowHistory
   alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun}
 
   defstruct [
     :entry,
     :preflight,
     :run,
+    :history,
     :active_run,
     :latest_activity_kind,
     :latest_activity_at
@@ -67,6 +71,7 @@ defmodule ForgeloopV2.WorkflowService.WorkflowSummary do
           entry: Entry.t(),
           preflight: ActionSnapshot.t(),
           run: ActionSnapshot.t(),
+          history: WorkflowHistory.Snapshot.t(),
           active_run: ActiveRun.t() | nil,
           latest_activity_kind: :preflight | :run | nil,
           latest_activity_at: String.t() | nil
@@ -90,7 +95,7 @@ end
 defmodule ForgeloopV2.WorkflowService do
   @moduledoc false
 
-  alias ForgeloopV2.{Config, PathPolicy, RuntimeState, RuntimeStateStore, WorkflowCatalog, Worktree}
+  alias ForgeloopV2.{Config, PathPolicy, RuntimeState, RuntimeStateStore, WorkflowCatalog, WorkflowHistory, Worktree}
   alias ForgeloopV2.WorkflowCatalog.Entry
   alias ForgeloopV2.WorkflowService.{ActionSnapshot, ActiveRun, Overview, WorkflowSummary}
 
@@ -127,12 +132,19 @@ defmodule ForgeloopV2.WorkflowService do
   defp workflow_summary(%Config{} = config, %Entry{} = entry, active_run, opts) do
     preflight = action_snapshot(config, entry, :preflight, opts)
     run = action_snapshot(config, entry, :run, opts)
-    {latest_activity_kind, latest_activity_at} = latest_activity(preflight, run)
+    history =
+      case WorkflowHistory.fetch(config, entry.name, limit: Keyword.get(opts, :history_limit, 5)) do
+        {:ok, snapshot} -> snapshot
+        {:error, reason} -> %WorkflowHistory.Snapshot{status: :error, entries: [], returned_count: 0, retained_count: 0, has_more?: false, counts: %{total: 0, succeeded: 0, failed: 0, escalated: 0, stopped: 0, start_failed: 0}, latest: nil, latest_by_action: %{preflight: nil, run: nil}, error: reason}
+      end
+
+    {latest_activity_kind, latest_activity_at} = latest_activity(preflight, run, history)
 
     %WorkflowSummary{
       entry: entry,
       preflight: preflight,
       run: run,
+      history: history,
       active_run: matching_active_run(active_run, entry.name),
       latest_activity_kind: latest_activity_kind,
       latest_activity_at: latest_activity_at
@@ -195,7 +207,17 @@ defmodule ForgeloopV2.WorkflowService do
     end
   end
 
-  defp latest_activity(%ActionSnapshot{} = preflight, %ActionSnapshot{} = run) do
+  defp latest_activity(%ActionSnapshot{} = preflight, %ActionSnapshot{} = run, history) do
+    case history && history.latest do
+      %{action: action} = latest when action in [:preflight, :run] ->
+        {action, latest.finished_at || latest.started_at}
+
+      _ ->
+        latest_activity_from_artifacts(preflight, run)
+    end
+  end
+
+  defp latest_activity_from_artifacts(%ActionSnapshot{} = preflight, %ActionSnapshot{} = run) do
     preflight_at = preflight.updated_at
     run_at = run.updated_at
 
@@ -225,6 +247,7 @@ defmodule ForgeloopV2.WorkflowService do
          true <- lane in [nil, "workflow"],
          {:ok, action} <- action_from_payload(Map.get(payload, "action"), mode) do
       %ActiveRun{
+        run_id: Map.get(payload, "run_id"),
         workflow_name: workflow_name,
         action: action,
         mode: mode,

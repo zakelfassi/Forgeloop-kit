@@ -331,6 +331,7 @@ defmodule ForgeloopV2.Loop do
     RuntimeRecovery,
     RuntimeState,
     RuntimeStateStore,
+    WorkflowHistory,
     Workspace
   }
 
@@ -351,6 +352,8 @@ defmodule ForgeloopV2.Loop do
       requested_action =
         Keyword.get(opts, :requested_action, RunSpec.requested_action(run_spec, config.failure_escalation_action))
       branch = Keyword.get(opts, :branch, config.default_branch)
+      run_id = Keyword.get(opts, :run_id)
+      started_at = Keyword.get(opts, :started_at)
       prior_status = RuntimeStateStore.status(config)
       unanswered_question_ids = ControlFiles.unanswered_question_ids(config)
       writer = writer_for(surface)
@@ -395,10 +398,36 @@ defmodule ForgeloopV2.Loop do
                 branch: branch
               })
 
+            _ =
+              maybe_record_workflow_terminal_outcome(config, run_spec, run_id,
+                outcome: :succeeded,
+                runtime_surface: surface,
+                branch: branch,
+                started_at: started_at,
+                finished_at: iso_now(),
+                summary: completed_reason(run_spec),
+                requested_action: "",
+                runtime_status: RuntimeStateStore.status(config)
+              )
+
             {:ok, Map.merge(payload, Workspace.metadata(workspace))}
 
           {:error, %{kind: kind, summary: summary, evidence_file: evidence_file}} ->
             if already_escalated?(config) do
+              _ =
+                maybe_record_workflow_terminal_outcome(config, run_spec, run_id,
+                  outcome: :escalated,
+                  runtime_surface: surface,
+                  branch: branch,
+                  started_at: started_at,
+                  finished_at: iso_now(),
+                  summary: summary,
+                  requested_action: requested_action,
+                  runtime_status: RuntimeStateStore.status(config),
+                  failure_kind: kind,
+                  error: summary
+                )
+
               {:stopped, :already_escalated}
             else
               case FailureTracker.handle(config, %{
@@ -410,8 +439,40 @@ defmodule ForgeloopV2.Loop do
                      mode: runtime_mode,
                      branch: branch
                    }) do
-                {:retry, count} -> {:retry, count}
-                {:stop, count} -> {:stopped, {:escalated, count}}
+                {:retry, count} ->
+                  _ =
+                    maybe_record_workflow_terminal_outcome(config, run_spec, run_id,
+                      outcome: :failed,
+                      runtime_surface: surface,
+                      branch: branch,
+                      started_at: started_at,
+                      finished_at: iso_now(),
+                      summary: summary,
+                      requested_action: requested_action,
+                      runtime_status: RuntimeStateStore.status(config),
+                      failure_kind: kind,
+                      error: summary
+                    )
+
+                  {:retry, count}
+
+                {:stop, count} ->
+                  _ =
+                    maybe_record_workflow_terminal_outcome(config, run_spec, run_id,
+                      outcome: :escalated,
+                      runtime_surface: surface,
+                      branch: branch,
+                      started_at: started_at,
+                      finished_at: iso_now(),
+                      summary: summary,
+                      requested_action: requested_action,
+                      runtime_status: RuntimeStateStore.status(config),
+                      failure_kind: kind,
+                      error: summary
+                    )
+
+                  {:stopped, {:escalated, count}}
+
                 {:error, reason} -> {:error, reason}
               end
             end
@@ -486,6 +547,24 @@ defmodule ForgeloopV2.Loop do
   defp writer_for("daemon"), do: :daemon
   defp writer_for("babysitter"), do: :babysitter
   defp writer_for(_surface), do: :loop
+
+  defp maybe_record_workflow_terminal_outcome(
+         %Config{} = config,
+         %RunSpec{lane: :workflow} = run_spec,
+         run_id,
+         attrs
+       )
+       when is_binary(run_id) and is_list(attrs) do
+    WorkflowHistory.record_terminal_outcome(config, run_spec, Keyword.put(attrs, :run_id, run_id))
+  end
+
+  defp maybe_record_workflow_terminal_outcome(_config, _run_spec, _run_id, _attrs), do: :ok
+
+  defp iso_now do
+    DateTime.utc_now()
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601()
+  end
 end
 
 defmodule ForgeloopV2.Daemon.State do
@@ -525,6 +604,7 @@ defmodule ForgeloopV2.Daemon do
     DaemonStateStore,
     RuntimeLifecycle,
     RuntimeStateStore,
+    WorkflowHistory,
     Worktree
   }
 
@@ -764,19 +844,21 @@ defmodule ForgeloopV2.Daemon do
   end
 
   defp run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag) do
+    start_meta = workflow_start_meta(run_spec)
+
     case ensure_managed_run_available(state.config) do
       :ok ->
-        do_run_managed_via_babysitter(state, run_spec, consume_flag)
+        do_run_managed_via_babysitter(state, run_spec, consume_flag, start_meta)
 
       {:error, {:managed_run_active, payload}} ->
         {:stopped, {:managed_run_active, payload}}
 
       {:error, reason} ->
-        normalize_managed_start_failure(state.config, run_spec, reason)
+        normalize_managed_start_failure(state.config, run_spec, reason, start_meta)
     end
   end
 
-  defp do_run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag) do
+  defp do_run_managed_via_babysitter(%State{} = state, %RunSpec{} = run_spec, consume_flag, start_meta) do
     try do
       case Babysitter.start_link(
              config: state.config,
@@ -788,30 +870,30 @@ defmodule ForgeloopV2.Daemon do
              name: nil
            ) do
         {:ok, pid} ->
-          case Babysitter.start_run(pid) do
+          case Babysitter.start_run(pid, start_run_meta(start_meta)) do
             :ok ->
               case maybe_consume_flag_after_start(state.config, consume_flag) do
                 :ok ->
                   case Babysitter.await_result(pid, stop?: true) do
-                    {:error, :babysitter_exited} = error -> normalize_managed_start_failure(state.config, run_spec, error)
+                    {:error, :babysitter_exited} = error -> normalize_managed_start_failure(state.config, run_spec, error, start_meta)
                     result -> result
                   end
 
                 {:error, reason} ->
                   _ = stop_babysitter(pid)
-                  normalize_managed_start_failure(state.config, run_spec, reason)
+                  normalize_managed_start_failure(state.config, run_spec, reason, start_meta)
               end
 
             {:error, reason} ->
               stop_babysitter(pid)
-              normalize_managed_start_failure(state.config, run_spec, reason)
+              normalize_managed_start_failure(state.config, run_spec, reason, start_meta)
           end
 
         {:error, reason} ->
-          normalize_managed_start_failure(state.config, run_spec, reason)
+          normalize_managed_start_failure(state.config, run_spec, reason, start_meta)
       end
     catch
-      :exit, reason -> normalize_managed_start_failure(state.config, run_spec, {:babysitter_exit, reason})
+      :exit, reason -> normalize_managed_start_failure(state.config, run_spec, {:babysitter_exit, reason}, start_meta)
     end
   end
 
@@ -827,7 +909,7 @@ defmodule ForgeloopV2.Daemon do
   defp maybe_consume_flag_after_start(_config, nil), do: :ok
   defp maybe_consume_flag_after_start(config, flag), do: ControlFiles.consume_flag(config, flag)
 
-  defp normalize_managed_start_failure(config, run_descriptor, reason) do
+  defp normalize_managed_start_failure(config, run_descriptor, reason, start_meta \\ []) do
     summary = managed_start_failure_summary(run_descriptor, reason)
     evidence_file = write_managed_start_error(config, run_descriptor, summary, reason)
     runtime_mode = managed_runtime_mode(run_descriptor)
@@ -841,11 +923,60 @@ defmodule ForgeloopV2.Daemon do
            mode: runtime_mode,
            branch: config.default_branch
          }) do
-      {:retry, count} -> {:retry, count}
-      {:stop, count} -> {:stopped, {:escalated, count}}
-      {:error, failure_reason} -> {:error, failure_reason}
+      {:retry, count} ->
+        _ = maybe_record_workflow_start_failure(config, run_descriptor, start_meta, summary, reason, RuntimeStateStore.status(config))
+        {:retry, count}
+
+      {:stop, count} ->
+        _ = maybe_record_workflow_start_failure(config, run_descriptor, start_meta, summary, reason, RuntimeStateStore.status(config))
+        {:stopped, {:escalated, count}}
+
+      {:error, failure_reason} ->
+        _ = maybe_record_workflow_start_failure(config, run_descriptor, start_meta, summary, reason, nil)
+        {:error, failure_reason}
     end
   end
+
+  defp workflow_start_meta(%RunSpec{lane: :workflow} = run_spec) do
+    [run_id: WorkflowHistory.generate_run_id(run_spec), started_at: daemon_iso_now()]
+  end
+
+  defp workflow_start_meta(_run_spec), do: []
+
+  defp start_run_meta([]), do: []
+  defp start_run_meta(meta), do: meta
+
+  defp maybe_record_workflow_start_failure(
+         %Config{} = config,
+         %RunSpec{lane: :workflow} = run_spec,
+         start_meta,
+         summary,
+         reason,
+         runtime_status
+       )
+       when is_list(start_meta) do
+    run_id = Keyword.get(start_meta, :run_id)
+
+    if is_binary(run_id) do
+      WorkflowHistory.record_terminal_outcome(config, run_spec,
+        run_id: run_id,
+        outcome: :start_failed,
+        runtime_surface: "daemon",
+        branch: config.default_branch,
+        started_at: Keyword.get(start_meta, :started_at),
+        finished_at: daemon_iso_now(),
+        summary: summary,
+        requested_action: RunSpec.requested_action(run_spec, config.failure_escalation_action),
+        runtime_status: runtime_status,
+        failure_kind: managed_runtime_mode(run_spec),
+        error: reason
+      )
+    else
+      :ok
+    end
+  end
+
+  defp maybe_record_workflow_start_failure(_config, _run_descriptor, _start_meta, _summary, _reason, _runtime_status), do: :ok
 
   defp managed_start_failure_summary(%RunSpec{} = run_spec, reason),
     do:
@@ -1350,13 +1481,18 @@ defmodule ForgeloopV2.Daemon do
   defp sanitize_file_segment(value, fallback) do
     value
     |> to_string()
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9_-]+/, "-")
+    |> String.replace(~r/[^a-zA-Z0-9_-]+/, "-")
     |> String.trim("-")
     |> case do
       "" -> fallback
-      sanitized -> sanitized
+      cleaned -> cleaned
     end
+  end
+
+  defp daemon_iso_now do
+    DateTime.utc_now()
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601()
   end
 
   defp driver_for_run_spec(ForgeloopV2.WorkDrivers.Noop, %RunSpec{lane: :workflow}),

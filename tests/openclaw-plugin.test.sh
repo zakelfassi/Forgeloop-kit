@@ -69,7 +69,7 @@ globalThis.fetch = async (url, options = {}) => {
         questions: [{ id: "Q-1", status_kind: "awaiting_response" }],
         escalations: [{ id: "E-1" }],
         events: [{ event_type: "daemon_tick" }],
-        workflows: { workflows: [{ entry: { name: "alpha" }, active_run: { workflow_name: "alpha", action: "run" } }] },
+        workflows: { workflows: [{ entry: { name: "alpha" }, active_run: { workflow_name: "alpha", action: "run" }, history: { latest: { action: "run", outcome: "failed", finished_at: "2026-03-21T00:00:02Z" } } }] },
         babysitter: { "running?": false }
       }
     });
@@ -102,7 +102,8 @@ const overviewResult = await overviewTool.execute("1", { limit: 9 });
 assert.match(overviewResult.content[0].text, /Runtime: running \/ build via ui on main/);
 assert.match(overviewResult.content[0].text, /Backlog: 1 pending items from IMPLEMENTATION_PLAN\.md/);
 assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local issues/);
-assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active\)/);
+assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active, failed=1, escalated=0, start_failed=0\)/);
+assert.match(overviewResult.content[0].text, /Workflow alpha: run failed @ 2026-03-21T00:00:02Z/);
 
 const controlResult = await controlTool.execute("2", { action: "build" });
 assert.match(controlResult.content[0].text, /surface\": \"openclaw\"/);

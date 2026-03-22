@@ -37,6 +37,11 @@ function buildOverviewTool(api) {
       const events = Array.isArray(data.events) ? data.events : [];
       const workflows = data.workflows?.workflows || [];
       const activeWorkflowCount = workflows.filter((workflow) => workflow.active_run).length;
+      const workflowOutcomeCounts = workflows.reduce((acc, workflow) => {
+        const outcome = workflow.history?.latest?.outcome;
+        if (outcome) acc[outcome] = (acc[outcome] || 0) + 1;
+        return acc;
+      }, {});
       const babysitter = data.babysitter || {};
       const flags = data.control_flags || {};
       const workflowTarget = flags.workflow_target || {};
@@ -57,7 +62,14 @@ function buildOverviewTool(api) {
         `Escalations: ${escalations.length}`,
         `Tracker: ${trackerIssues.length} projected repo-local issues`,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
-        `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active)`,
+        `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active, failed=${workflowOutcomeCounts.failed || 0}, escalated=${workflowOutcomeCounts.escalated || 0}, start_failed=${workflowOutcomeCounts.start_failed || 0})`,
+        ...workflows.map((workflow) => {
+          const latest = workflow.history?.latest;
+          const latestText = latest
+            ? `${latest.action || "run"} ${latest.outcome || "unknown"} @ ${latest.finished_at || latest.started_at || "unknown"}`
+            : (workflow.latest_activity_kind ? `${workflow.latest_activity_kind} @ ${workflow.latest_activity_at || "unknown"}` : "no activity yet");
+          return `Workflow ${workflow.entry?.name || "workflow"}: ${latestText}`;
+        }),
         `Recent events: ${events.length}`,
         "",
         JSON.stringify(data, null, 2),

@@ -16,6 +16,8 @@ defmodule ForgeloopV2.WorkflowServiceTest do
       assert summary.run.status == :missing
       assert summary.preflight.output == nil
       assert summary.run.output == nil
+      assert summary.history.status == :missing
+      assert summary.history.entries == []
       assert summary.latest_activity_kind == nil
       assert summary.latest_activity_at == nil
     end)
@@ -35,6 +37,11 @@ defmodule ForgeloopV2.WorkflowServiceTest do
     Process.sleep(1_100)
     File.write!(run_path, "run ok\n")
 
+    create_workflow_history!(config, "alpha", [
+      [action: :preflight, outcome: :succeeded, runtime_surface: "workflow", summary: "preflight ok"],
+      [action: :run, outcome: :succeeded, runtime_surface: "workflow", summary: "run ok"]
+    ])
+
     assert {:ok, summary} = WorkflowService.fetch(config, "alpha")
     assert summary.preflight.status == :available
     assert summary.run.status == :available
@@ -44,12 +51,17 @@ defmodule ForgeloopV2.WorkflowServiceTest do
     assert is_binary(summary.run.updated_at)
     assert summary.preflight.output == nil
     assert summary.run.output == nil
+    assert summary.history.status == :available
+    assert summary.history.returned_count == 2
+    assert summary.history.latest.outcome == :succeeded
+    assert summary.history.latest.action == :run
     assert summary.latest_activity_kind == :run
-    assert summary.latest_activity_at == summary.run.updated_at
+    assert is_binary(summary.latest_activity_at)
 
     assert {:ok, detailed} = WorkflowService.fetch(config, "alpha", include_output?: true)
     assert detailed.preflight.output == "preflight ok\n"
     assert detailed.run.output == "run ok\n"
+    assert Enum.count(detailed.history.entries) == 2
   end
 
   test "overview exposes workflow runtime state by workflow mode even when launched from another surface" do
@@ -100,6 +112,7 @@ defmodule ForgeloopV2.WorkflowServiceTest do
         "lane" => "workflow",
         "action" => "run",
         "mode" => "workflow-run",
+        "run_id" => "wf-alpha-run-1",
         "workflow_name" => "alpha",
         "runtime_surface" => "openclaw",
         "branch" => "main",
@@ -112,8 +125,26 @@ defmodule ForgeloopV2.WorkflowServiceTest do
     assert {:ok, overview} = WorkflowService.overview(config)
     [alpha, zeta] = overview.workflows
     assert alpha.entry.name == "alpha"
-    assert %ForgeloopV2.WorkflowService.ActiveRun{workflow_name: "alpha", action: :run, runtime_surface: "openclaw"} = alpha.active_run
+    assert %ForgeloopV2.WorkflowService.ActiveRun{run_id: "wf-alpha-run-1", workflow_name: "alpha", action: :run, runtime_surface: "openclaw"} = alpha.active_run
     assert zeta.active_run == nil
+  end
+
+  test "latest activity falls back to history when start failures have no output artifact" do
+    repo = create_repo_fixture!()
+    create_workflow_package!(repo.repo_root, "alpha")
+    config = config_for!(repo.repo_root)
+
+    create_workflow_history!(config, "alpha", [
+      [action: :run, outcome: :start_failed, runtime_surface: "daemon", summary: "start failed"]
+    ])
+
+    assert {:ok, summary} = WorkflowService.fetch(config, "alpha")
+    assert summary.preflight.status == :missing
+    assert summary.run.status == :missing
+    assert summary.history.status == :available
+    assert summary.history.latest.outcome == :start_failed
+    assert summary.latest_activity_kind == :run
+    assert summary.latest_activity_at == summary.history.latest.finished_at
   end
 
   test "fetch propagates invalid workflow names and missing workflows" do
@@ -161,8 +192,10 @@ defmodule ForgeloopV2.WorkflowServiceTest do
     assert {:ok, summary} = WorkflowService.fetch(config, "alpha")
     assert summary.preflight.status == :error
     assert summary.run.status == :error
+    assert summary.history.status == :error
     assert match?({:path_resolves_outside_allowed_root, _, _}, summary.preflight.error)
     assert match?({:path_resolves_outside_allowed_root, _, _}, summary.run.error)
+    assert match?({:path_resolves_outside_allowed_root, _, _}, summary.history.error)
 
     assert {:ok, overview} = WorkflowService.overview(config)
     [alpha] = overview.workflows

@@ -112,6 +112,8 @@ assert_file_contains "$record_file" "surface=workflow"
 assert_file_contains "$record_file" "runtime_mode=workflow-preflight"
 assert_file_contains "$record_file" "/.forgeloop-test/v2/workspaces/"
 assert_file_contains "$tmp_repo/.forgeloop-test/workflows/alpha/last-preflight.txt" "ok:preflight:alpha"
+assert_file_contains "$tmp_repo/.forgeloop-test/workflows/alpha/history.json" '"outcome": "succeeded"'
+assert_file_contains "$tmp_repo/.forgeloop-test/workflows/alpha/history.json" '"action": "preflight"'
 
 python3 - <<'PY' "$tmp_repo/.forgeloop-test/runtime-state.json"
 import json, sys
@@ -130,6 +132,8 @@ assert_file_contains "$record_file" "mode=run workflow=zeta"
 assert_file_contains "$record_file" "surface=workflow"
 assert_file_contains "$record_file" "runtime_mode=workflow-run"
 assert_file_contains "$record_file" "extra=--no-retro"
+assert_file_contains "$tmp_repo/.forgeloop-test/workflows/zeta/history.json" '"outcome": "succeeded"'
+assert_file_contains "$tmp_repo/.forgeloop-test/workflows/zeta/history.json" '"action": "run"'
 
 set +e
 (cd "$tmp_repo" && ./forgeloop.sh workflow run failing) >/tmp/forgeloop-workflow-fail.out 2>&1
@@ -143,6 +147,7 @@ fi
 assert_file_contains "$tmp_repo/REQUESTS.md" "[PAUSE]"
 assert_file_contains "$tmp_repo/QUESTIONS.md" "workflow-run"
 assert_file_contains "$tmp_repo/ESCALATIONS.md" "workflow-run"
+assert_file_contains "$tmp_repo/.forgeloop-test/workflows/failing/history.json" '"outcome": "escalated"'
 
 python3 - <<'PY' "$tmp_repo/.forgeloop-test/runtime-state.json"
 import json, sys
@@ -180,5 +185,9 @@ cmp -s "$tmp_repo/ESCALATIONS.md" "$tmp_repo/ESCALATIONS.before-invalid" || {
   echo "FAIL: invalid workflow name should not mutate ESCALATIONS.md" >&2
   exit 1
 }
+if [[ -e "$tmp_repo/.forgeloop-test/workflows/../escape/history.json" ]]; then
+  echo "FAIL: invalid workflow name should not create workflow history" >&2
+  exit 1
+fi
 
 echo "ok: workflow lane"
