@@ -16,7 +16,7 @@ If you want the conservative choice for an active project today, pin to `v1.0.0`
 - **Branch:** `main`
 - **Status:** **v2 alpha / development track**
 - **Runtime posture:** additive Elixir + bash coexistence work
-- **Best for:** contributors, evaluators, and teams explicitly trying the loopback service, HUD, OpenClaw seam, managed daemon path, and experimental workflow-pack lane
+- **Best for:** contributors, evaluators, and teams explicitly trying the loopback service, HUD, OpenClaw seam, managed daemon path, experimental workflow-pack lane, and the current v2 alpha product/visual system
 
 `main` is **not** the stable track yet.
 
@@ -43,6 +43,7 @@ Choose **`v1.0.0`** if you want:
 Choose **`main`** if you want to evaluate or contribute to:
 
 - the Elixir control-plane service and operator HUD
+- the current v2 alpha landing-page/HUD visual system documented in `design.md`
 - managed babysitter/worktree execution
 - explicit ownership/start-gate visibility across the service, HUD, and OpenClaw seam
 - the manual `./forgeloop.sh self-host-proof` release proof for the real HUD/service path
@@ -76,6 +77,7 @@ FORGELOOP_DAEMON_RUNTIME=bash ./forgeloop.sh daemon 300
 
 ## Read next
 
+- `../design.md`
 - `docs/runtime-control.md`
 - `docs/v2-roadmap.md`
 - `docs/elixir-parity-matrix.md`

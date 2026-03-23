@@ -17,6 +17,8 @@ It gives you four things that matter in practice:
 
 Everything else in the kit—skills, knowledge capture, kickoff prompts, task lanes, log ingestion, runner provisioning—compounds on top of that control plane.
 
+On `main` / the v2 alpha track, the landing page and operator HUD are now also treated as product surfaces, not just helper UI. The current visual brief for those surfaces lives in `design.md`.
+
 ## The core promise
 
 Most coding-agent demos show the happy path.
@@ -122,6 +124,7 @@ It is intentionally small and additive in this slice:
 - the loopback service now publishes a versioned contract descriptor at `/api/schema`, and JSON/SSE envelopes carry additive top-level `api` metadata so the HUD and OpenClaw can follow one service-owned schema
 - `/api/overview` now also exposes a service-owned additive `ownership` read model that makes live conflicts, reclaimable claims, stale active-run cleanup, and fail-closed ownership errors explicit instead of leaving clients to infer them from scattered raw fields
 - start-route 409/500 responses now keep their existing reason codes while also returning additive `error.ownership` context so blocked manual starts stay operator-readable in both the HUD and OpenClaw
+- the current v2 alpha visual direction for the landing page and HUD is documented in `design.md`, so the launch story and operator surface evolve together instead of drifting independently
 
 If you run OpenClaw beside Forgeloop on the same host/VM, the repo now also ships a workspace plugin seam at `.openclaw/extensions/forgeloop/`. Start the service first, then let OpenClaw monitor/pilot the same loopback control plane through the shared coordination read model instead of bypassing it. See `docs/openclaw.md`.
 
@@ -192,7 +195,7 @@ The operator contract is documented in:
 
 If you want the stable public release, pin to `v1.0.0`. If you want the current Elixir service/HUD/OpenClaw/managed-daemon work, use `main` as the **v2 alpha / development track**.
 
-Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track.
+Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track. If you are iterating on the v2 alpha launch story or public/operator visuals, read `design.md` too.
 
 Typical stable → main evaluation path inside an installed repo:
 

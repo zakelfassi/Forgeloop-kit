@@ -30,6 +30,7 @@ Read in this order before changing behavior:
 - `elixir/` — managed daemon, babysitter, loopback service, and UI foundation
 - `templates/` — files installed into target repos; do not confuse these with this repo's own root docs
 - `docs/` — authoritative long-form operator and architecture contracts
+- `design.md` — current visual brief for the landing page and operator HUD on the v2 alpha track
 - `tests/` — shell regression suite
 - `evals/` — public safe-autonomy proof harness
 - `.openclaw/` — OpenClaw integration seam
@@ -46,6 +47,7 @@ Read in this order before changing behavior:
 - Preserve the file-first control plane: `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` are part of the product surface.
 - Prefer repo-local knowledge over hidden context: if an agent needs it repeatedly, encode it in the repository.
 - Reduce entropy when you touch a surface: collapse stale docs, dead prompts, and drift rather than adding more parallel guidance.
+- If you change the landing page or operator HUD direction, update `design.md` in the same slice.
 
 ## Validation
 
