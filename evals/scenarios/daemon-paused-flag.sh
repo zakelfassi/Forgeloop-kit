@@ -50,7 +50,7 @@ PY
 (
   cd "$tmp_repo"
   PATH="$shim_dir:$PATH" \
-  FORGELOOP_DAEMON_RUNTIME=elixir \
+  FORGELOOP_DAEMON_RUNTIME="${FORGELOOP_DAEMON_RUNTIME:-bash}" \
   FORGELOOP_RUNTIME_DIR="$tmp_repo/.forgeloop-test" \
   FORGELOOP_DAEMON_LOCK_FILE="$tmp_repo/.forgeloop-test/daemon.lock" \
   ./forgeloop.sh daemon 1
