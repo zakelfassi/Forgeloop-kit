@@ -3,61 +3,88 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Forgeloop Operator UI</title>
+    <title>Forgeloop Operator HUD</title>
     <meta
       name="description"
-      content="Loopback-only operator UI for Forgeloop’s file-first control plane."
+      content="Loopback-only RPG control room for Forgeloop’s file-first operator surface."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
     />
     <link rel="stylesheet" href="/assets/app.css" />
   </head>
   <body>
-    <div class="grain"></div>
+    <div class="noise"></div>
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="orb orb-c"></div>
+
     <main class="shell">
       <header class="hero panel">
-        <div>
-          <p class="eyebrow">Forgeloop // Operator HUD</p>
-          <h1>Self-hosting control room</h1>
+        <div class="hero-copy">
+          <p class="eyebrow">Forgeloop // Operator questboard</p>
+          <h1>RPG control room for safe autonomous software work</h1>
           <p class="lead">
-            Loopback-only, file-first, and now interactive. The UI can steer the control plane, but the repo-local files and runtime artifacts still remain authoritative.
+            This is the live operator surface for Forgeloop’s file-first control plane. Make the state legible, keep the actions bounded, and leave the canonical repo-local artifacts in charge.
           </p>
-        </div>
-        <div class="hero-meta">
-          <div class="status-pill" id="connection-pill" data-state="loading">Booting…</div>
-          <div class="status-lines">
-            <span id="runtime-brief">No runtime state yet</span>
-            <span id="canonical-brief">Canonical files remain authoritative.</span>
+          <div class="hero-chips" aria-label="HUD themes">
+            <span class="hero-chip">ownership-aware</span>
+            <span class="hero-chip">fail-closed</span>
+            <span class="hero-chip">replayable events</span>
+            <span class="hero-chip">manual-first</span>
           </div>
         </div>
+
+        <aside class="hero-meta">
+          <div class="status-pill" id="connection-pill" data-state="loading">Booting…</div>
+          <div class="status-lines">
+            <span class="status-label">runtime signal</span>
+            <span id="runtime-brief">No runtime state yet</span>
+            <span class="status-label">canonical rule</span>
+            <span id="canonical-brief">Canonical files remain authoritative.</span>
+          </div>
+          <div class="mission-card">
+            <h2>Primary objective</h2>
+            <p>See what is happening, decide if intervention is safe, then move exactly one lever with evidence.</p>
+          </div>
+        </aside>
       </header>
 
       <section class="command-deck panel">
         <div>
-          <h2>Quick launch</h2>
-          <p>One command brings up the loopback service and this HUD.</p>
+          <p class="eyebrow small">Launch path</p>
+          <h2>Boot the loopback service</h2>
+          <p class="subtle-copy">One command brings up the real service and this HUD. The vivid skin is new; the file-first truth remains the same.</p>
         </div>
         <div class="command-card">
           <code>./forgeloop.sh serve</code>
-          <span>Fallback: <code>cd elixir &amp;&amp; mix forgeloop_v2.serve --repo ..</code></span>
+          <span>Inside the Forgeloop repo itself: <code>cd elixir &amp;&amp; mix forgeloop_v2.serve --repo ..</code></span>
         </div>
       </section>
 
       <section class="controls-panel panel">
         <div class="panel-head">
           <div>
-            <h2>Operator controls</h2>
-            <p class="subtle-copy">Pause, clear pause, request replan, or launch a one-off plan/build run without leaving the loopback HUD.</p>
+            <h2>Action deck</h2>
+            <p class="subtle-copy">Pause, clear pause, request replan, answer questions, or start bounded one-off work without leaving the control room.</p>
           </div>
-          <span class="panel-tag">controls</span>
+          <span class="panel-tag">actions</span>
         </div>
         <div id="control-status" class="notice info">Loading operator controls…</div>
         <div id="controls-body" class="stack empty">Waiting for control snapshot…</div>
       </section>
 
-      <section class="grid">
+      <section class="priority-grid">
         <article class="panel runtime-panel" id="runtime-panel">
           <div class="panel-head">
-            <h2>Runtime</h2>
-            <span class="panel-tag">state</span>
+            <div>
+              <h2>Runtime</h2>
+              <p class="subtle-copy">Current loop state, transition, lane, babysitter, and bounded operator run context.</p>
+            </div>
+            <span class="panel-tag">live</span>
           </div>
           <div id="runtime-body" class="stack empty">Waiting for runtime snapshot…</div>
         </article>
@@ -66,72 +93,98 @@
           <div class="panel-head">
             <div>
               <h2>Ownership / start gate</h2>
-              <p class="subtle-copy">Service-owned view of live conflicts, reclaimable claims, stale run metadata, and fail-closed ownership errors.</p>
+              <p class="subtle-copy">Conflict, reclaimability, stale metadata, and start-safe truth from the service-owned read model.</p>
             </div>
-            <span class="panel-tag">managed</span>
+            <span class="panel-tag">gate</span>
           </div>
           <div id="ownership-body" class="stack empty">Waiting for ownership snapshot…</div>
         </article>
 
         <article class="panel provider-panel" id="provider-panel">
           <div class="panel-head">
-            <h2>Provider health</h2>
+            <div>
+              <h2>Provider health</h2>
+              <p class="subtle-copy">Routing, auth condition, and failover posture across the active provider surface.</p>
+            </div>
             <span class="panel-tag">routing</span>
           </div>
           <div id="provider-body" class="stack empty">No provider state yet.</div>
         </article>
+      </section>
 
-        <article class="panel backlog-panel">
-          <div class="panel-head">
-            <h2>Canonical backlog</h2>
-            <span class="panel-tag">phase1</span>
-          </div>
-          <div id="backlog-body" class="stack empty">Waiting for canonical backlog snapshot…</div>
-        </article>
-
+      <section class="mission-grid">
         <article class="panel coordination-panel">
           <div class="panel-head">
-            <h2>Coordination</h2>
-            <span class="panel-tag">shared</span>
+            <div>
+              <h2>Coordination brief</h2>
+              <p class="subtle-copy">Shared operator advisory, playbooks, cursor progress, and recent timeline signals.</p>
+            </div>
+            <span class="panel-tag">brief</span>
           </div>
           <div id="coordination-body" class="stack empty">Waiting for coordination snapshot…</div>
         </article>
 
-        <article class="panel tracker-panel">
-          <div class="panel-head">
-            <h2>Repo-local tracker</h2>
-            <span class="panel-tag">projection</span>
-          </div>
-          <div id="tracker-body" class="stack empty">Waiting for repo-local tracker snapshot…</div>
-        </article>
-
         <article class="panel workflows-panel">
           <div class="panel-head">
-            <h2>Workflow packs</h2>
-            <span class="panel-tag">managed</span>
+            <div>
+              <h2>Workflow packs</h2>
+              <p class="subtle-copy">Managed workflow status, current activity, and latest bounded outcomes.</p>
+            </div>
+            <span class="panel-tag">quests</span>
           </div>
           <div id="workflows-body" class="stack empty">Waiting for workflow snapshot…</div>
         </article>
 
         <article class="panel questions-panel">
           <div class="panel-head">
-            <h2>Questions</h2>
-            <span class="panel-tag">human gates</span>
+            <div>
+              <h2>Questions</h2>
+              <p class="subtle-copy">Human gates, answer drafts, and resolution controls when the loop needs operator input.</p>
+            </div>
+            <span class="panel-tag">gates</span>
           </div>
           <div id="questions-body" class="stack empty">No questions are open.</div>
         </article>
 
         <article class="panel escalations-panel">
           <div class="panel-head">
-            <h2>Escalations</h2>
-            <span class="panel-tag">interrupts</span>
+            <div>
+              <h2>Escalations</h2>
+              <p class="subtle-copy">Interrupt artifacts and draft handoffs for the moment the system must stop and surface context.</p>
+            </div>
+            <span class="panel-tag">alerts</span>
           </div>
           <div id="escalations-body" class="stack empty">No escalation artifacts yet.</div>
         </article>
 
+        <article class="panel backlog-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Canonical backlog</h2>
+              <p class="subtle-copy">The repo-local implementation backlog as parsed by the service, still authoritative over any client view.</p>
+            </div>
+            <span class="panel-tag">canon</span>
+          </div>
+          <div id="backlog-body" class="stack empty">Waiting for canonical backlog snapshot…</div>
+        </article>
+
+        <article class="panel tracker-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Repo-local tracker</h2>
+              <p class="subtle-copy">Projected tracker issues layered on top of the canonical control plane for richer planning and follow-up.</p>
+            </div>
+            <span class="panel-tag">projection</span>
+          </div>
+          <div id="tracker-body" class="stack empty">Waiting for repo-local tracker snapshot…</div>
+        </article>
+
         <article class="panel events-panel">
           <div class="panel-head">
-            <h2>Live events</h2>
+            <div>
+              <h2>Combat log</h2>
+              <p class="subtle-copy">Replayable service events for operator context, streaming visibility, and bounded coordination.</p>
+            </div>
             <span class="panel-tag">stream</span>
           </div>
           <div id="events-body" class="stack empty">No recent events.</div>
@@ -140,10 +193,11 @@
 
       <section class="footer-note panel">
         <p>
-          This slice stays additive: no Phoenix, no database, no Node asset pipeline, and no second source of truth beyond the existing repo-local files, runtime JSON, and loopback API.
+          Additive by design: no Phoenix app shell, no database, no second source of truth. The spectacle is optional; the canonical repo-local artifacts and loopback contract are not.
         </p>
       </section>
     </main>
+
     <script src="/assets/app.js"></script>
   </body>
 </html>

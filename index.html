@@ -3,1876 +3,1117 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>Forgeloop — Safe-autonomy layer for coding agents</title>
+    <title>Forgeloop — RPG control room for safe autonomous software work</title>
     <meta
       name="description"
-      content="Forgeloop is the fail-closed control plane for coding agents: run plan/build loops, pause on repeated failures, preserve runtime state, and draft clean human escalations instead of spinning forever."
+      content="Forgeloop is the safe-autonomy control plane for coding agents: fail closed, preserve canonical artifacts, pilot live runs, and prove the system through a repo-local HUD, daemon, and self-hosting proof harness."
     />
-    <meta name="theme-color" content="#0b0f14" />
-
-    <!-- Open Graph -->
+    <meta name="theme-color" content="#090511" />
     <meta property="og:title" content="Forgeloop" />
     <meta
       property="og:description"
-      content="Let agents run, then pause before they thrash: Forgeloop preserves state, drafts escalations, and keeps the runtime reviewable."
+      content="A vibrant control room for safe autonomous software work: pause agent thrash, keep repo-local truth, and prove the system end to end."
     />
     <meta property="og:type" content="website" />
 
-    <!-- Fonts (intentionally not Inter/Roboto/Space Grotesk) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Literata:opsz,wght@7..72,400;7..72,600&family=JetBrains+Mono:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <script type="module">
-      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({
-        startOnLoad: true,
-        theme: 'base',
-        themeVariables: {
-          primaryColor: '#1fe38b',
-          primaryTextColor: '#0b0f14',
-          primaryBorderColor: '#0b0f14',
-          lineColor: '#0b0f14',
-          secondaryColor: '#5b66ff',
-          tertiaryColor: '#fbf7f0'
-        }
-      });
-    </script>
 
     <style>
       :root {
-        --font-display: "Unbounded", system-ui, -apple-system, Segoe UI, sans-serif;
-        --font-body: "Literata", ui-serif, Georgia, "Times New Roman", serif;
-        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-
-        --ink: #0b0f14;
-        --ink-2: rgba(11, 15, 20, 0.78);
-        --paper: #fbf7f0;
-        --paper-2: #fffdf8;
-        --paper-3: rgba(255, 253, 248, 0.72);
-
-        --grid: rgba(11, 15, 20, 0.06);
-        --grid-strong: rgba(11, 15, 20, 0.11);
-
-        --accent: #1fe38b; /* highlighter mint */
-        --accent-ink: #0a2b1b;
-        --accent-2: #ff5a7a; /* blush */
-        --accent-3: #5b66ff; /* indigo */
-
-        --shadow: 0 18px 55px rgba(10, 15, 20, 0.14);
-        --shadow-tight: 0 10px 26px rgba(10, 15, 20, 0.12);
-
-        --radius: 18px;
-        --radius-sm: 12px;
-
-        --container: 1120px;
-
-        --ring: 0 0 0 3px rgba(31, 227, 139, 0.35);
+        --bg: #090511;
+        --bg-2: #12081e;
+        --bg-3: #1d0f2b;
+        --panel: rgba(15, 10, 26, 0.72);
+        --panel-2: rgba(19, 11, 34, 0.88);
+        --panel-3: rgba(10, 8, 19, 0.92);
+        --line: rgba(255, 255, 255, 0.1);
+        --line-2: rgba(183, 255, 60, 0.24);
+        --text: #f7f2ff;
+        --muted: rgba(235, 225, 255, 0.72);
+        --acid: #b7ff3c;
+        --violet: #8d63ff;
+        --magenta: #ff4fd8;
+        --cyan: #2ce5ff;
+        --gold: #ffd76a;
+        --danger: #ff7c9f;
+        --good: #86ffbf;
+        --shadow: 0 28px 90px rgba(0, 0, 0, 0.4);
+        --shadow-tight: 0 18px 50px rgba(0, 0, 0, 0.28);
+        --display: "Syne", sans-serif;
+        --body: "IBM Plex Sans", sans-serif;
+        --mono: "IBM Plex Mono", monospace;
+        --radius-xl: 34px;
+        --radius-lg: 24px;
+        --radius-md: 18px;
+        --container: 1220px;
+        --ring: 0 0 0 3px rgba(183, 255, 60, 0.32);
       }
 
-      * {
-        box-sizing: border-box;
-      }
-
-      html {
-        scroll-behavior: smooth;
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: var(--body);
+        color: var(--text);
+        background:
+          radial-gradient(circle at 14% 10%, rgba(44, 229, 255, 0.14), transparent 24%),
+          radial-gradient(circle at 88% 14%, rgba(255, 79, 216, 0.16), transparent 22%),
+          radial-gradient(circle at 40% 90%, rgba(141, 99, 255, 0.15), transparent 26%),
+          linear-gradient(180deg, #08040f 0%, #12081d 42%, #090511 100%);
+        min-height: 100vh;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
       @media (prefers-reduced-motion: reduce) {
-        html {
-          scroll-behavior: auto;
-        }
-        * {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after {
           animation-duration: 1ms !important;
           animation-iteration-count: 1 !important;
           transition-duration: 1ms !important;
         }
       }
 
-      body {
-        margin: 0;
-        color: var(--ink);
-        background: var(--paper);
-        font-family: var(--font-body);
-        line-height: 1.6;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        overflow-x: hidden;
-      }
-
-      /* Paper atmosphere + grid */
-      body::before {
+      body::before,
+      body::after {
         content: "";
         position: fixed;
         inset: 0;
         pointer-events: none;
+      }
+
+      body::before {
         background:
-          radial-gradient(1100px 560px at 12% -8%, rgba(31, 227, 139, 0.26), transparent 62%),
-          radial-gradient(900px 520px at 88% 10%, rgba(91, 102, 255, 0.12), transparent 60%),
-          radial-gradient(900px 520px at 70% 110%, rgba(255, 90, 122, 0.13), transparent 55%),
-          repeating-linear-gradient(0deg, var(--grid) 0, var(--grid) 1px, transparent 1px, transparent 26px),
-          repeating-linear-gradient(90deg, var(--grid) 0, var(--grid) 1px, transparent 1px, transparent 26px);
-        opacity: 1;
+          radial-gradient(circle at 20% 20%, rgba(183, 255, 60, 0.08), transparent 18%),
+          radial-gradient(circle at 80% 24%, rgba(255, 79, 216, 0.1), transparent 18%),
+          radial-gradient(circle at 55% 72%, rgba(44, 229, 255, 0.08), transparent 18%);
+        filter: blur(34px);
       }
 
       body::after {
-        content: "";
-        position: fixed;
-        inset: -60px;
-        pointer-events: none;
-        background:
-          radial-gradient(closest-side, rgba(11, 15, 20, 0.06), transparent 60%),
-          radial-gradient(closest-side, rgba(11, 15, 20, 0.05), transparent 60%);
-        filter: blur(28px);
-        opacity: 0.5;
-        transform: rotate(-4deg);
+        background-image: radial-gradient(rgba(255,255,255,0.08) 0.7px, transparent 0.7px);
+        background-size: 12px 12px;
+        opacity: 0.1;
+        mix-blend-mode: screen;
       }
 
-      a {
-        color: inherit;
-        text-decoration: none;
-      }
-
-      a.underline {
-        text-decoration: underline;
-        text-decoration-thickness: 2px;
-        text-underline-offset: 3px;
-      }
-
-      .container {
-        width: 100%;
-        max-width: var(--container);
-        margin: 0 auto;
-        padding: 0 20px;
-        position: relative;
-        z-index: 1;
-      }
+      a { color: inherit; text-decoration: none; }
+      img { max-width: 100%; display: block; }
+      button, input, textarea { font: inherit; }
 
       .skip {
         position: absolute;
         left: -999px;
         top: 10px;
-        background: var(--paper-2);
+        background: #fff;
+        color: #111;
         padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid var(--grid-strong);
+        border-radius: 12px;
+        z-index: 100;
       }
 
-      .skip:focus {
-        left: 14px;
-        outline: none;
-        box-shadow: var(--ring);
+      .skip:focus { left: 10px; }
+
+      .shell {
+        width: min(100%, var(--container));
+        margin: 0 auto;
+        padding: 0 20px 96px;
+        position: relative;
+        z-index: 1;
       }
 
-      header {
+      .topbar {
         position: sticky;
         top: 0;
-        z-index: 50;
-        backdrop-filter: blur(10px);
-        background: rgba(251, 247, 240, 0.75);
-        border-bottom: 1px solid rgba(11, 15, 20, 0.08);
+        z-index: 40;
+        backdrop-filter: blur(18px);
+        background: rgba(9, 5, 17, 0.65);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       }
 
       .nav {
+        width: min(100%, var(--container));
+        margin: 0 auto;
+        padding: 18px 20px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        padding: 14px 0;
+        gap: 18px;
       }
 
       .brand {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 12px;
-        min-width: 240px;
+        gap: 14px;
+        min-width: 0;
       }
 
-      .mark {
-        width: 38px;
-        height: 38px;
-        border-radius: 14px;
-        background: linear-gradient(135deg, rgba(31, 227, 139, 0.9), rgba(91, 102, 255, 0.9));
-        box-shadow: 0 10px 26px rgba(31, 227, 139, 0.18);
+      .brand-mark {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        position: relative;
+        background:
+          radial-gradient(circle at 25% 25%, rgba(255,255,255,0.55), transparent 32%),
+          linear-gradient(135deg, rgba(183,255,60,0.95), rgba(44,229,255,0.9) 34%, rgba(141,99,255,0.95) 62%, rgba(255,79,216,0.95));
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.1),
+          0 18px 48px rgba(141, 99, 255, 0.34);
+        overflow: hidden;
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        inset: 9px;
+        border-radius: 12px;
+        border: 1px solid rgba(9, 5, 17, 0.38);
+        background: linear-gradient(180deg, rgba(9,5,17,0.15), rgba(9,5,17,0.35));
+      }
+
+      .brand-copy {
+        min-width: 0;
+      }
+
+      .brand-copy strong {
+        display: block;
+        font-family: var(--display);
+        font-size: 1.08rem;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .brand-copy span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .nav-link,
+      .nav-cta {
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-size: 0.88rem;
+        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+      }
+
+      .nav-link {
+        color: var(--muted);
+        border: 1px solid transparent;
+      }
+
+      .nav-link:hover,
+      .nav-link:focus-visible {
+        outline: none;
+        color: var(--text);
+        border-color: rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.04);
+      }
+
+      .nav-cta {
+        font-family: var(--mono);
+        border: 1px solid rgba(183,255,60,0.26);
+        background: rgba(183,255,60,0.12);
+        color: var(--acid);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+      }
+
+      .nav-cta.secondary {
+        color: var(--cyan);
+        border-color: rgba(44,229,255,0.22);
+        background: rgba(44,229,255,0.08);
+      }
+
+      .nav-cta:hover,
+      .nav-cta:focus-visible {
+        outline: none;
+        transform: translateY(-1px);
+      }
+
+      .section {
+        margin-top: 34px;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, rgba(18, 10, 30, 0.9), rgba(10, 8, 19, 0.94));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: var(--shadow-tight);
+        border-radius: var(--radius-lg);
         position: relative;
         overflow: hidden;
       }
 
-      .mark::before {
+      .panel::before {
         content: "";
         position: absolute;
-        inset: -40%;
+        inset: 0;
+        pointer-events: none;
         background:
-          radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), transparent 46%),
-          radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.8), transparent 55%),
-          repeating-linear-gradient(45deg, rgba(11, 15, 20, 0.12) 0, rgba(11, 15, 20, 0.12) 1px, transparent 1px, transparent 8px);
-        opacity: 0.35;
-        transform: rotate(10deg);
+          radial-gradient(circle at 0% 0%, rgba(44,229,255,0.12), transparent 34%),
+          radial-gradient(circle at 100% 0%, rgba(255,79,216,0.12), transparent 32%),
+          linear-gradient(135deg, rgba(255,255,255,0.02), transparent 45%);
       }
 
-      .brand h1 {
-        font-family: var(--font-display);
-        font-size: 16px;
-        letter-spacing: -0.02em;
-        margin: 0;
-        line-height: 1.1;
-      }
+      .panel > * { position: relative; z-index: 1; }
 
-      .brand p {
-        margin: 2px 0 0;
-        font-size: 12px;
-        color: var(--ink-2);
-        line-height: 1.2;
-      }
-
-      .navlinks {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      .pill.navtoggle {
-        display: none;
-      }
-
-      .pill {
+      .eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 12px;
+        margin: 0 0 20px;
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--acid);
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 10px;
+        height: 10px;
         border-radius: 999px;
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        background: var(--paper-2);
-        box-shadow: 0 10px 22px rgba(10, 15, 20, 0.06);
-        font-family: var(--font-mono);
-        font-size: 12px;
-        line-height: 1;
-        letter-spacing: -0.02em;
-        transition: transform 180ms ease, box-shadow 180ms ease;
-      }
-
-      .pill:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 16px 34px rgba(10, 15, 20, 0.1);
-      }
-
-      .pill:focus-visible {
-        outline: none;
-        box-shadow: var(--ring);
-      }
-
-      .pill .dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 0 3px rgba(31, 227, 139, 0.25);
-      }
-
-      .pill.secondary .dot {
-        background: var(--accent-3);
-        box-shadow: 0 0 0 3px rgba(91, 102, 255, 0.18);
-      }
-
-      .pill.ghost {
-        background: transparent;
-        box-shadow: none;
-      }
-
-      main {
-        padding: 48px 0 74px;
+        background: linear-gradient(135deg, var(--acid), var(--cyan));
+        box-shadow: 0 0 20px rgba(183,255,60,0.45);
       }
 
       .hero {
         display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 28px;
-        align-items: start;
-        padding: 28px;
-        border-radius: calc(var(--radius) + 10px);
-        background: var(--paper-3);
-        border: 1px solid rgba(11, 15, 20, 0.11);
-        box-shadow: var(--shadow);
-        position: relative;
-        overflow: hidden;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 24px;
+        padding-top: 44px;
       }
 
-      .hero::before {
-        content: "";
-        position: absolute;
-        inset: -2px;
-        border-radius: calc(var(--radius) + 12px);
-        background:
-          radial-gradient(550px 240px at 20% 0%, rgba(31, 227, 139, 0.18), transparent 70%),
-          radial-gradient(420px 240px at 100% 10%, rgba(91, 102, 255, 0.12), transparent 60%),
-          radial-gradient(420px 240px at 78% 120%, rgba(255, 90, 122, 0.1), transparent 60%);
-        opacity: 1;
-        pointer-events: none;
+      .hero-copy,
+      .hero-stage {
+        min-width: 0;
       }
 
-      .hero > * {
-        position: relative;
-        z-index: 1;
+      .hero-card,
+      .quest-panel,
+      .spotlight-panel,
+      .track-card,
+      .proof-card,
+      .story-card,
+      .surface-card,
+      .timeline-card,
+      .final-card {
+        padding: 26px;
       }
 
-      .herowide {
-        grid-column: 1 / -1;
+      .hero-card {
+        min-height: 100%;
       }
 
-      .kicker {
+      .hero-title {
+        margin: 0;
+        font-family: var(--display);
+        font-size: clamp(3rem, 7vw, 6.4rem);
+        line-height: 0.94;
+        letter-spacing: -0.06em;
+        max-width: 10.5ch;
+      }
+
+      .hero-title .accent {
+        color: var(--acid);
+        text-shadow: 0 0 24px rgba(183,255,60,0.22);
+      }
+
+      .hero-title .violet {
+        color: #d2b8ff;
+      }
+
+      .hero-lede {
+        margin: 22px 0 0;
+        max-width: 58ch;
+        color: var(--muted);
+        font-size: 1.05rem;
+        line-height: 1.7;
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 24px;
+      }
+
+      .button {
         display: inline-flex;
-        gap: 10px;
         align-items: center;
-        padding: 8px 10px;
-        border-radius: 999px;
-        border: 1px dashed rgba(11, 15, 20, 0.22);
-        background: rgba(255, 253, 248, 0.8);
-        font-family: var(--font-mono);
-        font-size: 12px;
+        justify-content: center;
+        gap: 10px;
+        padding: 14px 18px;
+        border-radius: 16px;
+        border: 1px solid transparent;
+        font-family: var(--mono);
+        font-size: 0.86rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
       }
 
-      .kicker b {
-        font-weight: 600;
+      .button.primary {
+        background: linear-gradient(135deg, rgba(183,255,60,0.2), rgba(44,229,255,0.12));
+        color: var(--acid);
+        border-color: rgba(183,255,60,0.28);
+        box-shadow: 0 18px 36px rgba(183,255,60,0.12);
       }
 
-      .hero h2 {
-        font-family: var(--font-display);
-        margin: 14px 0 10px;
-        font-size: clamp(34px, 4.2vw, 58px);
-        line-height: 1.04;
+      .button.secondary {
+        background: rgba(255,255,255,0.04);
+        color: var(--text);
+        border-color: rgba(255,255,255,0.12);
+      }
+
+      .button:hover,
+      .button:focus-visible {
+        outline: none;
+        transform: translateY(-2px);
+      }
+
+      .hero-strip {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .mini-card {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.035);
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .mini-card strong {
+        display: block;
+        font-family: var(--display);
+        font-size: 1rem;
         letter-spacing: -0.04em;
       }
 
-      .hero h2 .hl {
-        background: linear-gradient(0deg, rgba(31, 227, 139, 0.55), rgba(31, 227, 139, 0.55));
-        box-shadow: inset 0 -0.45em 0 rgba(31, 227, 139, 0.36);
-        padding: 0 0.1em;
-        border-radius: 10px;
+      .mini-card span {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
       }
 
-      .lead {
-        margin: 0;
-        font-size: 17px;
-        color: var(--ink-2);
-        max-width: 60ch;
+      .quest-panel {
+        display: grid;
+        gap: 18px;
       }
 
-      .ctas {
+      .quest-top {
         display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+
+      .quest-top h2,
+      .section-title,
+      .surface-card h3,
+      .story-card h3,
+      .track-card h3,
+      .proof-card h3,
+      .timeline-card h3,
+      .final-card h2 {
+        margin: 0;
+        font-family: var(--display);
+        letter-spacing: -0.04em;
+      }
+
+      .quest-badge,
+      .status-chip,
+      .code-label,
+      .track-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border: 1px solid rgba(255,255,255,0.12);
+      }
+
+      .quest-badge { color: var(--gold); background: rgba(255,215,106,0.1); }
+      .status-chip.live { color: var(--good); background: rgba(134,255,191,0.1); }
+      .status-chip.v2 { color: var(--violet); background: rgba(141,99,255,0.12); }
+      .status-chip.lock { color: var(--cyan); background: rgba(44,229,255,0.1); }
+
+      .quest-list,
+      .track-list,
+      .signal-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .quest-item,
+      .signal-item,
+      .timeline-step {
+        display: grid;
+        gap: 8px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .quest-item strong,
+      .signal-item strong,
+      .timeline-step strong {
+        font-size: 0.95rem;
+      }
+
+      .quest-item p,
+      .signal-item p,
+      .timeline-step p,
+      .surface-card p,
+      .story-card p,
+      .track-card p,
+      .proof-card p,
+      .final-card p,
+      .section-copy {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .spotlight-panel {
         margin-top: 18px;
       }
 
-      .btn {
-        appearance: none;
-        border: 0;
-        cursor: pointer;
+      .spotlight-panel h2 {
+        margin: 0 0 12px;
+        font-family: var(--display);
+        font-size: clamp(1.5rem, 3vw, 2.3rem);
+        letter-spacing: -0.05em;
+      }
+
+      .spotlight-grid,
+      .story-grid,
+      .surface-grid,
+      .proof-grid,
+      .tracks-grid,
+      .timeline-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .story-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .surface-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .tracks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .timeline-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+      .section-head {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+        max-width: 70ch;
+      }
+
+      .section-head .eyebrow { margin-bottom: 0; }
+
+      .section-title {
+        font-size: clamp(2rem, 4vw, 3.3rem);
+        line-height: 0.96;
+      }
+
+      .story-card,
+      .surface-card,
+      .proof-card,
+      .track-card,
+      .timeline-card,
+      .final-card {
+        background: linear-gradient(180deg, rgba(18, 10, 30, 0.88), rgba(8, 8, 18, 0.94));
+      }
+
+      .story-card h3,
+      .surface-card h3,
+      .proof-card h3,
+      .track-card h3,
+      .timeline-card h3 {
+        font-size: 1.4rem;
+        margin-bottom: 14px;
+      }
+
+      .story-card .story-number,
+      .surface-card .story-number {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
-        padding: 12px 14px;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        margin-bottom: 16px;
         border-radius: 14px;
-        background: var(--ink);
-        color: var(--paper-2);
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        letter-spacing: -0.02em;
-        box-shadow: 0 16px 34px rgba(10, 15, 20, 0.25);
-        transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        color: var(--bg);
+        background: linear-gradient(135deg, var(--acid), var(--cyan));
+        box-shadow: 0 12px 24px rgba(44,229,255,0.18);
       }
 
-      .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 22px 48px rgba(10, 15, 20, 0.28);
-        filter: saturate(1.05);
-      }
-
-      .btn:focus-visible {
-        outline: none;
-        box-shadow: var(--ring);
-      }
-
-      .btn.alt {
-        background: var(--paper-2);
-        color: var(--ink);
-        border: 1px solid rgba(11, 15, 20, 0.14);
-        box-shadow: 0 16px 34px rgba(10, 15, 20, 0.1);
-      }
-
-      .btn.alt:hover {
-        box-shadow: 0 22px 48px rgba(10, 15, 20, 0.14);
-      }
-
-      .btn .spark {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 0 3px rgba(31, 227, 139, 0.25);
-      }
-
-      .sticker {
-        position: absolute;
-        right: 18px;
-        top: 18px;
-        transform: rotate(8deg);
-        z-index: 3;
-        background: rgba(31, 227, 139, 0.9);
-        color: var(--accent-ink);
-        padding: 10px 12px;
-        border-radius: 14px;
-        font-family: var(--font-display);
-        font-size: 12px;
-        letter-spacing: -0.02em;
-        box-shadow: 0 20px 46px rgba(31, 227, 139, 0.22);
-        border: 1px solid rgba(10, 15, 20, 0.18);
-      }
-
-      .sticker span {
-        font-family: var(--font-mono);
-        font-weight: 600;
-        font-size: 11px;
-        opacity: 0.8;
-      }
-
-      .panel {
-        border-radius: var(--radius);
-        background: rgba(255, 253, 248, 0.88);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        box-shadow: var(--shadow-tight);
-        padding: 14px 14px 10px;
-      }
-
-      .panel h3 {
-        margin: 0;
-        font-family: var(--font-display);
-        font-size: 14px;
-        letter-spacing: -0.02em;
-      }
-
-      .panel p {
-        margin: 6px 0 10px;
-        color: var(--ink-2);
-        font-size: 13px;
-      }
-
-      .code {
-        position: relative;
-        background: #0b0f14;
-        color: rgba(255, 253, 248, 0.92);
-        border-radius: 14px;
-        padding: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        overflow: hidden;
+      .signal-strip {
         display: grid;
-        grid-template-columns: 1fr auto;
-        grid-template-rows: auto 1fr;
-        gap: 10px;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
       }
 
-      .code pre {
-        grid-column: 1 / -1;
-        grid-row: 2;
+      .signal-panel,
+      .proof-panel {
+        padding: 24px;
       }
 
-      .code.nowrap pre {
-        white-space: pre;
-        word-break: normal;
+      .command-block {
+        position: relative;
+        margin-top: 16px;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(4, 8, 15, 0.84);
+        border: 1px solid rgba(255,255,255,0.08);
+        overflow: hidden;
       }
 
-      .code::before {
+      .command-block::before {
         content: "";
         position: absolute;
-        inset: -1px;
+        inset: 0;
         background:
-          radial-gradient(260px 120px at 18% 0%, rgba(31, 227, 139, 0.18), transparent 60%),
-          radial-gradient(240px 120px at 95% 15%, rgba(91, 102, 255, 0.14), transparent 60%);
-        opacity: 1;
+          radial-gradient(circle at 0% 0%, rgba(183,255,60,0.12), transparent 34%),
+          radial-gradient(circle at 100% 0%, rgba(44,229,255,0.12), transparent 26%);
         pointer-events: none;
+      }
+
+      .code-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .code-label { color: var(--cyan); background: rgba(44,229,255,0.08); }
+
+      .copy-button {
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.04);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-family: var(--mono);
+        font-size: 0.76rem;
+        cursor: pointer;
+      }
+
+      .copy-button:hover,
+      .copy-button:focus-visible {
+        outline: none;
+        box-shadow: var(--ring);
       }
 
       pre {
         margin: 0;
-        position: relative;
-        z-index: 1;
-        font-family: var(--font-mono);
-        font-size: 12px;
-        line-height: 1.5;
-        white-space: pre;
-        overflow: auto;
-      }
-
-      .copy {
-        position: relative;
-        grid-column: 2;
-        grid-row: 1;
-        justify-self: end;
-        align-self: start;
-        z-index: 2;
-        background: rgba(255, 253, 248, 0.1);
-        border: 1px solid rgba(255, 253, 248, 0.18);
-        color: rgba(255, 253, 248, 0.9);
-        border-radius: 999px;
-        padding: 8px 10px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        cursor: pointer;
-        transition: transform 160ms ease, background 160ms ease;
-      }
-
-      .copy:hover {
-        transform: translateY(-1px);
-        background: rgba(255, 253, 248, 0.14);
-      }
-
-      .copy:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(31, 227, 139, 0.35);
-      }
-
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 16px;
-        margin-top: 18px;
-      }
-
-      .card {
-        grid-column: span 6;
-        border-radius: var(--radius);
-        background: rgba(255, 253, 248, 0.82);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        box-shadow: var(--shadow-tight);
-        padding: 18px;
-        position: relative;
-        overflow: hidden;
-      }
-
-      .card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: radial-gradient(520px 180px at 10% 0%, rgba(31, 227, 139, 0.08), transparent 60%);
-        pointer-events: none;
-      }
-
-      .card > * {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        color: #f6fbff;
+        line-height: 1.65;
         position: relative;
         z-index: 1;
       }
 
-      .card h3 {
-        margin: 0 0 10px;
-        font-family: var(--font-display);
-        letter-spacing: -0.02em;
-        font-size: 18px;
+      .proof-outcomes,
+      .track-list,
+      .surface-list {
+        margin-top: 16px;
       }
 
-      .card p {
-        margin: 0;
-        color: var(--ink-2);
-        font-size: 14px;
+      .proof-outcomes li,
+      .track-list li,
+      .surface-list li {
+        color: var(--muted);
+        line-height: 1.65;
       }
 
-      .chiprow {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 12px;
+      .proof-outcomes li + li,
+      .track-list li + li,
+      .surface-list li + li { margin-top: 8px; }
+
+      .track-pill.stable {
+        color: var(--acid);
+        background: rgba(183,255,60,0.12);
       }
 
-      .chip {
+      .track-pill.alpha {
+        color: var(--magenta);
+        background: rgba(255,79,216,0.12);
+      }
+
+      .timeline-card {
+        padding-top: 20px;
+      }
+
+      .timeline-step .step-index {
         display: inline-flex;
-        align-items: center;
-        gap: 8px;
+        width: fit-content;
+        padding: 6px 10px;
         border-radius: 999px;
-        padding: 8px 10px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        border: 1px solid rgba(11, 15, 20, 0.14);
-        background: rgba(251, 247, 240, 0.7);
+        background: rgba(141,99,255,0.12);
+        color: #d8c8ff;
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
 
-      .chip .tag {
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 0 3px rgba(31, 227, 139, 0.18);
+      .final-card {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 18px;
+        align-items: end;
       }
 
-      .chip.pink .tag {
-        background: var(--accent-2);
-        box-shadow: 0 0 0 3px rgba(255, 90, 122, 0.16);
+      .final-card h2 {
+        font-size: clamp(2.2rem, 5vw, 4rem);
+        line-height: 0.96;
       }
 
-      .chip.blue .tag {
-        background: var(--accent-3);
-        box-shadow: 0 0 0 3px rgba(91, 102, 255, 0.16);
-      }
-
-      section {
-        margin-top: 34px;
-      }
-
-      .sectionhead {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
+      .final-commands {
+        display: grid;
         gap: 12px;
-        flex-wrap: wrap;
       }
 
-      .sectionhead h2 {
-        margin: 0;
-        font-family: var(--font-display);
-        font-size: 22px;
-        letter-spacing: -0.02em;
+      .final-command {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.045);
+        border: 1px solid rgba(255,255,255,0.08);
       }
 
-      .sectionhead p {
-        margin: 0;
-        color: var(--ink-2);
-        font-size: 14px;
-        max-width: 70ch;
-      }
-
-      .how {
-        margin-top: 14px;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-      }
-
-      .step {
-        border-radius: var(--radius);
-        padding: 16px;
-        background: rgba(255, 253, 248, 0.78);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        box-shadow: var(--shadow-tight);
-        position: relative;
-        overflow: hidden;
-      }
-
-      .step::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background:
-          radial-gradient(520px 160px at 10% 0%, rgba(91, 102, 255, 0.07), transparent 55%),
-          radial-gradient(520px 160px at 100% 80%, rgba(31, 227, 139, 0.08), transparent 55%);
-        pointer-events: none;
-      }
-
-      .step > * {
-        position: relative;
-        z-index: 1;
-      }
-
-      .step .num {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 34px;
-        height: 34px;
-        border-radius: 12px;
-        background: rgba(31, 227, 139, 0.18);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        font-family: var(--font-display);
-        font-weight: 800;
-        letter-spacing: -0.04em;
-      }
-
-      .step h4 {
-        margin: 12px 0 8px;
-        font-family: var(--font-display);
-        font-size: 16px;
-        letter-spacing: -0.02em;
-      }
-
-      .step p {
-        margin: 0;
-        color: var(--ink-2);
-        font-size: 14px;
-      }
-
-      .tabs {
-        margin-top: 14px;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .tab {
-        border: 1px solid rgba(11, 15, 20, 0.14);
-        background: rgba(255, 253, 248, 0.82);
-        border-radius: 999px;
-        padding: 10px 12px;
-        font-family: var(--font-mono);
-        font-size: 12px;
-        cursor: pointer;
-        transition: transform 160ms ease, box-shadow 160ms ease;
-      }
-
-      .tab:hover {
-        transform: translateY(-1px);
-      }
-
-      .tab[aria-selected="true"] {
-        background: rgba(31, 227, 139, 0.22);
-        box-shadow: 0 14px 28px rgba(31, 227, 139, 0.14);
-      }
-
-      .tab:focus-visible {
-        outline: none;
-        box-shadow: var(--ring);
-      }
-
-      .tabpanels {
-        margin-top: 12px;
-      }
-
-      .panelbox {
-        border-radius: var(--radius);
-        padding: 18px;
-        background: rgba(255, 253, 248, 0.82);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        box-shadow: var(--shadow-tight);
-      }
-
-      .panelbox h3 {
-        margin: 0 0 10px;
-        font-family: var(--font-display);
-        font-size: 18px;
-        letter-spacing: -0.02em;
-      }
-
-      .panelbox ul {
-        margin: 0;
-        padding-left: 20px;
-        color: var(--ink-2);
-        font-size: 14px;
-      }
-
-      .panelbox li {
-        margin: 8px 0;
-      }
-
-      .callout {
-        margin-top: 14px;
-        border-radius: var(--radius);
-        padding: 14px 14px;
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        background: rgba(11, 15, 20, 0.04);
-        color: var(--ink-2);
-        font-size: 14px;
-      }
-
-      .callout b {
-        color: var(--ink);
-      }
-
-      .mermaid-wrap {
-        margin-top: 14px;
-        border-radius: var(--radius);
-        background: rgba(255, 253, 248, 0.88);
-        border: 1px solid rgba(11, 15, 20, 0.12);
-        box-shadow: var(--shadow-tight);
-        padding: 20px;
-        overflow-x: auto;
-      }
-
-      .mermaid {
-        display: flex;
-        justify-content: center;
-      }
-
-      .compare-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        font-size: 13px;
-      }
-
-      .compare-table th,
-      .compare-table td {
-        padding: 10px 12px;
-        text-align: left;
-        border: 1px solid rgba(11, 15, 20, 0.12);
-      }
-
-      .compare-table th {
-        background: rgba(31, 227, 139, 0.12);
-        font-family: var(--font-display);
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      .compare-table td {
-        background: rgba(255, 253, 248, 0.6);
-        font-family: var(--font-mono);
-        font-size: 11px;
-      }
-
-      .compare-table td:first-child {
-        font-family: var(--font-body);
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
-      }
-
-      .compare-table tr:hover td {
-        background: rgba(31, 227, 139, 0.06);
+      .final-command code {
+        font-family: var(--mono);
+        color: var(--acid);
+        font-size: 0.9rem;
       }
 
       footer {
-        margin-top: 38px;
-        padding: 22px 0 10px;
-        border-top: 1px solid rgba(11, 15, 20, 0.1);
-        color: rgba(11, 15, 20, 0.7);
-        font-size: 13px;
+        margin-top: 26px;
+        color: rgba(235, 225, 255, 0.56);
+        font-size: 0.92rem;
+        text-align: center;
       }
 
-      .footergrid {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 14px;
-        align-items: start;
-      }
-
-      .links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: flex-end;
-      }
-
-      @media (max-width: 980px) {
-        .hero {
+      @media (max-width: 1080px) {
+        .hero,
+        .signal-strip,
+        .proof-grid,
+        .tracks-grid,
+        .final-card {
           grid-template-columns: 1fr;
         }
-        .heromain {
-          grid-row: 2;
-        }
 
-        .herowide {
-          grid-row: 3;
-        }
-
-        .heroaside {
-          grid-row: 4;
-        }
-        .sticker {
-          position: static;
-          transform: rotate(-3deg);
-          display: inline-flex;
-          width: fit-content;
-          margin-bottom: 10px;
-        }
-        .card {
-          grid-column: span 12 !important;
-        }
-        .how {
-          grid-template-columns: 1fr;
-        }
-        .footergrid {
-          grid-template-columns: 1fr;
-        }
-        .links {
-          justify-content: flex-start;
+        .story-grid,
+        .timeline-grid,
+        .spotlight-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
 
-
-      @media (max-width: 860px) {
+      @media (max-width: 760px) {
         .nav {
-          align-items: flex-start;
-        }
-
-        .pill.navtoggle {
-          display: inline-flex;
-        }
-
-        .navlinks {
-          display: none;
-          width: 100%;
-          margin-top: 10px;
-          justify-content: flex-start;
-        }
-
-        html[data-nav-open="true"] .navlinks {
-          display: flex;
           flex-direction: column;
           align-items: stretch;
-          gap: 10px;
         }
 
-        html[data-nav-open="true"] .navlinks .pill {
-          width: 100%;
+        .nav-links {
           justify-content: flex-start;
-          padding: 12px 14px;
-        }
-      }
-
-      @media (max-width: 560px) {
-        .nav {
-          padding: 12px 0;
-        }
-        .brand {
-          min-width: unset;
-        }
-        .brand p {
-          display: none;
         }
 
         .hero {
-          padding: 18px;
+          padding-top: 28px;
         }
 
-        .kicker {
-          display: inline-block;
-          max-width: 100%;
+        .hero-strip,
+        .story-grid,
+        .surface-grid,
+        .spotlight-grid,
+        .timeline-grid {
+          grid-template-columns: 1fr;
         }
 
-        .lead {
-          font-size: 16px;
+        .hero-card,
+        .quest-panel,
+        .spotlight-panel,
+        .track-card,
+        .proof-card,
+        .story-card,
+        .surface-card,
+        .timeline-card,
+        .final-card {
+          padding: 22px;
         }
 
-        .ctas {
-          flex-direction: column;
-        }
-
-        .btn {
-          width: 100%;
-          justify-content: center;
-        }
-
-        .sticker {
-          font-size: 11px;
-          padding: 8px 10px;
-          border-radius: 12px;
-        }
-
-        .sticker span {
-          font-size: 10px;
-        }
-
-        .chip {
-          font-size: 10.5px;
-          padding: 7px 9px;
-        }
-
-        .chip span {
-          min-width: 0;
-          white-space: normal;
-        }
-
-        .code pre {
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-
-        .copy {
-          padding: 7px 8px;
-          font-size: 10px;
+        .hero-title {
+          font-size: clamp(2.6rem, 15vw, 4.6rem);
         }
       }
     </style>
   </head>
-
   <body>
     <a class="skip" href="#content">Skip to content</a>
 
-    <header>
-      <div class="container">
-        <div class="nav">
-          <div class="brand">
-            <div class="mark" aria-hidden="true"></div>
-            <div>
-              <h1>Forgeloop</h1>
-              <p>Safe autonomy for coding agents.</p>
-            </div>
-          </div>
+    <header class="topbar">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="#content">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-copy">
+            <strong>Forgeloop</strong>
+            <span>safe autonomy // vivid operator systems</span>
+          </span>
+        </a>
 
-          <button class="pill navtoggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
-            <span class="dot"></span><span class="navlabel">Menu</span>
-          </button>
-
-          <nav class="navlinks" id="primary-nav" aria-label="Primary">
-            <a class="pill ghost" href="#proof"><span class="dot"></span>Proof</a>
-            <a class="pill ghost" href="#how"><span class="dot"></span>How it works</a>
-            <a class="pill ghost secondary" href="#use"><span class="dot"></span>Use it</a>
-            <a class="pill" href="#provision"><span class="dot"></span>Provision (GCP)</a>
-            <a class="pill ghost" href="https://github.com/zakelfassi/Forgeloop-kit#readme" target="_blank" rel="noreferrer">
-              <span class="dot"></span>README
-            </a>
-            <a class="pill" href="https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0" target="_blank" rel="noreferrer">
-              <span class="dot"></span>v1.0.0 stable
-            </a>
-            <a class="pill" href="https://github.com/zakelfassi/Forgeloop-kit" target="_blank" rel="noreferrer">
-              <span class="dot"></span>GitHub
-            </a>
-          </nav>
+        <div class="nav-links">
+          <a class="nav-link" href="#why">Why</a>
+          <a class="nav-link" href="#surfaces">Surfaces</a>
+          <a class="nav-link" href="#proof">Proof</a>
+          <a class="nav-link" href="#tracks">Release tracks</a>
+          <a class="nav-cta secondary" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/docs/release-tracks.md">Docs</a>
+          <a class="nav-cta" href="#install">Quickstart</a>
         </div>
-      </div>
+      </nav>
     </header>
 
-    <main id="content">
-      <div class="container">
-        <div class="hero">
-          <div class="sticker" aria-hidden="true">
-            full-auto&nbsp;<span>but fail-closed</span>
-          </div>
-
-          <div class="heromain">
-            <div class="kicker">
-              <b>v1.0.0 stable</b> · <span>main = v2 alpha / development track</span>
-            </div>
-
-            <h2>
-              Let agents run.
-              <span class="hl">Pause before they thrash.</span>
-            </h2>
-
-            <p class="lead">
-              Forgeloop is the fail-closed control plane for coding agents. Install it into a repo, run real plan/build
-              loops against tests and checks, and when the same failure keeps repeating, Forgeloop pauses, preserves
-              state, writes escalation artifacts, and asks the human for the next move instead of free-spinning.
-            </p>
-            <p style="max-width: 64ch; margin-top: 12px; color: var(--ink-2)">
-              Track choice: <b>v1.0.0</b> is the stable release. <b>main</b> is the current v2 alpha / development track for evaluating
-              the Elixir control plane, HUD, OpenClaw seam, and managed daemon path. See
-              <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/docs/release-tracks.md" target="_blank" rel="noreferrer">docs/release-tracks.md</a>.
+    <main id="content" class="shell">
+      <section class="hero section">
+        <div class="hero-copy">
+          <article class="hero-card panel">
+            <p class="eyebrow">Forgeloop // v2 alpha // operator-grade autonomy</p>
+            <h1 class="hero-title">
+              Turn agent runs into a <span class="accent">control room</span>, not a guessing game.
+            </h1>
+            <p class="hero-lede">
+              Forgeloop is the safe-autonomy control plane for coding agents. It keeps repo-local truth, fails closed instead of thrashing, exposes a live HUD for operators, and now ships a one-command self-host proof that makes the whole system demo-worthy.
             </p>
 
-            <div class="ctas">
-              <a class="btn" href="#proof"><span class="spark"></span>Run the proof suite</a>
-              <a class="btn alt" href="#use"><span class="spark"></span>Get started</a>
-              <a class="btn alt" href="#provision"><span class="spark"></span>Provision a runner</a>
-              <a
-                class="btn alt"
-                href="https://github.com/ghuntley/how-to-ralph-wiggum"
-                target="_blank"
-                rel="noreferrer"
-                ><span class="spark"></span>Read the Playbook</a
-              >
-            </div>
-          </div>
-
-          <aside class="heroaside">
-            <div class="panel" id="proof">
-              <h3>Prove it fails closed</h3>
-              <p>
-                Run the safe-autonomy proof suite before you trust the runtime in a repo. On the current v2 alpha track,
-                there is also a separate manual HUD/service proof.
-              </p>
-              <div class="code">
-                <button class="copy" data-copy="#cmd-evals">Copy</button>
-                <pre id="cmd-evals">./forgeloop.sh evals</pre>
-              </div>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#cmd-self-host-proof">Copy</button>
-                <pre id="cmd-self-host-proof">./forgeloop.sh self-host-proof</pre>
-              </div>
-              <div class="chiprow" role="list" style="margin-top: 12px">
-                <span class="chip" role="listitem"><span class="tag"></span><span>daemon pause</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>failure escalation</span></span>
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>runtime state</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>HUD self-host proof</span></span>
-              </div>
+            <div class="hero-actions">
+              <a class="button primary" href="#install">Start the quest</a>
+              <a class="button secondary" href="#proof">See the proof path</a>
             </div>
 
-            <div class="panel" style="margin-top: 14px">
-              <h3>One-command runner (GCP)</h3>
-              <p>
-                Full-auto works best when the VM is the security boundary.
-                Provision a dedicated runner and keep your laptop out of the blast radius.
-              </p>
-              <div class="code">
-                <button class="copy" data-copy="#cmd-gcp">Copy</button>
-                <pre id="cmd-gcp">OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
-  ops/gcp/provision.sh --name forgeloop-runner \
-  --project &lt;gcp-project&gt; --zone us-central1-a</pre>
+            <div class="hero-strip" aria-label="Highlights">
+              <div class="mini-card">
+                <strong>Fail closed</strong>
+                <span>Pause repeated failures, preserve state, and draft the human handoff instead of spinning forever.</span>
+              </div>
+              <div class="mini-card">
+                <strong>Repo-local truth</strong>
+                <span>Canonical files and runtime artifacts remain authoritative even when the UI gets prettier.</span>
+              </div>
+              <div class="mini-card">
+                <strong>Presentation-ready</strong>
+                <span>CLI, HUD, OpenClaw seam, and self-host proof now tell one coherent product story.</span>
               </div>
             </div>
-          </aside>
-
-          <div class="herowide">
-            <div class="grid">
-              <div class="card" style="grid-column: span 4">
-                <h3>What happens when the agent gets stuck</h3>
-                <p>
-                  Forgeloop turns a bad loop into a reviewable handoff:
-                </p>
-                <ol style="margin: 14px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 14px">
-                  <li>stops retrying the same failure</li>
-                  <li>writes <code>[PAUSE]</code> into <code>REQUESTS.md</code></li>
-                  <li>drafts <code>ESCALATIONS.md</code> and <code>QUESTIONS.md</code></li>
-                  <li>records state in <code>.forgeloop/runtime-state.json</code></li>
-                </ol>
-              </div>
-
-              <div class="card" style="grid-column: span 8">
-                <h3>Quick install</h3>
-                <p>
-                  Install the kit into any repo, prove the control plane, then run a planning/build cycle. Secondary
-                  systems like skills and knowledge can compound later.
-                </p>
-                <div class="code" style="margin-top: 20px">
-                  <button class="copy" data-copy="#cmd-install">Copy</button>
-                  <pre id="cmd-install">REPO=/path/to/target-repo
-./install.sh "$REPO" --wrapper
-cd "$REPO"
-./forgeloop.sh evals
-# Optional V2 alpha release proof: ./forgeloop.sh self-host-proof
-# Fresh repo path: ./forgeloop.sh kickoff "&lt;one paragraph project brief&gt;"
-./forgeloop.sh plan 1
-./forgeloop.sh build 10
-# Optional: ./forgeloop.sh sync-skills
-# Continuous mode: ./forgeloop.sh daemon 300</pre>
-                </div>
-                <div class="chiprow" role="list" style="margin-top: 12px">
-                  <span class="chip" role="listitem"><span class="tag"></span><span>proof first</span></span>
-                  <span class="chip blue" role="listitem"><span class="tag"></span><span>machine-readable state</span></span>
-                  <span class="chip pink" role="listitem"><span class="tag"></span><span>fail-closed pauses</span></span>
-                  <span class="chip" role="listitem"><span class="tag"></span><span>repo-local install</span></span>
-                </div>
-              </div>
-            </div>
-          </div>
+          </article>
         </div>
 
-        <section id="how">
-          <div class="sectionhead">
-            <h2>How it works</h2>
-            <p>
-              The core loop is simple: prove the runtime, plan work, build against real checks, and pause into a clean
-              human handoff when the same failure keeps repeating. Knowledge, experts, skills, and ingestion are
-              optional systems that compound on top of this base loop.
-            </p>
-          </div>
-
-          <div class="mermaid-wrap">
-            <pre class="mermaid">
-flowchart LR
-    I[Install into repo] --> E[Run ./forgeloop.sh evals]
-    E --> P[Plan work]
-    P --> B[Build against checks]
-    B --> D{Passing?}
-    D -->|Yes| N[Next task]
-    D -->|No, repeated| X[Pause + escalate]
-    X --> A[Write REQUESTS / QUESTIONS / ESCALATIONS / runtime-state]
-    A --> H[Human answers once]
-    H --> R[Resume cleanly]
-    R --> B
-            </pre>
-          </div>
-
-          <div class="callout" style="margin-top: 14px">
-            <b>Daemon mode:</b> Optionally run <code>./forgeloop.sh daemon 300</code> to poll on an interval and run loops automatically.
-            Control with <code>[PAUSE]</code>, <code>[REPLAN]</code>, <code>[DEPLOY]</code>, <code>[INGEST_LOGS]</code>, and one explicit managed-backend <code>[WORKFLOW]</code> request.
-            The public launcher now prefers the managed Elixir daemon path when it is start-ready, keeps canonical repo-root artifacts authoritative, and still allows <code>FORGELOOP_DAEMON_RUNTIME=bash</code> for the legacy path. Elixir control-plane groundwork also treats <code>[PAUSE]</code>/<code>[REPLAN]</code> as locked, idempotent marker edits, can manually launch disposable-worktree babysitter runs, and exposes a loopback control-plane service + live operator UI with <code>./forgeloop.sh serve</code> plus the local OpenClaw plugin seam at <code>.openclaw/extensions/forgeloop</code>. That loopback service now publishes a versioned contract descriptor at <code>/api/schema</code>, and its JSON/SSE envelopes carry additive top-level <code>api</code> metadata so the HUD and OpenClaw can follow one service-owned contract.
-            When verify/CI/push keeps failing, Forgeloop pauses and drafts the handoff instead of free-spinning.
-          </div>
-
-          <div class="how" style="margin-top: 14px">
-            <div class="step">
-              <div class="num">1</div>
-              <h4>Install + prove</h4>
-              <p>
-                Install Forgeloop into the repo, then run <code>./forgeloop.sh evals</code> so you know the control plane,
-                runtime state, and escalation path work in this layout. On <code>main</code>, add the optional
-                <code>./forgeloop.sh self-host-proof</code> pass to drive the real HUD/service path through
-                <code>agent-browser</code>.
-              </p>
+        <div class="hero-stage">
+          <article class="quest-panel panel">
+            <div class="quest-top">
+              <div>
+                <h2>Quest board</h2>
+                <p class="section-copy">The current product stack, as an operator would actually experience it.</p>
+              </div>
+              <span class="quest-badge">main // v2 alpha</span>
             </div>
-            <div class="step" style="position: relative">
-              <div class="num">2</div>
-              <h4>Plan + build</h4>
-              <p>
-                Run planning/build loops against your real specs, repo checks, and branch state instead of one-shot prompt glue.
-                Fresh template-only repos now stop early and point you back to the intake prompt before checklist work starts.
-              </p>
-            </div>
-            <div class="step">
-              <div class="num">3</div>
-              <h4>Pause + resume</h4>
-              <p>
-                Repeated failures stop the loop, draft the handoff, and wait for human input. Clear the blocker once, then resume cleanly.
-              </p>
-            </div>
-          </div>
 
-          <div class="callout">
-            <b>Full-auto ≠ reckless:</b> in auto-permissions mode, the agent can run arbitrary commands.
-            Run in a dedicated VM/container. Treat the environment as disposable.
-            See <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/docs/sandboxing.md" target="_blank" rel="noreferrer">docs/sandboxing.md</a>.
-          </div>
-        </section>
-
-        <section id="sdd">
-          <div class="sectionhead">
-            <h2>Secondary system: Skills</h2>
-            <p>
-              Skills are an optional compounding layer. When a workflow becomes reusable, capture it as a repo-local
-              <b>Skill</b> so Claude Code / Codex can discover and reuse it.
-            </p>
-          </div>
-
-          <div class="grid" style="margin-top: 14px">
-            <div class="card" style="grid-column: span 4">
-              <h3>Operational (ICs)</h3>
-              <p>
-                One job. Repeat forever. The “how we do X here” playbook that keeps agents consistent across repos and time.
-              </p>
-              <div class="chiprow" role="list">
-                <span class="chip" role="listitem"><span class="tag"></span><span>single-purpose</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>scripts/</span></span>
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>references/</span></span>
+            <div class="quest-list">
+              <div class="quest-item">
+                <strong>01 — Boot the control room</strong>
+                <p>Serve the loopback service and HUD without adding a separate database or frontend app stack.</p>
+                <span class="status-chip live">real HUD</span>
+              </div>
+              <div class="quest-item">
+                <strong>02 — Prove the product path</strong>
+                <p>Drive the actual interface with <code>agent-browser</code>, confirm bounded operator actions, and keep artifacts.</p>
+                <span class="status-chip lock">manual proof</span>
+              </div>
+              <div class="quest-item">
+                <strong>03 — Keep the operator in charge</strong>
+                <p>Ownership, pause state, start gates, questions, and escalations stay visible instead of hidden in logs.</p>
+                <span class="status-chip v2">ownership aware</span>
               </div>
             </div>
+          </article>
 
-            <div class="card" style="grid-column: span 4">
-              <h3>Meta (managers)</h3>
-              <p>
-                Plan, gate, and steer the loop. Keep standards consistent. Turn “good taste” into a repeatable protocol.
-              </p>
-              <div class="chiprow" role="list">
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>project-architect</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>skillforge</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>completion-director</span></span>
+          <article class="spotlight-panel panel">
+            <h2>Why people will remember this</h2>
+            <div class="spotlight-grid">
+              <div class="signal-item">
+                <strong>It looks alive</strong>
+                <p>Not generic SaaS. Not generic agent hype. A real visual system with energy.</p>
+              </div>
+              <div class="signal-item">
+                <strong>It still tells the truth</strong>
+                <p>The UI points back to canonical files and bounded evidence, not vibes.</p>
+              </div>
+              <div class="signal-item">
+                <strong>It demos honestly</strong>
+                <p>You can show the real operator loop instead of a stitched-together happy path.</p>
               </div>
             </div>
+          </article>
+        </div>
+      </section>
 
-            <div class="card" style="grid-column: span 4">
-              <h3>Composed (middle management)</h3>
-              <p>
-                Chain skills into a delivery pipeline: brief → plan → forge → execute → validate. Build your internal “skill factory”.
-              </p>
-              <div class="chiprow" role="list">
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>builder-loop</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>voltrons</span></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="panelbox" style="margin-top: 14px">
-            <h3>Forge + sync</h3>
-            <p>
-              Project skills live at <code>skills/</code> (repo root). The kit ships a base library under <code>forgeloop/skills/</code>.
-              Sync them into <code>.claude/skills</code> (Claude Code) and <code>.codex/skills</code> (Codex) so agents can discover and reuse them.
-              If a sandbox blocks Codex mirroring or a destination exists as a non-symlink (your custom skill), <code>sync-skills</code> will warn and skip.
-            </p>
-            <div class="code" style="margin-top: 12px">
-              <button class="copy" data-copy="#cmd-sync-skills">Copy</button>
-              <pre id="cmd-sync-skills">./forgeloop.sh sync-skills
-# Optional: also install to user skill dirs (Codex/Claude/Amp)
-./forgeloop.sh sync-skills --all
-# Force overwrite non-symlink collisions
-./forgeloop.sh sync-skills --force-symlinks</pre>
-            </div>
-          </div>
-
-          <div class="callout">
-            <b>Keep skills secondary:</b> the control plane should be trustworthy even if you never create a single Skill.
-            Add them when a workflow is clearly worth repeating.
-          </div>
-        </section>
-
-        <section id="knowledge">
-          <div class="sectionhead">
-            <h2>Secondary system: Knowledge & Experts</h2>
-            <p>
-              Integrated from <a class="underline" href="https://github.com/Soupernerd/marge-simpson" target="_blank" rel="noreferrer">marge-simpson</a>:
-              <b>persistent memory</b> across sessions and <b>domain expert routing</b> for specialized guidance. These
-              are helpful, but they are not daemon control flags and they are not the main product promise.
-            </p>
-          </div>
-
-          <div class="grid" style="margin-top: 14px">
-            <div class="card" style="grid-column: span 6">
-              <h3>Knowledge Persistence</h3>
-              <p>
-                Session-to-session memory stored in <code>system/knowledge/</code>. Tracks decisions, patterns,
-                preferences, and codebase insights. Entries decay after 90+ days without access.
-              </p>
-              <div class="chiprow" role="list">
-                <span class="chip" role="listitem"><span class="tag"></span><span>decisions.md</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>patterns.md</span></span>
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>preferences.md</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>insights.md</span></span>
-              </div>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#cmd-knowledge">Copy</button>
-                <pre id="cmd-knowledge">./forgeloop.sh session-start   # Load context
-./forgeloop.sh session-end     # Capture knowledge</pre>
-              </div>
-            </div>
-
-            <div class="card" style="grid-column: span 6">
-              <h3>Domain Expert System</h3>
-              <p>
-                Specialized guidance loaded from <code>system/experts/</code> based on task keywords.
-                Experts provide guidance; Skills provide procedures. Use both together.
-              </p>
-              <div class="chiprow" role="list">
-                <span class="chip" role="listitem"><span class="tag"></span><span>architecture</span></span>
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>security</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>testing</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>implementation</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>devops</span></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="panelbox" style="margin-top: 14px">
-            <h3>Lite Mode</h3>
-            <p>
-              For simple one-shot tasks that don't need full planning overhead. Use <code>--lite</code> for direct execution
-              without status tracking or iteration.
-            </p>
-            <div class="code" style="margin-top: 12px">
-              <button class="copy" data-copy="#cmd-lite">Copy</button>
-              <pre id="cmd-lite">./forgeloop.sh build --lite 1   # One-shot, uses AGENTS-lite.md
-./forgeloop.sh build --full 10  # Full mode (default)</pre>
-            </div>
-          </div>
-        </section>
-
-        <section id="lanes">
-          <div class="sectionhead">
-            <h2>Three Execution Lanes</h2>
-            <p>
-              Forgeloop now supports three ways to drive work: markdown checklists, structured tasks, and an experimental native workflow-pack lane. Pick the lane that matches the shape of the work.
-            </p>
-          </div>
-
-          <div class="grid" style="margin-top: 14px">
-            <div class="card" style="grid-column: span 4">
-              <h3>Checklist Lane (phase-1 canonical)</h3>
-              <p>
-                Uses <code>IMPLEMENTATION_PLAN.md</code> with markdown checkboxes. This is the backlog surfaced by the
-                loopback service, HUD, OpenClaw seam, and self-hosting orchestrator in phase 1.
-              </p>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#lane-checklist">Copy</button>
-                <pre id="lane-checklist">./forgeloop.sh plan 1
-./forgeloop.sh build 10</pre>
-              </div>
-              <div class="chiprow" role="list">
-                <span class="chip" role="listitem"><span class="tag"></span><span>human-readable</span></span>
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>editable</span></span>
-              </div>
-            </div>
-
-            <div class="card" style="grid-column: span 4">
-              <h3>Tasks Lane (optional)</h3>
-              <p>
-                Uses <code>prd.json</code> with machine-readable <code>passes: true/false</code> flags. It remains supported,
-                but backlog unification with the HUD/control plane is intentionally deferred until after the UI core is stable.
-              </p>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#lane-tasks">Copy</button>
-                <pre id="lane-tasks">./forgeloop.sh tasks 10</pre>
-              </div>
-              <div class="chiprow" role="list">
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>machine-readable</span></span>
-                <span class="chip" role="listitem"><span class="tag"></span><span>progress.txt</span></span>
-              </div>
-            </div>
-
-            <div class="card" style="grid-column: span 4">
-              <h3>Workflow Lane (experimental)</h3>
-              <p>
-                Uses native workflow packs under <code>workflows</code> and runs them through Forgeloop’s fail-closed contract. Elixir can already read the workflow catalog, latest workflow artifacts, live active-run metadata, and a bounded workflow history sidecar through the control plane, surface them in the loopback operator UI, and honor one explicit daemon <code>[WORKFLOW]</code> request against a configured target.
-              </p>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#lane-workflow">Copy</button>
-                <pre id="lane-workflow">./forgeloop.sh workflow list
-./forgeloop.sh workflow preflight issue-to-pr
-./forgeloop.sh workflow run issue-to-pr</pre>
-              </div>
-              <div class="chiprow" role="list">
-                <span class="chip blue" role="listitem"><span class="tag"></span><span>manual-first</span></span>
-                <span class="chip pink" role="listitem"><span class="tag"></span><span>configured runner</span></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="panelbox" style="margin-top: 14px">
-            <h3>Comparison</h3>
-            <table class="compare-table">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Checklist Lane</th>
-                  <th>Tasks Lane</th>
-                  <th>Workflow Lane</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Task file</td>
-                  <td>IMPLEMENTATION_PLAN.md <span class="subtle">(phase-1 canonical)</span></td>
-                  <td>prd.json <span class="subtle">(optional, not UI-canonical yet)</span></td>
-                  <td><code>workflow.dot</code> + <code>workflow.toml</code></td>
-                </tr>
-                <tr>
-                  <td>Progress</td>
-                  <td>Markdown checkboxes</td>
-                  <td>passes: true/false</td>
-                  <td>external runner state + Forgeloop evidence files</td>
-                </tr>
-                <tr>
-                  <td>Run command</td>
-                  <td>./forgeloop.sh build N</td>
-                  <td>./forgeloop.sh tasks N</td>
-                  <td>./forgeloop.sh workflow run &lt;name&gt;</td>
-                </tr>
-                <tr>
-                  <td>Best for</td>
-                  <td>Human review/edits</td>
-                  <td>Full automation</td>
-                  <td>graph-shaped workflows / native workflow packs</td>
-                </tr>
-                <tr>
-                  <td>Tracking</td>
-                  <td>STATUS.md</td>
-                  <td>progress.txt</td>
-                    <td>.forgeloop/workflows/&lt;name&gt;/last-*.txt + history.json (with managed Elixir control/status visibility)</td>
-                </tr>
-              </tbody>
-            </table>
-            <p class="subtle" style="margin-top: 12px">
-              Phase-1 self-hosting uses <code>IMPLEMENTATION_PLAN.md</code> as the canonical backlog. The HUD/OpenClaw plane now also
-              follows a service-owned loopback contract via <code>/api/schema</code> plus additive <code>api</code> envelope metadata, projects a read-only repo-local tracker view from backlog items + workflow packs, can trigger managed workflow
-              <code>preflight</code>/<code>run</code> actions through the same babysitter/worktree path, exposes canonical workflow artifacts plus a bounded history sidecar,
-              and now treats <code>.forgeloop/v2/events.log</code> as a first-class event surface through bounded <code>/api/events</code> replay/tails plus snapshot-bootstrap/live SSE, with the service exposing a shared coordination advisory for the HUD and OpenClaw, including a bounded operator brief/timeline over the same replay window, plus an additive service-owned <code>ownership</code> start-gate read model over the shared active-runtime claim and babysitter metadata that bash and Elixir now both honor at run boundaries, explicit reclaimable-dead-claim / fail-closed malformed-metadata semantics in that same view, additive <code>error.ownership</code> context on blocked starts, and OpenClaw able to review one caller-scoped event window, derive invocation-scoped operator playbooks, and optionally apply one conservative control action,
-              while tracker/<code>prd.json</code> unification remains a later slice and workflow metadata stays outside <code>WORKFLOW.md</code> service-owned keys.
-            </p>
-          </div>
-        </section>
-
-        
-
-        <section id="under-the-hood">
-          <div class="sectionhead">
-            <h2>What gets added to your repo</h2>
-            <p>
-              Forgeloop steers by <b>signs</b>: prompts, operational notes, patterns in your codebase, and backpressure from
-              tests/typecheck/lint. This kit drops in the structure so the signs are consistent — plus a typed Skills library
-              (<code>forgeloop/skills</code>) and room for repo-specific skills (<code>skills/</code>) so your workflow compounds over time.
-            </p>
-          </div>
-
-          <div class="grid">
-            <div class="card" style="grid-column: span 7">
-              <h3>File layout</h3>
-              <p>Installer writes prompts + coordination files at repo root, and vendors the kit at <code>./forgeloop</code>.</p>
-              <div class="code nowrap" style="margin-top: 12px">
-                <button class="copy" data-copy="#tree">Copy</button>
-                <pre id="tree">./
-├─ AGENTS.md
-├─ AGENTS-lite.md           # Lite mode (one-shot tasks)
-├─ PROMPT_intake.md         # Reusable intake prompt for new projects
-├─ PROMPT_plan.md
-├─ PROMPT_plan_work.md
-├─ PROMPT_build.md
-├─ PROMPT_tasks.md          # Tasks lane prompt
-├─ workflows/               # (optional) workflow packs
-├─ IMPLEMENTATION_PLAN.md
-├─ REQUESTS.md
-├─ QUESTIONS.md
-├─ STATUS.md
-├─ CHANGELOG.md
-├─ prd.json                 # (optional) Tasks lane task file
-├─ progress.txt             # (optional) Tasks lane progress
-├─ system/
-│  ├─ knowledge/            # Session memory (from marge-simpson)
-│  │  ├─ _index.md
-│  │  ├─ decisions.md
-│  │  ├─ patterns.md
-│  │  ├─ preferences.md
-│  │  ├─ insights.md
-│  │  └─ archive.md
-│  └─ experts/              # Domain guidance (from marge-simpson)
-│     ├─ _index.md
-│     ├─ architecture.md
-│     ├─ security.md
-│     ├─ testing.md
-│     ├─ implementation.md
-│     └─ devops.md
-├─ .claude/
-│  └─ skills/               # (generated) Claude Code skill mirror
-├─ .codex/
-│  └─ skills/               # (generated) Codex skill mirror
-├─ skills/                  # (optional) your project skills
-│  ├─ operational/
-│  ├─ meta/
-│  └─ composed/
-├─ specs/
-│  ├─ feature_template.md
-│  └─ ...
-├─ docs/
-│  ├─ README.md
-│  ├─ workflows.md          # Workflow lane contract
-│  └─ ...
-└─ forgeloop/
-   ├─ bin/
-   │  ├─ loop.sh            # Main build loop
-   │  ├─ loop-tasks.sh      # Tasks lane loop
-   │  ├─ workflow.sh        # Experimental workflow-pack lane
-   │  ├─ forgeloop-daemon.sh    # Daemon mode
-   │  ├─ ingest-report.sh   # Report ingestion
-   │  ├─ ingest-logs.sh     # Log ingestion
-   │  ├─ kickoff.sh         # Kickoff helper
-   │  ├─ sync-skills.sh     # Skills discovery (Claude Code / Codex / Amp)
-   │  ├─ session-start.sh   # Load knowledge context
-   │  └─ session-end.sh     # Capture session knowledge
-   ├─ lib/
-   │  ├─ core.sh            # Logging, notifications, git helpers
-   │  └─ llm.sh             # LLM routing with failover
-   ├─ skills/
-   │  ├─ operational/
-   │  │  ├─ prd/SKILL.md                # PRD generation skill
-   │  │  └─ tasks/SKILL.md              # PRD → prd.json conversion
-   │  ├─ meta/
-   │  │  ├─ skillforge/SKILL.md         # Scaffold new Skills
-   │  │  ├─ project-architect/SKILL.md  # Plan + skill opportunities
-   │  │  └─ completion-director/SKILL.md # Closed-loop execution
-   │  └─ composed/
-   │     └─ builder-loop/SKILL.md       # End-to-end orchestration
-   ├─ config.sh
-   └─ ...</pre>
-              </div>
-            </div>
-
-            <div class="card" style="grid-column: span 5">
-              <h3>Routing + knobs</h3>
-              <p>Works with Codex and/or Claude. By default: Codex plans/reviews, Claude builds. Override via env.</p>
-              <ul style="margin: 10px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 14px">
-                <li><code>AI_MODEL=claude|codex</code> force one model</li>
-                <li><code>FORGELOOP_AUTOPUSH=false</code> by default</li>
-                <li><code>FORGELOOP_PLAN_AUTOPUSH</code> push on plan/plan-work iterations (no CI gate)</li>
-                <li><code>FORGELOOP_ALLOW_PRD_VERIFY_CMD</code> allow <code>verify_cmd</code> from <code>prd.json</code> (tasks lane)</li>
-                <li><code>FORGELOOP_WORKFLOWS_DIR</code> override where workflow packages are discovered</li>
-                <li><code>FORGELOOP_WORKFLOW_RUNNER</code> choose the external runner used by the workflow lane</li>
-                <li><code>FORGELOOP_FAILURE_ESCALATE_AFTER</code> set the repeated-failure pause threshold</li>
-                <li><code>FORGELOOP_FAILURE_ESCALATION_ACTION</code> choose the drafted human handoff action</li>
-                <li><code>./forgeloop.sh sync-skills</code> refresh skill discovery (Claude Code; Codex mirror when writable)</li>
-                <li><code>./forgeloop.sh upgrade --from /path/to/kit</code> refresh the vendored runtime in place</li>
-                <li><code>FORGELOOP_TEST_CMD</code> run after review auto-fixes</li>
-                <li><code>FORGELOOP_DEPLOY_CMD</code> used by daemon on <code>[DEPLOY]</code></li>
-                <li><code>FORGELOOP_INGEST_LOGS_CMD</code> / <code>FORGELOOP_INGEST_LOGS_FILE</code> used by daemon on <code>[INGEST_LOGS]</code></li>
-                <li><code>CODEX_PLANNING_CONFIG</code> / <code>CODEX_REVIEW_CONFIG</code> reasoning tuning</li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="callout">
-            <b>Tune it like a guitar:</b> if Forgeloop is producing the wrong shape of code, don’t only tweak prompts — add
-            better utilities/patterns and strengthen backpressure. The repo itself becomes the steering wheel.
-          </div>
-        </section>
-<section id="use">
-          <div class="sectionhead">
-            <h2>How to use it</h2>
-            <p>
-              Two common paths: start a new repo from scratch (intake prompt + kickoff + plan + build), augment an existing repo
-              (specs + plan + build + occasional kit upgrades), or run native workflow packs through the new experimental workflow lane.
-            </p>
-          </div>
-
-          <div class="tabs" role="tablist" aria-label="Use cases">
-            <button class="tab" role="tab" aria-selected="true" aria-controls="panel-new" id="tab-new">
-              New project
-            </button>
-            <button class="tab" role="tab" aria-selected="false" aria-controls="panel-existing" id="tab-existing">
-              Existing repo
-            </button>
-          </div>
-
-          <div class="tabpanels">
-            <div class="panelbox" id="panel-new" role="tabpanel" aria-labelledby="tab-new">
-              <h3>New project (greenfield)</h3>
-              <ul>
-                <li>
-                  Install kit + wrapper:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-new-install">Copy</button>
-                    <pre id="cmd-new-install">./install.sh /path/to/your/new-repo --wrapper
-cd /path/to/your/new-repo
-./forgeloop.sh evals</pre>
-                  </div>
-                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
-                    Tip: In TTY, existing files prompt for <b>skip/overwrite/merge/diff</b>. Use <code>--batch</code> for CI or <code>--force</code> to overwrite all.
-                  </p>
-                </li>
-                <li>
-                  Start from the repo-local intake prompt. Hand <code>PROMPT_intake.md</code> directly to your external LLM/agent,
-                  or render a shareable kickoff prompt:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-kickoff">Copy</button>
-                    <pre id="cmd-kickoff">./forgeloop.sh kickoff "&lt;one paragraph project brief&gt;"</pre>
-                  </div>
-                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
-                    Default output should stay checklist-first: <code>docs/*</code>, <code>specs/*</code>, and <code>IMPLEMENTATION_PLAN.md</code>.
-                    Ask for <code>prd.json</code> only when you intentionally want the tasks lane, and only seed workflow packs when you explicitly want the experimental workflow lane.
-                  </p>
-                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
-                    Fresh installs now treat this as part of the normal lifecycle: checklist <code>plan</code>/<code>build</code> stop early until real intake output replaces the bootstrap templates.
-                  </p>
-                </li>
-                <li>
-                  Apply the patch your memory-backed agent returns (creates <code>docs/*</code>, <code>specs/*</code>, and
-                  a solid plan). Then run:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-new-run">Copy</button>
-                    <pre id="cmd-new-run">./forgeloop.sh plan 1
-./forgeloop.sh build 10
-# Add --watch or --infinite for continuous looping</pre>
-                  </div>
-                </li>
-              </ul>
-              <p style="margin-top: 10px; color: var(--ink-2); font-size: 14px">
-                Read the full kickoff workflow: <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/docs/kickoff.md" target="_blank" rel="noreferrer">docs/kickoff.md</a>
-              </p>
-            </div>
-
-            <div
-              class="panelbox"
-              id="panel-existing"
-              role="tabpanel"
-              aria-labelledby="tab-existing"
-              hidden
-            >
-              <h3>Existing repo (augmentation)</h3>
-              <ul>
-                <li>
-                  Install kit + wrapper:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-old-install">Copy</button>
-                    <pre id="cmd-old-install">./install.sh /path/to/existing-repo --wrapper
-cd /path/to/existing-repo
-./forgeloop.sh evals</pre>
-                  </div>
-                  <p style="margin-top: 8px; color: var(--ink-2); font-size: 13px">
-                    When files exist: <b>skip</b> (default), <b>overwrite</b>, <b>merge</b> (append template), or <b>diff</b> (view changes).
-                  </p>
-                </li>
-                <li>
-                  Refresh the vendored runtime when a newer Forgeloop kit is available:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-old-upgrade">Copy</button>
-                    <pre id="cmd-old-upgrade">./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force</pre>
-                  </div>
-                </li>
-                <li>
-                  Write/curate specs for the system you want (3–8 files is a great start). Then run planning:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-old-plan">Copy</button>
-                    <pre id="cmd-old-plan">./forgeloop.sh plan 1</pre>
-                  </div>
-                </li>
-                <li>
-                  Build in loops with backpressure:
-                  <div class="code" style="margin-top: 8px">
-                    <button class="copy" data-copy="#cmd-old-build">Copy</button>
-                    <pre id="cmd-old-build">./forgeloop.sh build 10
-# Add --watch or --infinite for continuous looping</pre>
-                  </div>
-                </li>
-              </ul>
-              <p style="margin-top: 10px; color: var(--ink-2); font-size: 14px">
-                Tip: use <code>plan-work</code> on a work branch when you want a scoped plan:
-                <code style="font-family: var(--font-mono)">./forgeloop/bin/loop.sh plan-work "scope"</code>
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section id="provision">
-          <div class="sectionhead">
-            <h2>Provision a Forgeloop-equipped VM (GCP)</h2>
-            <p>
-              The whole point: run full-auto without giving an agent access to your personal machine.
-              Provision a dedicated runner VM, then clone your repo and loop.
-            </p>
-          </div>
-
-          <div class="grid">
-            <div class="card" style="grid-column: span 7">
-              <h3>One command</h3>
-              <p>
-                Requires <code>gcloud</code> on your laptop. Uploads the kit to the VM, installs Node/pnpm + agent CLIs
-                (best-effort), and stores keys in <code>/etc/forgeloop/keys.env</code>.
-              </p>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#cmd-provision">Copy</button>
-                <pre id="cmd-provision">OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
-  ops/gcp/provision.sh --name forgeloop-runner \
-  --project &lt;gcp-project&gt; --zone us-central1-a</pre>
-              </div>
-              <div class="callout" style="margin-top: 12px">
-                <b>Security:</b> treat runners as disposable. Use least-privilege tokens.
-                Never put personal SSH keys or browser cookies on the VM.
-              </div>
-            </div>
-
-            <div class="card" style="grid-column: span 5">
-              <h3>After it’s up</h3>
-              <p>SSH in, clone your target repo, install the kit, and run loops in <code>tmux</code>.</p>
-              <div class="code" style="margin-top: 12px">
-                <button class="copy" data-copy="#cmd-after">Copy</button>
-                <pre id="cmd-after">gcloud compute ssh forgeloop-runner \
-  --project &lt;gcp-project&gt; --zone us-central1-a
-
-mkdir -p ~/work && cd ~/work
-git clone &lt;your-repo-url&gt; repo
-/opt/forgeloop/install.sh ~/work/repo --wrapper
-
-cd ~/work/repo
-./forgeloop.sh plan 1
-./forgeloop.sh build 10</pre>
-              </div>
-            </div>
-          </div>
-
-          <p style="margin-top: 12px; color: var(--ink-2); font-size: 14px">
-            More details: <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/ops/gcp/README.md" target="_blank" rel="noreferrer">ops/gcp/README.md</a> and
-            <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/blob/main/docs/sandboxing.md" target="_blank" rel="noreferrer">docs/sandboxing.md</a>
+      <section id="why" class="section">
+        <div class="section-head">
+          <p class="eyebrow">01 // Why Forgeloop exists</p>
+          <h2 class="section-title">Agents only feel autonomous while the demo is going well.</h2>
+          <p class="section-copy">
+            Forgeloop is built for the unhappy path: repeated failures, unanswered blockers, ownership conflicts, dead daemon state, and the moment when someone needs to take the wheel without losing the trail.
           </p>
-        </section>
+        </div>
 
-        <footer>
-          <div class="footergrid">
-            <div>
-              <div style="font-family: var(--font-display); letter-spacing: -0.02em">Forgeloop</div>
-              <div style="margin-top: 6px">
-                <a class="underline" href="https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0" target="_blank" rel="noreferrer">v1.0.0</a> stable (bash) ·
-                <span>main = v2 alpha / development track</span>.
-                Inspired by Geoff Huntley's Ralph methodology, marge-simpson's knowledge persistence, and compound-product's patterns.
-              </div>
+        <div class="story-grid">
+          <article class="story-card panel">
+            <span class="story-number">01</span>
+            <h3>Stop the thrash</h3>
+            <p>When failure repeats, Forgeloop pauses, writes the canonical control artifacts, and preserves runtime state for the next human or tool.</p>
+          </article>
+          <article class="story-card panel">
+            <span class="story-number">02</span>
+            <h3>Show the real state</h3>
+            <p>The daemon, service, HUD, and OpenClaw seam all converge on the same repo-local truth instead of inventing parallel histories.</p>
+          </article>
+          <article class="story-card panel">
+            <span class="story-number">03</span>
+            <h3>Make autonomy reviewable</h3>
+            <p>Questions, escalations, ownership, workflows, and proof surfaces are visible enough for real operators — and compelling enough for content and demos.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="surfaces" class="section">
+        <div class="section-head">
+          <p class="eyebrow">02 // Surfaces</p>
+          <h2 class="section-title">One product, multiple control surfaces.</h2>
+          <p class="section-copy">
+            Forgeloop is no longer just a bash loop. It is becoming a full operator stack: CLI entrypoints, managed daemon behavior, a loopback HUD, an OpenClaw seam, and a self-hosting proof flow that exercises the actual product path.
+          </p>
+        </div>
+
+        <div class="surface-grid">
+          <article class="surface-card panel">
+            <span class="story-number">CLI</span>
+            <h3>Repo-local commands</h3>
+            <p>Use <code>./forgeloop.sh</code> to install, serve, run evals, kickoff a fresh repo, launch checklist loops, and now trigger the self-host proof path.</p>
+          </article>
+          <article class="surface-card panel">
+            <span class="story-number">HUD</span>
+            <h3>Live operator dashboard</h3>
+            <p>A loopback-only control room for pause, clear-pause, replan, one-off runs, ownership visibility, workflow status, and replayable events.</p>
+          </article>
+          <article class="surface-card panel">
+            <span class="story-number">OC</span>
+            <h3>OpenClaw seam</h3>
+            <p>Monitor and pilot the same bounded control plane via the repo-local plugin seam instead of bypassing the service contract.</p>
+          </article>
+          <article class="surface-card panel">
+            <span class="story-number">Proof</span>
+            <h3>Self-host proof harness</h3>
+            <p>A real browser-driven proof that snapshots into an isolated proof repo when needed, drives the live HUD, and checks the system without mutating your canonical control files.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="proof" class="section signal-strip">
+        <article class="proof-card panel proof-panel">
+          <p class="eyebrow">03 // Public proof path</p>
+          <h3>Public safe-autonomy proof</h3>
+          <p>
+            The stable proof surface is still the curated eval suite. It is the fast, repeatable signal for the fail-closed control-plane story.
+          </p>
+          <div class="command-block">
+            <div class="code-row">
+              <span class="code-label">Stable proof</span>
+              <button class="copy-button" data-copy="./forgeloop.sh evals">Copy</button>
             </div>
-            <div class="links" aria-label="Footer links">
-              <a class="pill" href="https://ghuntley.com/forgeloop/" target="_blank" rel="noreferrer"
-                ><span class="dot"></span>Methodology</a
-              >
-              <a
-                class="pill"
-                href="https://github.com/ghuntley/how-to-ralph-wiggum"
-                target="_blank"
-                rel="noreferrer"
-                ><span class="dot"></span>Playbook</a
-              >
-              <a
-                class="pill"
-                href="https://github.com/Soupernerd/marge-simpson"
-                target="_blank"
-                rel="noreferrer"
-                ><span class="dot"></span>marge-simpson</a
-              >
-              <a class="pill" href="https://github.com/zakelfassi/Forgeloop-kit" target="_blank" rel="noreferrer"
-                ><span class="dot"></span>Repo</a
-              >
-            </div>
+            <pre><code>./forgeloop.sh evals</code></pre>
           </div>
-        </footer>
-      </div>
+          <ul class="proof-outcomes">
+            <li>daemon pause behavior</li>
+            <li>repeated-failure escalation</li>
+            <li>blocker handling</li>
+            <li>runtime-state transitions</li>
+            <li>layout portability</li>
+          </ul>
+        </article>
+
+        <article class="proof-card panel proof-panel">
+          <p class="eyebrow">04 // V2 alpha proof</p>
+          <h3>One-command self-host proof</h3>
+          <p>
+            On <code>main</code>, the real product story goes further: a browser-driven proof opens the actual HUD, triggers bounded control actions, verifies service responses, and retains artifacts.
+          </p>
+          <div class="command-block">
+            <div class="code-row">
+              <span class="code-label">Release proof</span>
+              <button class="copy-button" data-copy="./forgeloop.sh self-host-proof">Copy</button>
+            </div>
+            <pre><code>./forgeloop.sh self-host-proof</code></pre>
+          </div>
+          <ul class="proof-outcomes">
+            <li>uses the real loopback service and HUD</li>
+            <li>drives the UI with <code>agent-browser</code></li>
+            <li>checks pause, clear-pause, replan, and one-off plan behavior</li>
+            <li>keeps screenshots and logs for review</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="tracks" class="section">
+        <div class="section-head">
+          <p class="eyebrow">05 // Release tracks</p>
+          <h2 class="section-title">Stable lane, alpha lane, clear expectations.</h2>
+          <p class="section-copy">
+            The product is now opinionated about release posture. Stable and experimental work should feel coherent, not mixed together in one ambiguous story.
+          </p>
+        </div>
+
+        <div class="tracks-grid">
+          <article class="track-card panel">
+            <span class="track-pill stable">v1.0.0 stable</span>
+            <h3>Trustworthy baseline</h3>
+            <p>The stable track is the repo-local fail-closed control plane: checklist loops, canonical files, daemon behavior, and public proof via the eval suite.</p>
+            <ul class="track-list">
+              <li>best path for conservative adoption</li>
+              <li>public proof surface anchored by <code>evals</code></li>
+              <li>upgrade path remains explicit</li>
+            </ul>
+          </article>
+          <article class="track-card panel">
+            <span class="track-pill alpha">main // v2 alpha</span>
+            <h3>Operator-system future</h3>
+            <p>The alpha lane introduces the richer product story: loopback service, HUD, ownership model, event replay, workflow surfaces, OpenClaw coordination, and the self-host proof harness.</p>
+            <ul class="track-list">
+              <li>best path for demos, product iteration, and launch prep</li>
+              <li>manual proof surface via <code>self-host-proof</code></li>
+              <li>more visually legible and more operationally expressive</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <p class="eyebrow">06 // How it works</p>
+          <h2 class="section-title">The product loop, in four moves.</h2>
+          <p class="section-copy">
+            The UI can glow harder now, but the underlying loop still stays grounded: canonical files, runtime state, bounded control actions, and proofable system behavior.
+          </p>
+        </div>
+
+        <div class="timeline-grid">
+          <article class="timeline-card panel">
+            <div class="timeline-step">
+              <span class="step-index">Step 01</span>
+              <strong>Intake</strong>
+              <p>Fresh repos start from <code>PROMPT_intake.md</code> and kickoff instead of pretending a plan already exists.</p>
+            </div>
+          </article>
+          <article class="timeline-card panel">
+            <div class="timeline-step">
+              <span class="step-index">Step 02</span>
+              <strong>Loop</strong>
+              <p>Checklist runs plan and build against real repo checks, then stop early when the system says it should stop.</p>
+            </div>
+          </article>
+          <article class="timeline-card panel">
+            <div class="timeline-step">
+              <span class="step-index">Step 03</span>
+              <strong>Coordinate</strong>
+              <p>The service, HUD, and OpenClaw seam read the same ownership, runtime, questions, escalations, workflows, and replayable events.</p>
+            </div>
+          </article>
+          <article class="timeline-card panel">
+            <div class="timeline-step">
+              <span class="step-index">Step 04</span>
+              <strong>Prove</strong>
+              <p>Run <code>evals</code> for the public stable story or <code>self-host-proof</code> for the real V2-alpha operator path.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="install" class="section">
+        <article class="final-card panel">
+          <div>
+            <p class="eyebrow">07 // Quickstart</p>
+            <h2>Install it. Serve it. Prove it. Then make it yours.</h2>
+            <p>
+              Forgeloop should feel like infrastructure you can trust and a product you actually want to show people. That is the bar for this redesign and for the V2 launch path.
+            </p>
+          </div>
+
+          <div class="final-commands">
+            <div class="final-command"><code>./install.sh /path/to/target-repo --wrapper</code></div>
+            <div class="final-command"><code>./forgeloop.sh serve</code></div>
+            <div class="final-command"><code>./forgeloop.sh evals</code></div>
+            <div class="final-command"><code>./forgeloop.sh self-host-proof</code></div>
+          </div>
+        </article>
+      </section>
+
+      <footer>
+        Forgeloop is a repo-local safe-autonomy control plane for coding agents. Stable lives on v1.0.0. Main is the vivid V2 alpha track.
+      </footer>
     </main>
 
     <script>
-      (function () {
-        // Tabs
-        const tabs = Array.from(document.querySelectorAll(".tab"));
-        const panels = {
-          new: document.getElementById("panel-new"),
-          existing: document.getElementById("panel-existing"),
-        };
-
-        function select(which) {
-          const isNew = which === "new";
-          document.getElementById("tab-new").setAttribute("aria-selected", String(isNew));
-          document.getElementById("tab-existing").setAttribute("aria-selected", String(!isNew));
-          panels.new.hidden = !isNew;
-          panels.existing.hidden = isNew;
-        }
-
-        document.getElementById("tab-new").addEventListener("click", () => select("new"));
-        document.getElementById("tab-existing").addEventListener("click", () => select("existing"));
-
-        // Mobile nav
-        const navToggle = document.getElementById("nav-toggle");
-        const nav = document.getElementById("primary-nav");
-
-        function setNavOpen(open) {
-          document.documentElement.dataset.navOpen = open ? "true" : "false";
-          if (!navToggle) return;
-          navToggle.setAttribute("aria-expanded", String(open));
-          const label = navToggle.querySelector(".navlabel");
-          if (label) label.textContent = open ? "Close" : "Menu";
-        }
-
-        if (navToggle && nav) {
-          setNavOpen(false);
-
-          navToggle.addEventListener("click", () => {
-            const open = document.documentElement.dataset.navOpen !== "true";
-            setNavOpen(open);
-          });
-
-          nav.addEventListener("click", (e) => {
-            const el = e.target;
-            if (!(el instanceof HTMLElement)) return;
-            if (el.closest("a")) setNavOpen(false);
-          });
-
-          document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") setNavOpen(false);
-          });
-
-          window.addEventListener("resize", () => {
-            if (window.matchMedia("(min-width: 861px)").matches) setNavOpen(false);
-          });
-        }
-
-        // Copy
-        async function copyText(text) {
+      document.querySelectorAll('[data-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const value = button.getAttribute('data-copy') || '';
           try {
-            await navigator.clipboard.writeText(text);
-            return true;
-          } catch (_) {
-            return false;
-          }
-        }
-
-        const copyButtons = Array.from(document.querySelectorAll("button.copy"));
-        copyButtons.forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const sel = btn.getAttribute("data-copy");
-            if (!sel) return;
-            const el = document.querySelector(sel);
-            if (!el) return;
-
-            const ok = await copyText(el.textContent || "");
-            const original = btn.textContent;
-            btn.textContent = ok ? "Copied" : "Copy failed";
+            await navigator.clipboard.writeText(value);
+            const original = button.textContent;
+            button.textContent = 'Copied';
             setTimeout(() => {
-              btn.textContent = original;
-            }, 900);
-          });
+              button.textContent = original;
+            }, 1200);
+          } catch (_error) {
+            button.textContent = 'Copy failed';
+            setTimeout(() => {
+              button.textContent = 'Copy';
+            }, 1200);
+          }
         });
-      })();
+      });
     </script>
   </body>
 </html>
