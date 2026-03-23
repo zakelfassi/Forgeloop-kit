@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Forgeloop — RPG control room for safe autonomous software work</title>
+    <title>Forgeloop — stop agent thrash, keep building</title>
     <meta
       name="description"
-      content="Forgeloop is the safe-autonomy control plane for coding agents: fail closed, preserve canonical artifacts, pilot live runs, and prove the system through a repo-local HUD, daemon, and self-hosting proof harness."
+      content="Forgeloop is the runtime layer that stops coding agents from spinning. When Claude or Codex hits a wall, Forgeloop pauses the run, preserves everything, and hands you a clean next step."
     />
     <meta name="theme-color" content="#090511" />
     <meta property="og:title" content="Forgeloop" />
     <meta
       property="og:description"
-      content="A vibrant control room for safe autonomous software work: pause agent thrash, keep repo-local truth, and prove the system end to end."
+      content="Stop agent thrash. See what your agents are actually doing. Take the wheel when it matters."
     />
     <meta property="og:type" content="website" />
 
@@ -821,7 +821,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-copy">
             <strong>Forgeloop</strong>
-            <span>safe autonomy // vivid operator systems</span>
+            <span>the runtime layer for coding agents</span>
           </span>
         </a>
 
@@ -840,31 +840,31 @@
       <section class="hero section">
         <div class="hero-copy">
           <article class="hero-card panel">
-            <p class="eyebrow">Forgeloop // v2 alpha // operator-grade autonomy</p>
+            <p class="eyebrow">Forgeloop // v2 alpha</p>
             <h1 class="hero-title">
-              Turn agent runs into a <span class="accent">control room</span>, not a guessing game.
+              Your agents <span class="accent">stop thrashing</span>. You keep building.
             </h1>
             <p class="hero-lede">
-              Forgeloop is the safe-autonomy control plane for coding agents. It keeps repo-local truth, fails closed instead of thrashing, exposes a live operator HUD, and ships a one-command self-host proof so the real system is something you can pilot, prove, and present.
+              Coding agents are powerful until they hit a wall — then they burn tokens retrying the same failure forever. Forgeloop catches that loop, pauses cleanly, saves every artifact, and shows you exactly what went wrong and what to do next. One install. Works with Claude, Codex, or any LLM.
             </p>
 
             <div class="hero-actions">
-              <a class="button primary" href="#install">Start the quest</a>
-              <a class="button secondary" href="#proof">See the proof path</a>
+              <a class="button primary" href="#install">Get started</a>
+              <a class="button secondary" href="#proof">See the proof</a>
             </div>
 
             <div class="hero-strip" aria-label="Highlights">
               <div class="mini-card">
-                <strong>Fail closed</strong>
-                <span>Pause repeated failures, preserve state, and draft the human handoff instead of spinning forever.</span>
+                <strong>Stops the spin</strong>
+                <span>When your agent hits the same failure twice, Forgeloop pauses the run and writes a clean handoff — no more burning tokens on retries.</span>
               </div>
               <div class="mini-card">
-                <strong>Repo-local truth</strong>
-                <span>Canonical files and runtime artifacts remain authoritative even when the UI gets prettier.</span>
+                <strong>Everything in the repo</strong>
+                <span>State, questions, escalations, and runtime status live in plain files in your repo. No external database. No second source of truth.</span>
               </div>
               <div class="mini-card">
-                <strong>Presentation-ready</strong>
-                <span>CLI, HUD, OpenClaw seam, and self-host proof now tell one coherent product story.</span>
+                <strong>Prove it first</strong>
+                <span>Run <code>./forgeloop.sh evals</code> before you trust it. One command, real scenarios, real proof.</span>
               </div>
             </div>
           </article>
@@ -874,45 +874,45 @@
           <article class="quest-panel panel">
             <div class="quest-top">
               <div>
-                <h2>Quest board</h2>
-                <p class="section-copy">The current product stack, as an operator would actually experience it.</p>
+                <h2>What you get</h2>
+                <p class="section-copy">From install to a run you can actually explain to your team.</p>
               </div>
-              <span class="quest-badge">main // v2 alpha</span>
+              <span class="quest-badge">v2 alpha</span>
             </div>
 
             <div class="quest-list">
               <div class="quest-item">
-                <strong>01 — Boot the control room</strong>
-                <p>Serve the loopback service and HUD without adding a separate database or frontend app stack.</p>
-                <span class="status-chip live">real HUD</span>
+                <strong>01 — A live dashboard for agent runs</strong>
+                <p>See runtime state, active blockers, and pending questions in a real-time HUD — no log spelunking required.</p>
+                <span class="status-chip live">live HUD</span>
               </div>
               <div class="quest-item">
-                <strong>02 — Prove the product path</strong>
-                <p>Drive the actual interface with <code>agent-browser</code>, confirm bounded operator actions, and keep artifacts.</p>
-                <span class="status-chip lock">manual proof</span>
+                <strong>02 — One-command proof it works</strong>
+                <p>Run <code>./forgeloop.sh evals</code> to verify pause behavior, failure handling, and state transitions before you trust it.</p>
+                <span class="status-chip lock">verified</span>
               </div>
               <div class="quest-item">
-                <strong>03 — Keep the operator in charge</strong>
-                <p>Ownership, pause state, start gates, questions, and escalations stay visible instead of hidden in logs.</p>
-                <span class="status-chip v2">ownership aware</span>
+                <strong>03 — You stay in control</strong>
+                <p>Pause, resume, replan, answer blockers. The system never pretends to be fully autonomous — you decide when to intervene.</p>
+                <span class="status-chip v2">human-first</span>
               </div>
             </div>
           </article>
 
           <article class="spotlight-panel panel">
-            <h2>Why people will remember this</h2>
+            <h2>Built for how agents actually fail</h2>
             <div class="spotlight-grid">
               <div class="signal-item">
-                <strong>It looks alive</strong>
-                <p>Not generic SaaS. Not generic agent hype. A real visual system with energy.</p>
+                <strong>Tests keep failing</strong>
+                <p>Forgeloop catches the retry loop, pauses, and shows you the exact failure chain.</p>
               </div>
               <div class="signal-item">
-                <strong>It still tells the truth</strong>
-                <p>The UI points back to canonical files and bounded evidence, not vibes.</p>
+                <strong>Auth expires mid-run</strong>
+                <p>Provider failover kicks in. If both providers are down, it pauses instead of burning tokens.</p>
               </div>
               <div class="signal-item">
-                <strong>It demos honestly</strong>
-                <p>You can show the real operator loop instead of a stitched-together happy path.</p>
+                <strong>Agent needs a decision</strong>
+                <p>The question gets written to a file. The run pauses. You answer when you're ready.</p>
               </div>
             </div>
           </article>
@@ -921,71 +921,71 @@
 
       <section id="why" class="section">
         <div class="section-head">
-          <p class="eyebrow">01 // Why Forgeloop exists</p>
-          <h2 class="section-title">Agents only feel autonomous while the demo is going well.</h2>
+          <p class="eyebrow">01 // The problem</p>
+          <h2 class="section-title">Agent runs fail. The question is whether you lose the work.</h2>
           <p class="section-copy">
-            Forgeloop is built for the unhappy path: repeated failures, unanswered blockers, ownership conflicts, dead daemon state, and the moment when someone needs to take the wheel without losing the trail.
+            Every team running coding agents hits the same wall: the tests fail, the agent retries, burns through your API budget, and leaves you with nothing useful. Forgeloop exists so that when an agent run goes sideways, you get a clean stop, a preserved trail, and a clear next step — not a $200 invoice and an empty diff.
           </p>
         </div>
 
         <div class="story-grid">
           <article class="story-card panel">
             <span class="story-number">01</span>
-            <h3>Stop the thrash</h3>
-            <p>When failure repeats, Forgeloop pauses, writes the canonical control artifacts, and preserves runtime state for the next human or tool.</p>
+            <h3>Catches the loop</h3>
+            <p>When an agent retries the same failure, Forgeloop stops the run, writes the reason to your repo, and preserves every artifact so nothing is lost.</p>
           </article>
           <article class="story-card panel">
             <span class="story-number">02</span>
-            <h3>Show the real state</h3>
-            <p>The daemon, service, HUD, and OpenClaw seam all converge on the same repo-local truth instead of inventing parallel histories.</p>
+            <h3>One source of truth</h3>
+            <p>Runtime state, pending questions, escalations, and blockers all live in plain files in your repo. The CLI, HUD, and daemon all read the same files.</p>
           </article>
           <article class="story-card panel">
             <span class="story-number">03</span>
-            <h3>Make autonomy reviewable</h3>
-            <p>Questions, escalations, ownership, workflows, and proof surfaces are visible enough for real operators — and compelling enough for content and demos.</p>
+            <h3>You can review everything</h3>
+            <p>Every pause, every escalation, every decision point is a file you can read, diff, and discuss in a PR. No hidden state, no magic.</p>
           </article>
         </div>
       </section>
 
       <section id="surfaces" class="section">
         <div class="section-head">
-          <p class="eyebrow">02 // Surfaces</p>
-          <h2 class="section-title">One product, multiple control surfaces.</h2>
+          <p class="eyebrow">02 // How you use it</p>
+          <h2 class="section-title">CLI, dashboard, or plugin — same truth everywhere.</h2>
           <p class="section-copy">
-            Forgeloop is no longer just a bash loop. It is becoming a full operator stack: CLI entrypoints, managed daemon behavior, a loopback HUD, an OpenClaw seam, and a self-hosting proof flow that exercises the actual product path.
+            Every way you interact with Forgeloop reads and writes the same repo-local files. Pick whatever fits your workflow.
           </p>
         </div>
 
         <div class="surface-grid">
           <article class="surface-card panel">
             <span class="story-number">CLI</span>
-            <h3>Repo-local commands</h3>
-            <p>Use <code>./forgeloop.sh</code> to install, serve, run evals, kickoff a fresh repo, launch checklist loops, and now trigger the self-host proof path.</p>
+            <h3>Terminal-first workflow</h3>
+                <p>Install, plan, build, run proofs, and manage everything from <code>./forgeloop.sh</code>. No GUI required.</p>
           </article>
           <article class="surface-card panel">
             <span class="story-number">HUD</span>
-            <h3>Live operator dashboard</h3>
-            <p>A loopback-only control room for pause, clear-pause, replan, one-off runs, ownership visibility, workflow status, and replayable events.</p>
+            <h3>Live dashboard</h3>
+                <p>Real-time view of runtime state, blockers, questions, and ownership. Pause, resume, and replan without touching the terminal.</p>
           </article>
           <article class="surface-card panel">
             <span class="story-number">OC</span>
-            <h3>OpenClaw seam</h3>
-            <p>Monitor and pilot the same bounded control plane via the repo-local plugin seam instead of bypassing the service contract.</p>
+            <h3>OpenClaw plugin</h3>
+                <p>Monitor and steer Forgeloop runs from inside OpenClaw. Same files, same state, same control actions.</p>
           </article>
           <article class="surface-card panel">
             <span class="story-number">Proof</span>
-            <h3>Self-host proof harness</h3>
-            <p>A real browser-driven proof that snapshots into an isolated proof repo when needed, drives the live HUD, and checks the system without mutating your canonical control files.</p>
+            <h3>Self-host proof</h3>
+                <p>One command spins up an isolated test environment, drives the real HUD, and verifies everything works end to end.</p>
           </article>
         </div>
       </section>
 
       <section id="proof" class="section signal-strip">
         <article class="proof-card panel proof-panel">
-          <p class="eyebrow">03 // Public proof path</p>
-          <h3>Public safe-autonomy proof</h3>
+          <p class="eyebrow">03 // Trust, verified</p>
+          <h3>Prove it works before you use it</h3>
           <p>
-            The stable proof surface is still the curated eval suite. It is the fast, repeatable signal for the fail-closed control-plane story.
+            Run the eval suite in under a minute. It tests the behaviors that actually matter: does it pause? Does it escalate? Does it preserve state?
           </p>
           <div class="command-block">
             <div class="code-row">
@@ -1004,10 +1004,10 @@
         </article>
 
         <article class="proof-card panel proof-panel">
-          <p class="eyebrow">04 // V2 alpha proof</p>
-          <h3>One-command self-host proof</h3>
+          <p class="eyebrow">04 // End-to-end proof</p>
+          <h3>Test the full stack in one command</h3>
           <p>
-            On <code>main</code>, the real product story goes further: a browser-driven proof opens the actual HUD, triggers bounded control actions, verifies service responses, and retains artifacts.
+            Spins up the real HUD and service in an isolated repo, drives actual UI interactions, and saves screenshots as evidence. Run it before you demo.
           </p>
           <div class="command-block">
             <div class="code-row">
@@ -1028,21 +1028,21 @@
       <section id="tracks" class="section">
         <div class="section-head">
           <p class="eyebrow">05 // Release tracks</p>
-          <h2 class="section-title">Stable lane, alpha lane, clear expectations.</h2>
+          <h2 class="section-title">Pick the track that matches your risk appetite.</h2>
           <p class="section-copy">
-            The product is now opinionated about release posture. Stable and experimental work should feel coherent, not mixed together in one ambiguous story.
+            v1 is battle-tested. v2 alpha has the dashboard, the live HUD, and the richer developer experience. Both share the same repo-local contract.
           </p>
         </div>
 
         <div class="tracks-grid">
           <article class="track-card panel">
             <span class="track-pill stable">v1.0.0 stable</span>
-            <h3>Trustworthy baseline</h3>
-            <p>The stable track is the repo-local fail-closed control plane: checklist loops, canonical files, daemon behavior, and public proof via the eval suite.</p>
+            <h3>Ship with confidence</h3>
+            <p>The stable track gives you the proven runtime: checklist loops, fail-closed pauses, clean escalations, and a public eval suite you can run in CI.</p>
             <ul class="track-list">
-              <li>best path for conservative adoption</li>
-              <li>public proof surface anchored by <code>evals</code></li>
-              <li>upgrade path remains explicit</li>
+              <li>best for teams using agents on real projects today</li>
+              <li>verifiable with <code>./forgeloop.sh evals</code></li>
+              <li>clean upgrade path to v2 when you're ready</li>
             </ul>
             <p class="section-copy" style="margin-top: 16px;">
               Moving from stable to alpha? Start with the
@@ -1051,12 +1051,12 @@
           </article>
           <article class="track-card panel">
             <span class="track-pill alpha">main // v2 alpha</span>
-            <h3>Operator-system future</h3>
-            <p>The alpha lane introduces the richer product story: loopback service, HUD, ownership model, event replay, workflow surfaces, OpenClaw coordination, and the self-host proof harness.</p>
+            <h3>Try the full experience</h3>
+            <p>The alpha track adds the live dashboard, real-time event streams, workflow packs, the OpenClaw plugin, and the self-host proof harness.</p>
             <ul class="track-list">
-              <li>best path for demos, product iteration, and launch prep</li>
-              <li>manual proof surface via <code>self-host-proof</code></li>
-              <li>more visually legible and more operationally expressive</li>
+              <li>best for evaluation, demos, and building on top of Forgeloop</li>
+              <li>end-to-end proof via <code>./forgeloop.sh self-host-proof</code></li>
+              <li>everything v1 has, plus a richer developer experience</li>
             </ul>
             <p class="section-copy" style="margin-top: 16px;">
               The current alpha launch story and visual system are documented in
@@ -1069,9 +1069,9 @@
       <section class="section">
         <div class="section-head">
           <p class="eyebrow">06 // How it works</p>
-          <h2 class="section-title">The product loop, in four moves.</h2>
+          <h2 class="section-title">Four steps from install to a run you trust.</h2>
           <p class="section-copy">
-            The UI can glow harder now, but the underlying loop still stays grounded: canonical files, runtime state, bounded control actions, and proofable system behavior.
+            Describe what you want to build. Let the agent loop against real checks. See shared state across every surface. Prove it works before you ship.
           </p>
         </div>
 
@@ -1079,29 +1079,29 @@
           <article class="timeline-card panel">
             <div class="timeline-step">
               <span class="step-index">Step 01</span>
-              <strong>Intake</strong>
-              <p>Fresh repos start from <code>PROMPT_intake.md</code> and kickoff instead of pretending a plan already exists.</p>
+              <strong>Describe</strong>
+              <p>Start from a one-paragraph brief. Forgeloop generates the spec, plan, and checklist so the agent has real structure to work against.</p>
             </div>
           </article>
           <article class="timeline-card panel">
             <div class="timeline-step">
               <span class="step-index">Step 02</span>
-              <strong>Loop</strong>
-              <p>Checklist runs plan and build against real repo checks, then stop early when the system says it should stop.</p>
+              <strong>Build</strong>
+              <p>The agent plans and builds against your repo's real checks. When it gets stuck, Forgeloop pauses the loop instead of retrying forever.</p>
             </div>
           </article>
           <article class="timeline-card panel">
             <div class="timeline-step">
               <span class="step-index">Step 03</span>
-              <strong>Coordinate</strong>
-              <p>The service, HUD, and OpenClaw seam read the same ownership, runtime, questions, escalations, workflows, and replayable events.</p>
+              <strong>See everything</strong>
+              <p>Runtime state, blockers, questions, and event history — visible from the terminal, the dashboard, or the OpenClaw plugin. Same files everywhere.</p>
             </div>
           </article>
           <article class="timeline-card panel">
             <div class="timeline-step">
               <span class="step-index">Step 04</span>
-              <strong>Prove</strong>
-              <p>Run <code>evals</code> for the public stable story or <code>self-host-proof</code> for the real V2-alpha operator path.</p>
+              <strong>Verify</strong>
+              <p>Run the eval suite or the full self-host proof. Real scenarios. Real results. Know it works before you hand it real work.</p>
             </div>
           </article>
         </div>
@@ -1111,9 +1111,9 @@
         <article class="final-card panel">
           <div>
             <p class="eyebrow">07 // Quickstart</p>
-            <h2>Install it. Serve it. Prove it. Then make it yours.</h2>
+            <h2>Four commands to see it for yourself.</h2>
             <p>
-              Forgeloop should feel like infrastructure you can trust and a product you actually want to show people. That is the bar for this redesign and for the V2 launch path.
+              Install into any repo. Spin up the dashboard. Run the proof. You'll know in under five minutes whether this is worth your time.
             </p>
           </div>
 
@@ -1127,7 +1127,7 @@
       </section>
 
       <footer>
-        Forgeloop is a repo-local safe-autonomy control plane for coding agents. Stable lives on v1.0.0. Main is the vivid V2 alpha track.
+        Forgeloop — the runtime layer that stops coding agents from spinning. v1.0.0 is stable. main is the V2 alpha track.
       </footer>
     </main>
 

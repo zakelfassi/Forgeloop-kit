@@ -1,19 +1,18 @@
 # Forgeloop Docs
 
-Start here, in this order:
+Start here to understand what Forgeloop actually guarantees. Read in this order:
 
-1. `runtime-control.md` — the fail-closed runtime contract: supported daemon flags, escalation artifacts, runtime-state semantics, and the current limits of planned self-hosting isolation
-2. `release-tracks.md` — stable `v1.0.0` vs `main` as the current v2 alpha/development track, plus the upgrade/evaluation path between them
-3. `v1-to-v2-upgrade.md` — practical stable-to-alpha evaluation guide with commands, fallback posture, and rollback expectations
-4. `../design.md` — current visual brief for the landing page and operator HUD on the v2 alpha track
-5. `workflows.md` — the detailed workflow-lane contract: repo layout, artifact behavior, compatibility notes, and checkpoint cadence
-6. `sandboxing.md` — how to run full-auto safely in a disposable VM/container, plus the future repo-internal worktree layer
-7. `v2-roadmap.md` — the mainline v2 alpha roadmap: bash vs Elixir coexistence, milestone ordering, planned self-hosting supervision, workflow migration direction, and current deferrals
-8. `elixir-parity-matrix.md` — the current bash-to-Elixir proof matrix
-9. `../evals/README.md` — the public proof suite for the safe-autonomy story
-10. `kickoff.md` — greenfield workflow for the reusable `PROMPT_intake.md` surface and generated `docs/KICKOFF_PROMPT.md`
-11. `harness-readiness.md` — repo-local checklist for agent legibility, reproducibility, failure handling, and the next self-hosting proof gaps
-12. `pr-triage-2026-03-05.md` — current PR triage notes
+1. `runtime-control.md` — the fail-closed contract: pauses, escalations, runtime state, and daemon behavior
+2. `release-tracks.md` — v1 stable vs v2 alpha: how to choose
+3. `v1-to-v2-upgrade.md` — upgrading from stable to alpha with commands, fallback, and rollback
+4. `workflows.md` — the workflow-pack lane: layout, artifacts, runner behavior
+5. `sandboxing.md` — running full-auto safely in disposable VMs/containers
+6. `v2-roadmap.md` — what's shipping on v2 alpha, what's deferred, what gates beta
+7. `elixir-parity-matrix.md` — bash-to-Elixir parity tracking
+8. `../evals/README.md` — the public proof suite
+9. `kickoff.md` — fresh-repo intake via `PROMPT_intake.md`
+10. `harness-readiness.md` — repo readiness checklist for agent work
+11. `../design.md` — v2 alpha visual direction for the landing page and HUD
 
 Useful commands:
 
@@ -25,26 +24,19 @@ Useful commands:
 ./forgeloop.sh upgrade --from /path/to/newer-forgeloop-kit --force
 ```
 
-Fresh bootstrap repos should use `kickoff` before checklist `plan` / `build`; template-only installs are now blocked with explicit intake guidance until real docs/specs/plan content exists.
+Fresh repos should run `kickoff` before `plan` / `build`. Template-only installs will stop early with guidance.
 
-If you are deciding between the stable release and current mainline, read `release-tracks.md` before treating the V2 work as beta- or parity-level ready.
-
-If you are evaluating an existing stable install against the alpha track, read `v1-to-v2-upgrade.md` next.
-
-If you are changing the landing page or operator HUD, read `../design.md` first so the visual system stays coherent with the current v2 alpha launch story.
+Choosing between v1 and v2? Read `release-tracks.md`. Already on v1 and evaluating v2? Read `v1-to-v2-upgrade.md`.
 
 GCP provisioning scripts live in `ops/gcp/`.
 
-## Secondary systems
+## Additional capabilities
 
-Forgeloop also ships systems that compound on top of the control plane:
+These ship with Forgeloop and become more useful once the core runtime is trusted:
 
-- Skills / `sync-skills`
-- repo-local knowledge capture
-- domain experts
-- kickoff prompts
-- structured tasks lane
-- workflow packs / workflow-pack lane
-- report / log ingestion
-
-They are real capabilities, but the runtime contract above is the primary trust surface.
+- **Skills** — reusable workflow procedures via `sync-skills`
+- **Knowledge capture** — session-based repo-local knowledge
+- **Kickoff prompts** — generate specs and plans from a one-paragraph brief
+- **Tasks lane** — structured `prd.json` execution
+- **Workflow packs** — native workflow lane (experimental)
+- **Log ingestion** — turn runtime logs into new work items

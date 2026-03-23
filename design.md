@@ -14,14 +14,14 @@ It is written to be usable by humans, coding agents, and design-generation tools
 
 ## Product summary
 
-Forgeloop is the safe-autonomy control plane for coding agents.
+Forgeloop is the runtime layer that stops coding agents from spinning.
 
-Its job is not to make agents look magical. Its job is to make autonomous software work observable, reviewable, interruptible, and fail-closed.
+Its job is not to make agents look magical. Its job is to make agent work observable, interruptible, and fail-closed — so builders can trust autonomous runs with real projects.
 
 The UI should make Forgeloop feel like:
-- a serious operator system
-- a beautiful product, not an internal tool accident
-- a trustworthy control room for real autonomous work
+- a product you'd screenshot and share
+- a control room for real autonomous work, not an admin panel
+- something that earns trust through transparency, not marketing
 - a new category beyond issue trackers and chat logs
 
 ## Release context
@@ -43,19 +43,19 @@ The UI should make Forgeloop feel like:
 
 ## Target users
 
-### 1. Founder / technical operator
-- Runs agents on real repos
-- Needs confidence, control, and clarity
-- Wants to see what the system is doing without reading raw files first
+### 1. Builder / technical founder
+- Runs Claude or Codex on real repos and needs to know what's happening
+- Wants confidence and control without reading raw log files
+- Evaluates tools by trying them, not reading about them
 
 ### 2. AI-forward engineering team
-- Evaluates whether Forgeloop can become part of their delivery workflow
-- Needs clear differentiation from issue trackers, CI dashboards, and chat agents
-- Wants confidence that the system is reviewable and safe
+- Evaluates whether Forgeloop fits their delivery workflow
+- Needs to see how it's different from CI dashboards and chat agents
+- Cares about reviewability and safe defaults
 
 ### 3. Power user / self-hoster
-- Cares about repo-local state, proofs, ownership conflicts, recovery, workflows, and control surfaces
-- Values dense information, but only when organized with strong hierarchy
+- Wants repo-local state, proofs, ownership visibility, and dense controls
+- Values information density with clear hierarchy
 
 ## Experience principles
 

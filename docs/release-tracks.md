@@ -1,61 +1,54 @@
 # Release Tracks
 
-Forgeloop currently ships on two clearly different tracks.
+Forgeloop ships on two tracks. Pick the one that matches how you want to use it.
 
 ## Stable track
 
 - **Version:** [`v1.0.0`](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0)
 - **Status:** stable
 - **Runtime posture:** bash-first public runtime
-- **Best for:** projects that want the current stable control-plane contract without following ongoing V2 work
+- **Best for:** teams using coding agents on real projects today
 
-If you want the conservative choice for an active project today, pin to `v1.0.0`.
+Pin to `v1.0.0` when you want the proven runtime without evaluating new surfaces.
 
 ## Main track
 
 - **Branch:** `main`
 - **Status:** **v2 alpha / development track**
 - **Runtime posture:** additive Elixir + bash coexistence work
-- **Best for:** contributors, evaluators, and teams explicitly trying the loopback service, HUD, OpenClaw seam, managed daemon path, experimental workflow-pack lane, and the current v2 alpha product/visual system
+- **Best for:** teams who want the live dashboard, event streams, OpenClaw plugin, workflow packs, and the richer developer experience
 
-`main` is **not** the stable track yet.
-
-It is also **not** the beta track yet. The repo still treats beta as a future milestone after the current parity and release-hardening work lands.
+`main` is **not** the stable track yet. It is also **not** beta yet — that milestone comes after parity and release hardening.
 
 ## What stays true on both tracks
 
-These product truths do not change:
+These stay the same on both tracks:
 
-- the file-first control plane stays canonical
-- `IMPLEMENTATION_PLAN.md` remains the phase-1 canonical backlog
-- the checklist lane remains the default path
-- the tasks lane is still opt-in
-- the workflow lane is still experimental and opt-in
+- all state lives in plain files in your repo
+- `IMPLEMENTATION_PLAN.md` is the default backlog
+- the checklist lane is the default execution path
+- tasks and workflow lanes are opt-in
 
 ## How to choose
 
 Choose **`v1.0.0`** if you want:
 
-- the stable bash runtime
-- the current public release line
-- fewer moving parts while adopting Forgeloop in a project
+- the proven bash runtime for production agent work
+- the smallest risk surface
+- to skip the v2 evaluation for now
 
-Choose **`main`** if you want to evaluate or contribute to:
+Choose **`main`** if you want:
 
-- the Elixir control-plane service and operator HUD
-- the current v2 alpha landing-page/HUD visual system documented in `design.md`
-- managed babysitter/worktree execution
-- explicit ownership/start-gate visibility across the service, HUD, and OpenClaw seam
-- the manual `./forgeloop.sh self-host-proof` release proof for the real HUD/service path
-- the OpenClaw integration seam
-- replayable event streams and coordination advisory surfaces
-- the experimental workflow-pack lane and managed daemon workflow request path
+- the live dashboard and real-time HUD
+- the OpenClaw plugin
+- workflow packs and managed daemon execution
+- replayable event streams
+- disposable-worktree isolation
+- the end-to-end self-host proof
 
 ## Upgrade path from stable to main
 
-If you are already using `v1.0.0` and want to evaluate the V2 alpha track, start with `docs/v1-to-v2-upgrade.md` and then use the summary below.
-
-If you are already using `v1.0.0` and want to evaluate the V2 alpha track:
+If you are already on `v1.0.0`, start with `docs/v1-to-v2-upgrade.md` for the full guide. Quick version:
 
 1. do it on a branch or disposable clone/worktree first
 2. update the vendored kit to a current `main` checkout

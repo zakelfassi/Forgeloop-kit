@@ -1,12 +1,8 @@
 # Upgrading from Stable v1 to the V2 Alpha Track
 
-This guide is for teams already using **Forgeloop v1.0.0** who want to evaluate the current **`main` / v2 alpha** track without confusing that evaluation with a stable upgrade.
+This guide is for teams already on **Forgeloop v1.0.0** who want to try **v2 alpha** without risking their current setup.
 
-The short version:
-
-- `v1.0.0` is still the stable release
-- `main` is still alpha
-- the right posture is **evaluate deliberately**, not “blindly upgrade prod”
+The short version: evaluate v2 on a branch or disposable clone. Keep v1 easy to restore. Run both proof suites before you commit.
 
 See also:
 
@@ -17,51 +13,45 @@ See also:
 
 ## What changes on the V2 alpha track
 
-Moving from stable v1 to `main` means evaluating more than just runtime internals.
+v2 alpha is not just a runtime swap — it adds a broader developer experience:
 
-You are opting into a broader product surface that currently includes:
-
-- additive Elixir + bash coexistence work
-- the loopback service
-- the operator HUD
-- explicit ownership/start-gate visibility
-- replayable event streams
-- the OpenClaw seam
-- the manual `./forgeloop.sh self-host-proof` release proof
-- the current v2 alpha visual/product system for the landing page and HUD
+- **Live dashboard** with real-time state, blockers, and interactive controls
+- **Event streams** you can replay and inspect
+- **OpenClaw plugin** for monitoring and steering runs
+- **Disposable-worktree isolation** for safer self-hosting
+- **Self-host proof** that verifies the full stack end-to-end
 
 ## What does **not** change
 
-These remain the trust anchors on both tracks:
+These stay the same on both tracks:
 
-- the file-first control plane stays canonical
-- `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` remain the review surface
-- the checklist lane remains the default path
-- `IMPLEMENTATION_PLAN.md` remains the phase-1 canonical backlog
-- fail-closed behavior matters more than feature count
+- all state lives in plain files in your repo
+- `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` are still the source of truth
+- the checklist lane is still the default
+- `IMPLEMENTATION_PLAN.md` is still the canonical backlog
+- fail-closed behavior still matters more than feature count
 
 ## When to stay on v1 stable
 
 Stay on `v1.0.0` if you want:
 
-- the conservative runtime choice for active project work
-- the current stable public release line
-- fewer moving parts while adopting Forgeloop
-- to avoid evaluating the Elixir service/HUD/OpenClaw/operator surfaces right now
+- the proven runtime for production work
+- fewer moving parts
+- to skip the dashboard/HUD/plugin evaluation for now
 
 ## Recommended evaluation posture
 
-Evaluate V2 alpha like this:
+Evaluate v2 alongside v1, not as a replacement:
 
-1. use a branch, disposable clone, or disposable worktree
+1. use a branch, disposable clone, or worktree
 2. keep the old stable path easy to restore
-3. rerun both proof surfaces before trusting the newer runtime
-4. prefer explicit fallback settings over guessing
-5. review canonical repo-local artifacts, not just UI state
+3. run both proof suites before trusting the newer runtime
+4. use explicit fallback settings (`FORGELOOP_DAEMON_RUNTIME=bash`) when in doubt
+5. review the plain-file artifacts, not just what the dashboard shows
 
 ## Upgrade flow inside an installed repo
 
-From the target repo that already has Forgeloop installed:
+From the target repo that already has Forgeloop installed, update the vendored kit and immediately rerun both proof surfaces:
 
 ```bash
 ./forgeloop.sh upgrade --from /path/to/Forgeloop-kit --force
@@ -70,7 +60,7 @@ From the target repo that already has Forgeloop installed:
 bash forgeloop/tests/run.sh
 ```
 
-That sequence gives you:
+That sequence gives you a fast confidence check:
 
 - updated vendored kit contents from the newer checkout
 - the public safe-autonomy proof (`evals`)
@@ -79,7 +69,7 @@ That sequence gives you:
 
 ## Recommended post-upgrade checks
 
-After upgrading, explicitly check:
+After upgrading, explicitly check the surfaces you plan to trust:
 
 ### 1. Public proof still passes
 
@@ -124,23 +114,23 @@ Use that during evaluation when you want:
 
 ## What to pay attention to during evaluation
 
-Treat these as the real acceptance bar:
+These are the real acceptance criteria — not whether the demo boots:
 
-- does it pause instead of spin?
-- does it preserve the escalation artifact chain?
-- does the runtime state remain legible?
-- are ownership/start-gate failures explicit instead of confusing?
-- do repo-root and vendored layouts still behave correctly?
-- does the self-host proof reflect the real product path?
+- does it stop retrying when failure repeats?
+- are escalation artifacts written correctly?
+- is the runtime state consistent and readable?
+- are ownership conflicts surfaced clearly?
+- does it work in both repo-root and vendored layouts?
+- does the self-host proof pass?
 
 ## Rollback posture
 
-If the alpha track is not ready for your repo, roll back cleanly:
+If v2 doesn't earn your trust yet, roll back:
 
-1. restore the prior vendored kit / stable reference
+1. restore the v1 vendored kit
 2. rerun `./forgeloop.sh evals`
-3. keep the stable daemon/runtime path as the default again
-4. treat any alpha findings as evaluation notes, not half-adopted state
+3. keep the stable daemon path as default
+4. treat your findings as evaluation notes, not half-adopted state
 
 ## Suggested evaluation checklist
 

@@ -2,81 +2,67 @@
 
 [![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 alpha](https://img.shields.io/badge/main-v2%20alpha-5b66ff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
 
-> **Forgeloop is the safe-autonomy layer for coding agents.**
->
-> Install it in a repo, let Claude / Codex do real work, and when they start thrashing, Forgeloop pauses, preserves state, and drafts a clean human handoff instead of spinning forever.
+> **Forgeloop stops coding agents from spinning.** Install it in any repo. When Claude, Codex, or any LLM agent starts thrashing on the same failure, Forgeloop pauses the run, preserves every artifact, and gives you a clean next step instead of a wasted API bill.
 
-Forgeloop is a vendorable, repo-local control plane for agentic software work.
+Forgeloop vendors into your repo and gives you:
 
-It gives you four things that matter in practice:
+1. **Fail-closed loops** — repeated failures become a pause and a readable handoff, not an infinite retry
+2. **A live dashboard** — see what the agent is doing, what's blocking it, and what needs your attention
+3. **Plain-file state** — runtime status, questions, escalations, and blockers all live in your repo as markdown and JSON
+4. **One-command proof** — verify the whole system works before you trust it with real work
 
-1. **A repeatable loop** for planning and building against real repo checks
-2. **Fail-closed backpressure** when the same failure keeps repeating
-3. **Reviewable escalation artifacts** instead of silent retries and lost context
-4. **Machine-readable runtime state** so humans and tooling can see what the agent is doing
+Works with Claude, Codex, or any LLM. Supports checklist-driven loops, structured task execution, and workflow packs.
 
-Everything else in the kit—skills, knowledge capture, kickoff prompts, task lanes, log ingestion, runner provisioning—compounds on top of that control plane.
+On `main` / the v2 alpha track, you also get the live HUD, real-time event streams, the OpenClaw plugin, and a self-host proof harness. See `design.md` for the visual direction.
 
-On `main` / the v2 alpha track, the landing page and operator HUD are now also treated as product surfaces, not just helper UI. The current visual brief for those surfaces lives in `design.md`.
+## The problem Forgeloop solves
 
-## The core promise
+Agent runs fail. The question is what happens next.
 
-Most coding-agent demos show the happy path.
+Without Forgeloop, your agent retries the same broken test 40 times, burns through your API budget, and leaves you with nothing useful. With Forgeloop, when the agent hits a wall:
 
-Forgeloop is about the unhappy path:
+- it **stops** instead of retrying forever
+- it **preserves** every artifact and the full failure trail
+- it **writes** the blocking question so you can answer on your own time
+- it **pauses** cleanly so you can resume from exactly where it stopped
 
-- the tests keep failing
-- the same blocker stays unanswered
-- auth breaks on one provider
-- the loop needs to stop without losing the trail
-
-When that happens, Forgeloop is designed to **fail closed, not spin**.
+Forgeloop is designed to **fail closed, not spin**.
 
 ## What happens when an agent gets stuck
 
 When a loop crosses the repeated-failure threshold, Forgeloop:
 
-1. **Stops retrying**
-2. **Writes `[PAUSE]` to `REQUESTS.md`**
-3. **Drafts a human handoff in `ESCALATIONS.md`**
-4. **Appends the blocking question to `QUESTIONS.md`**
-5. **Writes machine-readable state to `.forgeloop/runtime-state.json`**
+1. **Stops retrying** — no more wasted tokens
+2. **Pauses the run** — writes `[PAUSE]` to `REQUESTS.md`
+3. **Drafts a handoff** — a human-readable summary in `ESCALATIONS.md`
+4. **Captures the blocker** — the exact question in `QUESTIONS.md`
+5. **Writes machine state** — `.forgeloop/runtime-state.json` for tooling
 
-That artifact chain is the product.
+Every piece of that chain is a plain file in your repo. You can read it, diff it, discuss it in a PR.
 
 ## Prove it in under a minute
 
-Install the kit into a target repo:
-
 ```bash
 ./install.sh /path/to/target-repo --wrapper
-```
-
-Then validate the control plane in that repo:
-
-```bash
 cd /path/to/target-repo
 ./forgeloop.sh evals
 ```
 
-The eval suite is curated around the safe-autonomy story:
+The eval suite tests the things that actually matter:
 
-- daemon pause behavior
-- repeated-failure escalation
-- blocker escalation
-- runtime-state transitions
-- auth failover
-- vendored vs repo-root entrypoint portability
+- does it pause when failure repeats?
+- does it escalate correctly?
+- does the runtime state stay consistent?
+- does auth failover work?
+- does it behave the same in different repo layouts?
 
-See `evals/README.md` for the public proof surface.
-
-On the current `main` / v2 alpha track, there is also a separate **manual release proof** for the real loopback service + HUD path:
+On the v2 alpha track, there's also a full end-to-end proof that spins up the real dashboard and drives it with a browser:
 
 ```bash
 ./forgeloop.sh self-host-proof
 ```
 
-That proof is intentionally outside default CI and `evals`: it snapshots the current repo into a disposable proof repo when git is available, drives the real HUD with `agent-browser`, and checks bounded pause / clear-pause / replan / one-off `plan` behavior without mutating your canonical repo-root control files.
+See `evals/README.md` for details.
 
 ## Quickstart
 
@@ -102,33 +88,25 @@ For continuous operation:
 
 That daemon is **interval-based**. It does not watch git in real time. It periodically checks the repo and control files, then decides whether to plan, build, pause, deploy, or ingest logs.
 
-## Local operator UI (experimental)
+## Live dashboard (v2 alpha)
 
-Forgeloop now ships a loopback-only operator UI on top of the same file-backed control plane:
+Forgeloop ships a real-time dashboard on top of the same file-backed state, so you can see and steer live runs without reading raw files:
 
 ```bash
-./forgeloop.sh serve
-./forgeloop.sh self-host-proof
+./forgeloop.sh serve          # start the dashboard
+./forgeloop.sh self-host-proof # verify it end-to-end
 ```
 
-It is intentionally small and additive in this slice:
+What it gives you:
 
-- served directly by the Elixir control-plane service
-- live-updating via SSE
-- interactive for pause, clear-pause, replan, question answer/resolve, and one-off `plan` / `build` runs
-- a one-command manual self-host proof that drives the real HUD with `agent-browser` and bounded UI actions through a disposable proof repo snapshot when git is available on the v2 alpha track
-- the first operator surface referenced by new escalation drafts
-- phase-1 backlog reads resolve from `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`)
-- no Phoenix, database, or Node asset pipeline
-- canonical repo files and `.forgeloop/runtime-state.json` remain authoritative
-- the loopback service now publishes a versioned contract descriptor at `/api/schema`, and JSON/SSE envelopes carry additive top-level `api` metadata so the HUD and OpenClaw can follow one service-owned schema
-- `/api/overview` now also exposes a service-owned additive `ownership` read model that makes live conflicts, reclaimable claims, stale active-run cleanup, and fail-closed ownership errors explicit instead of leaving clients to infer them from scattered raw fields
-- start-route 409/500 responses now keep their existing reason codes while also returning additive `error.ownership` context so blocked manual starts stay operator-readable in both the HUD and OpenClaw
-- the current v2 alpha visual direction for the landing page and HUD is documented in `design.md`, so the launch story and operator surface evolve together instead of drifting independently
+- **Live state** — runtime status, blockers, questions, and ownership, updating in real time via SSE
+- **Interactive controls** — pause, resume, replan, answer questions, and launch one-off runs from the browser
+- **No extra infrastructure** — no Phoenix, no database, no Node asset pipeline. Served directly by Elixir.
+- **Same source of truth** — reads and writes the same repo-local files as the CLI and daemon
 
-If you run OpenClaw beside Forgeloop on the same host/VM, the repo now also ships a workspace plugin seam at `.openclaw/extensions/forgeloop/`. Start the service first, then let OpenClaw monitor/pilot the same loopback control plane through the shared coordination read model instead of bypassing it. See `docs/openclaw.md`.
+The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. See `docs/openclaw.md` for the plugin integration.
 
-If you are working inside this repo directly, the equivalent command is:
+If you are working inside this repo directly:
 
 ```bash
 cd elixir
@@ -147,28 +125,26 @@ Add these anywhere in `REQUESTS.md`:
 
 `[PAUSE]` may also be inserted automatically by Forgeloop when it escalates a repeated failure or blocker.
 
-## Three execution lanes
+## Three ways to drive work
 
-Forgeloop now has three execution lanes:
+Forgeloop gives you three execution lanes depending on how structured your repo is:
 
-1. **Checklist lane** — `IMPLEMENTATION_PLAN.md` with `./forgeloop.sh plan|build`
-2. **Tasks lane** — `prd.json` with `./forgeloop.sh tasks`
-3. **Workflow lane (experimental)** — native Forgeloop workflow packs with `./forgeloop.sh workflow ...`
+1. **Checklist lane** — `IMPLEMENTATION_PLAN.md` with `./forgeloop.sh plan|build` (default)
+2. **Tasks lane** — `prd.json` with `./forgeloop.sh tasks` (opt-in)
+3. **Workflow lane** — native workflow packs with `./forgeloop.sh workflow ...` (experimental)
 
-In phase 1 self-hosting, the checklist lane is the **canonical backlog** surfaced by the Elixir service, UI, OpenClaw seam, and orchestrator through `FORGELOOP_IMPLEMENTATION_PLAN_FILE` (default `IMPLEMENTATION_PLAN.md`). The tasks lane remains supported, but tracker/`prd.json` unification is intentionally deferred until after the UI core is stable.
+The checklist lane is the default. The dashboard, daemon, and OpenClaw plugin all surface the checklist as the canonical backlog. The tasks lane is supported but separate. The workflow lane is still manual-first and experimental.
 
-The workflow lane is intentionally narrow in this slice: still runner-backed, still mapped onto the same runtime-state + escalation contract, and still manual-first. Workflow `preflight` / `run` actions flow through the managed Elixir babysitter + disposable-worktree path, the loopback service/HUD/OpenClaw seam exposes the same workflow control/status surface, and the daemon can now honor one explicit `[WORKFLOW]` marker by launching a single configured workflow target through that same managed path whenever the managed backend is active. The public `./forgeloop.sh daemon` command now prefers that managed backend by default and keeps `FORGELOOP_DAEMON_RUNTIME=bash` as an explicit legacy fallback. Elixir now also exposes a bounded workflow outcome/history sidecar beside the canonical workflow artifacts and active-run metadata, while broader workflow orchestration and native graph execution remain deferred. Elixir also keeps a read-only workflow catalog/artifact view plus a repo-local tracker projection that maps canonical backlog items and workflow packs into `Tracker.Issue` structs without mutating external trackers yet.
-
-See `docs/workflows.md` for the detailed workflow-pack contract and checkpoint cadence.
+See `docs/workflows.md` for the workflow-pack contract.
 
 ## Why teams use it
 
-- **Repo-local control plane** — vendor it into an existing repo without rebuilding your whole stack
-- **Trust architecture** — repeated failures become explicit pauses and handoffs
-- **State you can inspect** — the runtime always writes a machine-readable status file
-- **Safer defaults** — `FORGELOOP_AUTOPUSH=false` by default
-- **Model failover** — Claude/Codex routing with auth/rate-limit failover
-- **Isolated-runner friendly** — designed for disposable VMs / containers when you run full-auto
+- **Drop-in** — vendors into any existing repo. No infrastructure changes, no new services to run.
+- **Saves money** — stops burning API tokens on infinite retry loops
+- **Reviewable** — every state change is a plain file you can diff and discuss
+- **Safe defaults** — `FORGELOOP_AUTOPUSH=false`, conservative escalation thresholds, explicit opt-in for anything destructive
+- **Provider-resilient** — routes between Claude and Codex with automatic auth/rate-limit failover
+- **Isolation-ready** — designed for disposable VMs and containers when you run full-auto
 
 ## The runtime contract
 
@@ -193,7 +169,7 @@ The operator contract is documented in:
 | [v1.0.0](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) | **Stable** | Bash | `git checkout v1.0.0` |
 | `main` | **V2 alpha / development** | Elixir + Bash | `git checkout main` |
 
-If you want the stable public release, pin to `v1.0.0`. If you want the current Elixir service/HUD/OpenClaw/managed-daemon work, use `main` as the **v2 alpha / development track**.
+Pin to `v1.0.0` when you want the proven public release for active project work. Use `main` when you want to deliberately evaluate the richer V2 alpha operator stack: service, HUD, OpenClaw seam, managed daemon path, and self-host proof.
 
 Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track. If you are iterating on the v2 alpha launch story or public/operator visuals, read `design.md` too.
 
@@ -210,33 +186,19 @@ For the full stable-to-alpha posture, fallback guidance, rollback path, and revi
 
 ## Elixir v2 foundation
 
-An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains available while the Elixir foundation grows toward feature parity.
+The v2 alpha track is built on an Elixir foundation in `elixir/`. It powers the live dashboard, the managed daemon, and disposable-worktree isolation — while the stable bash runtime stays available as a fallback.
 
-Elixir now ships three experimental operator/runtime surfaces in `elixir/`: `mix forgeloop_v2.babysit build --repo ..` launches one manual child run in a disposable git worktree, `mix forgeloop_v2.daemon --repo ..` now routes checklist `plan` / `build`, deploy/log-ingest daemon actions, and one explicit `[WORKFLOW]` request through that same babysitter/worktree substrate or matching daemon helpers, and `mix forgeloop_v2.serve --repo ..` starts a loopback-only control-plane service that serves both JSON endpoints and a static live-updating UI for runtime/backlog/repo-local-tracker/questions/escalations/events/workflows/provider health plus babysitter visibility/control. In phase 1, that backlog is explicitly the configured implementation plan file (`FORGELOOP_IMPLEMENTATION_PLAN_FILE`, default `IMPLEMENTATION_PLAN.md`), not a full native-Elixir planner replacement or tracker unification layer. The loopback service now also publishes a versioned contract descriptor at `/api/schema`, and all JSON plus SSE snapshot/event envelopes carry additive top-level `api` metadata so the HUD and OpenClaw seam can resolve the same service-owned route/schema contract while keeping literal fallback behavior for older services where intended. `/api/overview` now also carries one additive service-owned `ownership` read model that unifies manual-start readiness, live-owner conflicts, reclaimable dead claims, stale active-run cleanup, and fail-closed malformed metadata in one place while preserving the older raw `runtime_owner` / `babysitter` fields for compatibility. The HUD and OpenClaw seam now also expose a read-only repo-local tracker projection that maps canonical backlog items and workflow packs into `Tracker.Issue`-shaped structs without mutating external trackers, plus a shared service-owned coordination advisory surfaced through `/api/coordination` and `overview.coordination`, with a bounded operator brief/timeline derived from the same replay window used for warnings and playbooks. The UI can now request pause/clear-pause/replan, answer or resolve questions, launch one-off `plan` / `build` runs through the babysitter with `surface: "ui"`, and trigger managed workflow `preflight` / `run` actions over the same control plane. JSONL under `.forgeloop/v2/events.log` remains the canonical event store, `/api/events` now exposes bounded event tails/replay with stable event ids, and `/api/stream` now bootstraps with a snapshot and then replays/live-streams canonical events over SSE instead of polling overview snapshots. Start-route 409/500 responses now keep their stable reason codes while also returning additive `error.ownership` context so blocked starts stay operator-readable in both the HUD and OpenClaw. Workflow read models now include canonical `last-preflight.txt` / `last-run.txt`, live `active-run.json`, and a bounded structured history sidecar for recent terminal outcomes. The repo also now ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`, which talks to the same loopback service, uses `surface: "openclaw"` for manual runs, can pilot workflow actions through the same babysitter/worktree path instead of inventing a side channel, and now prefers that shared coordination advisory plus ownership/start-gate read model for `forgeloop_overview` / `forgeloop_control`, falling back to local `/api/events` + `/api/overview` evaluation only for older services while still returning the same bounded brief/timeline shape and capping apply at one conservative pause / clear-pause / replan action. All of these surfaces keep `IMPLEMENTATION_PLAN.md`, `REQUESTS.md`, `QUESTIONS.md`, `ESCALATIONS.md`, and `.forgeloop/runtime-state.json` canonical at repo root. The public `./forgeloop.sh daemon` command now prefers the managed Elixir backend when `mix` + `forgeloop/elixir` are available, while `FORGELOOP_DAEMON_RUNTIME=bash` preserves an explicit legacy fallback. Broader workflow orchestration, long-lived OpenClaw event loops, native graph execution, event compaction/search, and tracker/`prd.json` unification are still not implemented.
+Three Elixir surfaces ship today:
 
-Current coexistence rule:
+- `mix forgeloop_v2.serve --repo ..` — the dashboard and API service
+- `mix forgeloop_v2.daemon --repo ..` — the managed daemon (checklist, workflows, deploy/ingest)
+- `mix forgeloop_v2.babysit build --repo ..` — one-off runs in disposable git worktrees
 
-- simultaneous bash + Elixir active control of one repo is still unsupported
-- bash `loop.sh` / legacy bash daemon and managed Elixir runs now all participate in `.forgeloop/v2/active-runtime.json`
-- managed Elixir runs claim/release that file at the real run boundary, and service-managed starts surface additive `runtime_owner` visibility through `/api/overview`
-- same-host dead claims now become reclaimable, while malformed ownership files stay visible and block new managed starts fail-closed
-- this hardens run-boundary coexistence, but it is still not a full daemon-session lock or split-brain-prevention guarantee
+All three surfaces read and write the same repo-local files. The Elixir layer does not introduce a separate database or state store.
 
-Current scope:
+**Coexistence:** bash and Elixir share the same ownership claim file (`.forgeloop/v2/active-runtime.json`). Running both as simultaneous active controllers is unsupported. Use `FORGELOOP_DAEMON_RUNTIME=bash` to stay on the legacy daemon path.
 
-- runtime-state JSON compatibility
-- control-file + escalation artifact parity
-- repeated-failure and blocker tracking
-- a small GenServer daemon baseline whose Elixir checklist `plan` / `build` actions now route through the babysitter + disposable-worktree path
-- initial provider failover tests
-- runtime transition validation, metadata-first workspace safety, local event history, locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, managed workflow actions plus visibility over workflow catalogs + latest workflow artifacts, a manual single-child disposable-worktree babysitter skeleton, and a loopback control-plane service + interactive SSE-backed operator UI in Elixir
-
-When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`.
-
-See `elixir/README.md` for the current scope and how to run `mix test`.
-- `docs/v2-roadmap.md`
-- `docs/elixir-parity-matrix.md`
-- `evals/README.md`
+When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`. See `elixir/README.md`, `docs/v2-roadmap.md`, and `docs/elixir-parity-matrix.md` for the current scope.
 
 ### Runtime states
 
