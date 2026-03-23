@@ -137,11 +137,19 @@ tmp_target="$(mktemp -d)"
 trap 'rm -rf "$tmp_root" "$tmp_target"' EXIT
 
 prepare_repo_root_layout "$tmp_root"
-run_elixir_daemon_smoke "$tmp_root" './bin/daemon.sh 1'
+if command -v mix >/dev/null 2>&1; then
+  run_elixir_daemon_smoke "$tmp_root" './bin/daemon.sh 1'
+else
+  echo "skip: elixir daemon smoke (mix not available)"
+fi
 run_bash_daemon_ownership_smoke "$tmp_root" './bin/forgeloop-daemon.sh 1'
 
 "$ROOT_DIR/install.sh" "$tmp_target" --force --wrapper >/dev/null
-run_elixir_daemon_smoke "$tmp_target" './forgeloop.sh daemon 1'
+if command -v mix >/dev/null 2>&1; then
+  run_elixir_daemon_smoke "$tmp_target" './forgeloop.sh daemon 1'
+else
+  echo "skip: elixir daemon smoke vendored (mix not available)"
+fi
 run_bash_daemon_ownership_smoke "$tmp_target" './forgeloop.sh daemon 1'
 
 echo "ok: daemon entrypoint layouts"
