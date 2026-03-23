@@ -53,6 +53,8 @@ Choose **`main`** if you want to evaluate or contribute to:
 
 ## Upgrade path from stable to main
 
+If you are already using `v1.0.0` and want to evaluate the V2 alpha track, start with `docs/v1-to-v2-upgrade.md` and then use the summary below.
+
 If you are already using `v1.0.0` and want to evaluate the V2 alpha track:
 
 1. do it on a branch or disposable clone/worktree first
@@ -77,6 +79,7 @@ FORGELOOP_DAEMON_RUNTIME=bash ./forgeloop.sh daemon 300
 
 ## Read next
 
+- `docs/v1-to-v2-upgrade.md`
 - `../design.md`
 - `docs/runtime-control.md`
 - `docs/v2-roadmap.md`

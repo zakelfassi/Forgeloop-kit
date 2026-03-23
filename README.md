@@ -206,6 +206,8 @@ Typical stable → main evaluation path inside an installed repo:
 bash forgeloop/tests/run.sh
 ```
 
+For the full stable-to-alpha posture, fallback guidance, rollback path, and review checklist, read `docs/v1-to-v2-upgrade.md`.
+
 ## Elixir v2 foundation
 
 An Elixir rewrite foundation now lives in `elixir/`. It is additive: the bash runtime remains available while the Elixir foundation grows toward feature parity.
