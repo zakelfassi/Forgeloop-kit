@@ -98,6 +98,24 @@ Format:
     - Director Mode now opens with an Episode recap rail that summarizes the last beat, current beat, and next-up decision point using the same canonical loopback snapshot/stream.
     - Recap cards stay evidence-linked to runtime, workflow outcomes, questions, escalations, queue front, and replayable events rather than inventing spectator-only state.
 
+- [x] Add richer proof / preview cards after the recap rail proved the narrative shape
+  - Acceptance:
+    - Director Mode exposes richer spectator-facing proof cards that stay derived from the existing snapshot or stream.
+    - The proof shelf can honestly answer what shipped, what is stuck, and what to watch next without inventing scores, ETAs, or hidden progress.
+    - The shelf reuses current workflow, runtime, ownership, queue, escalation, question, and event data instead of adding a new service read model.
+    - Manual browser proof verifies the proof shelf renders in Director Mode.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+  - Non-goals:
+    - no export/share backend yet
+    - no screenshot or diff preview backend yet
+    - no fake countdowns, boss phases, or spectator-only scoring
+  - Shipped behavior:
+    - Director Mode now surfaces a proof shelf that frames the current state as what shipped, what is stuck, and what to watch next.
+    - The shelf stays tied to workflow outcomes, replayable events, ownership/start-gate truth, open questions, escalations, and backlog pressure rather than a new narration source.
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
@@ -544,11 +562,11 @@ Format:
   - Scope for the later slice:
     - derive `headline`, `objective`, `stakes`, `next_move`, `queue_preview`, and recent highlights from existing runtime/coordination/workflow/backlog/event state
     - keep the model additive and explicitly non-canonical
-- [ ] Add richer proof / preview cards after the recap rail proves the narrative shape
+- [ ] Add export / share framing for director moments only if it stays reviewable and derived
   - Scope for the later slice:
-    - changed-file or proof-summary cards
+    - lightweight “what shipped” or “episode recap” exports
     - screenshots / output previews / milestone snapshots when the service can expose them cleanly
-    - lightweight “what shipped” or “episode recap” exports only if they stay derived and reviewable
+    - no second control plane or hidden summary store
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 
 ## Checkpoint Cadence

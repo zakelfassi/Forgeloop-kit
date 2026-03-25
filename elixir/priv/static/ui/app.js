@@ -443,6 +443,16 @@ function renderDirectorMode(snapshot) {
   const interventionPrompt = directorInterventionPrompt({ ownership, flags, topPlaybook, openQuestion, nextBacklog, latestEscalation });
   const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
   const feedCards = directorFeedCards({ timeline, events });
+  const previewCards = directorPreviewCards({
+    runtime,
+    ownership,
+    topPlaybook,
+    featuredWorkflow,
+    nextBacklog,
+    openQuestion,
+    latestEscalation,
+    events
+  });
   const showcaseCards = directorShowcaseCards({ runtime, nextBacklog, featuredWorkflow, latestEscalation, events });
   const recapCards = directorRecapCards({
     runtime,
@@ -535,9 +545,12 @@ function renderDirectorMode(snapshot) {
     ? feedCards.join("")
     : "<p>No recent timeline or event signals are available yet.</p>";
 
-  refs.directorShowcase.className = showcaseCards.length ? "director-showcase-grid" : "stack empty";
-  refs.directorShowcase.innerHTML = showcaseCards.length
-    ? showcaseCards.join("")
+  refs.directorShowcase.className = previewCards.length || showcaseCards.length ? "director-showcase-stack" : "stack empty";
+  refs.directorShowcase.innerHTML = previewCards.length || showcaseCards.length
+    ? `
+      ${previewCards.length ? `<div class="director-preview-strip">${previewCards.join("")}</div>` : ""}
+      ${showcaseCards.length ? `<div class="director-showcase-grid">${showcaseCards.join("")}</div>` : ""}
+    `
     : "<p>No showcase-worthy artifacts are available yet.</p>";
 }
 
@@ -1645,6 +1658,194 @@ function directorShowcaseCards(context) {
   }
 
   return cards;
+}
+
+function directorPreviewCards(context) {
+  const { runtime, ownership, topPlaybook, featuredWorkflow, nextBacklog, openQuestion, latestEscalation, events } = context;
+  const latestOutcome = featuredWorkflow?.history?.latest || null;
+  const latestEvent = events.slice().reverse().find(Boolean) || null;
+  const intervention = directorInterventionPrompt({ ownership, flags: {}, topPlaybook, openQuestion, nextBacklog, latestEscalation });
+  const cards = [];
+
+  const shippedStory = directorShippedStory({ featuredWorkflow, latestOutcome, latestEvent, nextBacklog });
+  cards.push(`
+    <article class="list-card director-preview-card shipped">
+      <div class="list-meta">
+        ${badge("proof card", "good")}
+        ${shippedStory.badge ? badge(shippedStory.badge, shippedStory.badgeKind) : ""}
+      </div>
+      <p class="director-preview-kicker">What shipped</p>
+      <h3>${escapeHtml(shippedStory.title)}</h3>
+      <p>${escapeHtml(shippedStory.detail)}</p>
+      <span class="event-time">${escapeHtml(shippedStory.footer)}</span>
+    </article>
+  `);
+
+  const blockedStory = directorBlockedStory({ runtime, ownership, openQuestion, latestEscalation });
+  cards.push(`
+    <article class="list-card director-preview-card blocked">
+      <div class="list-meta">
+        ${badge("pressure card", blockedStory.kind)}
+        ${blockedStory.badge ? badge(blockedStory.badge, blockedStory.badgeKind || blockedStory.kind) : ""}
+      </div>
+      <p class="director-preview-kicker">What is stuck</p>
+      <h3>${escapeHtml(blockedStory.title)}</h3>
+      <p>${escapeHtml(blockedStory.detail)}</p>
+      <span class="event-time">${escapeHtml(blockedStory.footer)}</span>
+    </article>
+  `);
+
+  const watchStory = directorWatchStory({ topPlaybook, nextBacklog, intervention, runtime });
+  cards.push(`
+    <article class="list-card director-preview-card watch">
+      <div class="list-meta">
+        ${badge("preview card", "purple")}
+        ${watchStory.badge ? badge(watchStory.badge, watchStory.badgeKind || "info") : ""}
+      </div>
+      <p class="director-preview-kicker">What to watch</p>
+      <h3>${escapeHtml(watchStory.title)}</h3>
+      <p>${escapeHtml(watchStory.detail)}</p>
+      <span class="event-time">${escapeHtml(watchStory.footer)}</span>
+    </article>
+  `);
+
+  return cards;
+}
+
+function directorShippedStory(context) {
+  const { featuredWorkflow, latestOutcome, latestEvent, nextBacklog } = context;
+
+  if (latestOutcome && outcomeFeelsPositive(latestOutcome.outcome)) {
+    return {
+      badge: latestOutcome.outcome || "success",
+      badgeKind: workflowOutcomeBadgeClass(latestOutcome.outcome),
+      title: `${featuredWorkflow?.entry?.name || "Workflow pack"} landed a fresh outcome`,
+      detail: `${latestOutcome.action || "run"} finished ${latestOutcome.outcome || "successfully"} and is now the clearest proof artifact on the board.`,
+      footer: latestOutcome.finished_at || latestOutcome.started_at || "Latest workflow history"
+    };
+  }
+
+  if (latestEvent) {
+    return {
+      badge: latestEvent.event_code || latestEvent.event_type || "event",
+      badgeKind: "info",
+      title: "The board has a new replayable moment",
+      detail: directorEventSummary(latestEvent),
+      footer: latestEvent.occurred_at || latestEvent.recorded_at || "Latest replayable event"
+    };
+  }
+
+  if (nextBacklog?.text) {
+    return {
+      badge: nextBacklog.section || "backlog",
+      badgeKind: "good",
+      title: "The queue front is ready to become the next shipped beat",
+      detail: nextBacklog.text,
+      footer: `Backlog line ${nextBacklog.line_number || "—"}`
+    };
+  }
+
+  return {
+    badge: "standby",
+    badgeKind: "info",
+    title: "No new shipped moment has landed yet",
+    detail: "The current snapshot is live, but it does not yet expose a stronger proof artifact than the standing runtime and queue state.",
+    footer: "Waiting for the next proof beat"
+  };
+}
+
+function directorBlockedStory(context) {
+  const { runtime, ownership, openQuestion, latestEscalation } = context;
+
+  if (latestEscalation) {
+    return {
+      kind: "bad",
+      badge: latestEscalation.requested_action || "escalation",
+      badgeKind: "warn",
+      title: "A human handoff is now part of the story",
+      detail: latestEscalation.summary || "Escalation artifacts are already live and should stay visible in the broadcast scene.",
+      footer: "From ESCALATIONS.md"
+    };
+  }
+
+  if (openQuestion) {
+    return {
+      kind: "warn",
+      badge: "question",
+      badgeKind: "warn",
+      title: "One open question is holding back the next clean move",
+      detail: openQuestion.question || "The queue contains a human question that still needs an answer.",
+      footer: "From QUESTIONS.md"
+    };
+  }
+
+  if (ownership.startAllowed === false) {
+    return {
+      kind: ownership.failClosed ? "bad" : "warn",
+      badge: ownership.startGate.reason || "start gate",
+      badgeKind: ownership.failClosed ? "bad" : "warn",
+      title: "The start gate is the current blocker worth showing",
+      detail: ownership.detail || "A start-gate condition is preventing another launch right now.",
+      footer: ownership.startGate.status || "ownership gate"
+    };
+  }
+
+  if (runtime.status === "blocked" || runtime.status === "awaiting-human") {
+    return {
+      kind: runtime.status === "blocked" ? "bad" : "warn",
+      badge: runtime.status,
+      badgeKind: runtime.status === "blocked" ? "bad" : "warn",
+      title: "The runtime itself is signaling pressure",
+      detail: runtime.reason || "The current runtime status is already the clearest pressure signal available.",
+      footer: runtime.transition || "runtime state"
+    };
+  }
+
+  return {
+    kind: "good",
+    badge: "clear",
+    badgeKind: "good",
+    title: "No major blocker is stealing the show right now",
+    detail: "There is still pressure in the queue, but nothing stronger than the normal bounded control surfaces is demanding a human interruption.",
+    footer: "No escalation or open question"
+  };
+}
+
+function directorWatchStory(context) {
+  const { topPlaybook, nextBacklog, intervention, runtime } = context;
+
+  if (topPlaybook?.recommended_action) {
+    return {
+      badge: topPlaybook.recommended_action,
+      badgeKind: topPlaybook.apply_eligible ? "good" : "warn",
+      title: "The coordination layer is teeing up the next move",
+      detail: topPlaybook.goal || topPlaybook.reason || "A concrete playbook is ready to become the next visible beat.",
+      footer: "From coordination playbooks"
+    };
+  }
+
+  if (nextBacklog?.text) {
+    return {
+      badge: nextBacklog.section || "backlog",
+      badgeKind: "info",
+      title: "The backlog front is the next scene to watch",
+      detail: nextBacklog.text,
+      footer: `Backlog line ${nextBacklog.line_number || "—"}`
+    };
+  }
+
+  return {
+    badge: intervention.cue || "observe",
+    badgeKind: intervention.cue_kind || "info",
+    title: intervention.title || "Keep watching the board",
+    detail: intervention.detail || "The next meaningful moment will come from the existing runtime, queue, or coordination state.",
+    footer: runtime.mode || "Runtime watch"
+  };
+}
+
+function outcomeFeelsPositive(outcome) {
+  const text = String(outcome || "").toLowerCase();
+  return ["success", "succeeded", "completed", "pass", "passed", "ok"].some((token) => text.includes(token));
 }
 
 function directorRecapCards(context) {
