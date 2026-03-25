@@ -280,6 +280,7 @@ The first version should stay client-side if possible and remix the current HUD 
 The next polish pass should add:
 - one bounded human prompt that asks the most useful decision-oriented question in the current moment
 - stronger queue storytelling so spectators can tell what is waiting behind the active objective
+- an artifact showcase lane for proof moments, workflow outcomes, escalation drafts, and canonical queue artifacts already exposed by the current state model
 - sharper “why this matters now” copy without crossing into fake lore or invented state
 
 Narration rules:

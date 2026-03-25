@@ -29,6 +29,7 @@ const refs = {
   directorNext: document.getElementById("director-next"),
   directorQueue: document.getElementById("director-queue"),
   directorFeed: document.getElementById("director-feed"),
+  directorShowcase: document.getElementById("director-showcase"),
   runtimeBody: document.getElementById("runtime-body"),
   ownershipBody: document.getElementById("ownership-body"),
   providerBody: document.getElementById("provider-body"),
@@ -414,7 +415,7 @@ function renderControls(snapshot) {
 }
 
 function renderDirectorMode(snapshot) {
-  if (!refs.directorNow || !refs.directorNext || !refs.directorQueue || !refs.directorFeed) {
+  if (!refs.directorNow || !refs.directorNext || !refs.directorQueue || !refs.directorFeed || !refs.directorShowcase) {
     return;
   }
 
@@ -431,6 +432,7 @@ function renderDirectorMode(snapshot) {
   const flags = snapshot.control_flags || {};
   const topPlaybook = playbooks.find((playbook) => playbook.status === "actionable") || playbooks[0] || null;
   const activeWorkflow = workflows.find((workflow) => workflow.active_run) || null;
+  const featuredWorkflow = workflows.find((workflow) => workflow.history?.latest || workflow.active_run || workflow.latest_activity_kind) || activeWorkflow;
   const nextBacklog = backlogItems[0] || null;
   const openQuestion = questions.find((question) => question.status_kind !== "resolved") || null;
   const latestEscalation = escalations[0] || null;
@@ -440,6 +442,7 @@ function renderDirectorMode(snapshot) {
   const interventionPrompt = directorInterventionPrompt({ ownership, flags, topPlaybook, openQuestion, nextBacklog, latestEscalation });
   const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
   const feedCards = directorFeedCards({ timeline, events });
+  const showcaseCards = directorShowcaseCards({ runtime, nextBacklog, featuredWorkflow, latestEscalation, events });
 
   refs.directorNow.className = "director-subgrid";
   refs.directorNow.innerHTML = `
@@ -517,6 +520,11 @@ function renderDirectorMode(snapshot) {
   refs.directorFeed.innerHTML = feedCards.length
     ? feedCards.join("")
     : "<p>No recent timeline or event signals are available yet.</p>";
+
+  refs.directorShowcase.className = showcaseCards.length ? "director-showcase-grid" : "stack empty";
+  refs.directorShowcase.innerHTML = showcaseCards.length
+    ? showcaseCards.join("")
+    : "<p>No showcase-worthy artifacts are available yet.</p>";
 }
 
 function renderRuntime(runtime, babysitter, controlFlags, ownership) {
@@ -1539,6 +1547,92 @@ function directorFeedCards(context) {
   return cards;
 }
 
+function directorShowcaseCards(context) {
+  const { runtime, nextBacklog, featuredWorkflow, latestEscalation, events } = context;
+  const cards = [];
+
+  cards.push(`
+    <article class="list-card director-artifact-card">
+      <div class="list-meta">
+        ${badge("runtime artifact", "purple")}
+        ${runtime.status ? badge(runtime.status, badgeClass(runtime.status)) : ""}
+      </div>
+      <h3>Current run posture</h3>
+      <p>${escapeHtml(runtime.reason || "No runtime reason has been recorded yet.")}</p>
+      <div class="metric-grid compact-grid">
+        ${metric("Surface", runtime.surface || "—")}
+        ${metric("Mode", runtime.mode || "—")}
+        ${metric("Branch", runtime.branch || "—")}
+        ${metric("Requested action", runtime.requested_action || "—")}
+      </div>
+    </article>
+  `);
+
+  if (featuredWorkflow) {
+    const latestOutcome = featuredWorkflow.history?.latest || null;
+    const title = featuredWorkflow.entry?.name || "Workflow pack";
+    const detail = latestOutcome
+      ? `${latestOutcome.action || "run"} ${latestOutcome.outcome || "unknown"} @ ${latestOutcome.finished_at || latestOutcome.started_at || "unknown"}`
+      : (featuredWorkflow.latest_activity_kind
+          ? `${featuredWorkflow.latest_activity_kind} @ ${featuredWorkflow.latest_activity_at || "unknown"}`
+          : "No workflow artifact has been recorded yet.");
+    cards.push(`
+      <article class="list-card director-artifact-card">
+        <div class="list-meta">
+          ${badge("workflow artifact", "good")}
+          ${latestOutcome ? badge(latestOutcome.outcome || "unknown", workflowOutcomeBadgeClass(latestOutcome.outcome)) : badge("activity", "info")}
+        </div>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(detail)}</p>
+      </article>
+    `);
+  }
+
+  if (nextBacklog) {
+    cards.push(`
+      <article class="list-card director-artifact-card">
+        <div class="list-meta">
+          ${badge("queue front", "info")}
+          ${nextBacklog.line_number ? badge(`line ${nextBacklog.line_number}`, "purple") : ""}
+          ${nextBacklog.section ? badge(nextBacklog.section, "good") : ""}
+        </div>
+        <h3>Canonical backlog artifact</h3>
+        <p>${escapeHtml(nextBacklog.text || nextBacklog.raw_line || "Untitled backlog item")}</p>
+      </article>
+    `);
+  }
+
+  if (latestEscalation) {
+    cards.push(`
+      <article class="list-card director-artifact-card">
+        <div class="list-meta">
+          ${badge("escalation draft", "bad")}
+          ${latestEscalation.requested_action ? badge(latestEscalation.requested_action, "warn") : ""}
+        </div>
+        <h3>${escapeHtml(latestEscalation.summary || "Escalation artifact")}</h3>
+        <p>${escapeHtml(truncateText(latestEscalation.draft || latestEscalation.host || "Escalation details are recorded in canonical repo-local artifacts.", 240))}</p>
+      </article>
+    `);
+  }
+
+  const latestEvent = events.slice().reverse().find(Boolean) || null;
+  if (latestEvent) {
+    cards.push(`
+      <article class="list-card director-artifact-card">
+        <div class="list-meta">
+          ${badge("event highlight", "purple")}
+          ${badge(latestEvent.event_code || latestEvent.event_type || "event", "info")}
+        </div>
+        <h3>Latest replayable highlight</h3>
+        <p>${escapeHtml(directorEventSummary(latestEvent))}</p>
+        <span class="event-time">${escapeHtml(latestEvent.occurred_at || latestEvent.recorded_at || "unknown")}</span>
+      </article>
+    `);
+  }
+
+  return cards;
+}
+
 function directorEventSummary(event) {
   if (event.reason) return event.reason;
   if (event.action) return `action=${event.action}`;
@@ -1552,6 +1646,13 @@ function directorEventSummary(event) {
     .join(" · ");
 
   return extra || "No extra payload.";
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").trim();
+  if (!text) return "—";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 function renderNotice() {

@@ -45,7 +45,7 @@ Format:
     - Director Mode remixes existing runtime, ownership, coordination, backlog, workflow, question, escalation, and event data into now / next / queue / live feed zones.
     - Browser proof now verifies scene switching and confirms Director Mode stays tied to the same canonical loopback truth as the operator HUD.
 
-- [ ] Add bounded director prompts and queue polish so Director Mode feels stream-worthy without inventing state
+- [x] Add bounded director prompts and queue polish so Director Mode feels stream-worthy without inventing state
   - Acceptance:
     - Director Mode surfaces one concrete human prompt derived from the current ownership, coordination, queue, or escalation state.
     - Queue cards tell a clearer story about what is stacking up behind the active objective.
@@ -58,6 +58,27 @@ Format:
     - no raw AI-thought surface
     - no service-owned broadcast summary model yet
     - no artifact-preview lane yet
+  - Shipped behavior:
+    - Director Mode now surfaces a bounded human prompt derived from ownership, queue, coordination, or escalation pressure.
+    - Queue cards now better explain what is stacking behind the current objective instead of only listing raw items.
+    - The narration remains derived from existing runtime, coordination, workflow, backlog, question, escalation, and event data only.
+
+- [x] Add a first-pass artifact showcase lane to Director Mode using existing canonical artifacts
+  - Acceptance:
+    - Director Mode exposes a showcase lane built only from data already present in the current snapshot or stream.
+    - The lane highlights proof moments, workflow outcomes/history, escalation drafts, canonical backlog artifacts, and replayable event highlights without introducing a new backend.
+    - Manual browser proof verifies the showcase lane renders in Director Mode.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+  - Non-goals:
+    - no screenshot-preview backend yet
+    - no diff/file-preview backend yet
+    - no service-owned broadcast summary model yet
+  - Shipped behavior:
+    - Director Mode now exposes a showcase lane with runtime posture, workflow artifact, canonical backlog artifact, escalation draft, and event highlight cards when that evidence exists.
+    - The lane stays purely derived from current loopback snapshot/stream data and does not introduce a second source of truth.
 
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:

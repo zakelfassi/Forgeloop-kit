@@ -481,7 +481,8 @@ h3 {
 .director-now-panel,
 .director-next-panel,
 .director-queue-panel,
-.director-feed-panel {
+.director-feed-panel,
+.director-showcase-panel {
   padding: 22px;
   min-height: 300px;
 }
@@ -493,10 +494,15 @@ h3 {
   grid-column: span 6;
 }
 
+.director-showcase-panel {
+  grid-column: span 12;
+}
+
 .director-summary,
 .director-highlight,
 .director-queue-item,
-.director-feed-item {
+.director-feed-item,
+.director-artifact-card {
   display: grid;
   gap: 10px;
 }
@@ -513,9 +519,14 @@ h3 {
 }
 
 .director-queue-list,
-.director-feed-list {
+.director-feed-list,
+.director-showcase-grid {
   display: grid;
   gap: 12px;
+}
+
+.director-showcase-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .director-feed-list .event-time,
@@ -819,7 +830,8 @@ body[data-scene="director"] .operator-scene {
   .director-now-panel,
   .director-next-panel,
   .director-queue-panel,
-  .director-feed-panel {
+  .director-feed-panel,
+  .director-showcase-panel {
     grid-column: auto;
   }
 }
