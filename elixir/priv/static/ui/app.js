@@ -8,6 +8,7 @@ const state = {
   contract: null,
   api: null,
   scene: "operator",
+  presentation: "standard",
   latestEventId: null,
   refreshTimer: null,
   questionDrafts: {},
@@ -23,6 +24,7 @@ const refs = {
   canonicalBrief: document.getElementById("canonical-brief"),
   sceneOperatorButton: document.getElementById("scene-operator"),
   sceneDirectorButton: document.getElementById("scene-director"),
+  presentationToggle: document.getElementById("presentation-toggle"),
   controlStatus: document.getElementById("control-status"),
   controlsBody: document.getElementById("controls-body"),
   directorRecap: document.getElementById("director-recap"),
@@ -48,7 +50,9 @@ boot();
 async function boot() {
   bindEvents();
   hydrateScenePreference();
+  hydratePresentationPreference();
   renderSceneToggle();
+  renderPresentationToggle();
   setConnectionState("loading", "Booting…");
   renderNotice();
 
@@ -71,7 +75,9 @@ async function boot() {
 function bindEvents() {
   refs.sceneOperatorButton?.addEventListener("click", handleSceneClick);
   refs.sceneDirectorButton?.addEventListener("click", handleSceneClick);
+  refs.presentationToggle?.addEventListener("click", handlePresentationToggle);
   refs.controlsBody.addEventListener("click", handleControlClick);
+  refs.directorShowcase?.addEventListener("click", handleDirectorShowcaseClick);
   refs.workflowsBody.addEventListener("click", handleControlClick);
   refs.questionsBody.addEventListener("input", handleQuestionInput);
   refs.questionsBody.addEventListener("click", handleQuestionClick);
@@ -90,6 +96,19 @@ function hydrateScenePreference() {
   document.body.dataset.scene = state.scene;
 }
 
+function hydratePresentationPreference() {
+  try {
+    const saved = window.localStorage.getItem("forgeloop-hud-presentation");
+    if (saved === "broadcast" || saved === "standard") {
+      state.presentation = saved;
+    }
+  } catch (_error) {
+    state.presentation = "standard";
+  }
+
+  document.body.dataset.presentation = state.presentation;
+}
+
 function handleSceneClick(event) {
   const button = event.currentTarget;
   const scene = button?.dataset?.scene;
@@ -104,6 +123,7 @@ function handleSceneClick(event) {
 
   document.body.dataset.scene = state.scene;
   renderSceneToggle();
+  renderPresentationToggle();
   setNotice("info", scene === "director"
     ? "Director Mode enabled. The scene is still derived from the same loopback truth."
     : "Operator HUD enabled. Controls and proofs still target the same canonical state.");
@@ -121,6 +141,50 @@ function renderSceneToggle() {
   if (refs.sceneDirectorButton) {
     refs.sceneDirectorButton.classList.toggle("active", directorActive);
     refs.sceneDirectorButton.setAttribute("aria-pressed", String(directorActive));
+  }
+}
+
+function handlePresentationToggle() {
+  if (state.scene !== "director") return;
+
+  state.presentation = state.presentation === "broadcast" ? "standard" : "broadcast";
+  try {
+    window.localStorage.setItem("forgeloop-hud-presentation", state.presentation);
+  } catch (_error) {
+    // ignore localStorage failures; state still applies for this session
+  }
+
+  document.body.dataset.presentation = state.presentation;
+  renderPresentationToggle();
+  setNotice("info", state.presentation === "broadcast"
+    ? "Broadcast frame enabled. The stream is still derived from the same canonical loopback truth."
+    : "Broadcast frame disabled. Director Mode remains active with the full HUD chrome.");
+}
+
+function renderPresentationToggle() {
+  if (!refs.presentationToggle) return;
+  const active = state.scene === "director" && state.presentation === "broadcast";
+  refs.presentationToggle.classList.toggle("active", active);
+  refs.presentationToggle.setAttribute("aria-pressed", String(active));
+  refs.presentationToggle.textContent = active ? "Exit broadcast frame" : "Broadcast frame";
+}
+
+async function handleDirectorShowcaseClick(event) {
+  const button = event.target.closest("button[data-action='copy-director-summary']");
+  if (!button) return;
+
+  const summary = button.dataset.summary;
+  if (!summary) return;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(summary);
+      setNotice("good", "Director summary copied. Share it anywhere without losing the canonical source of truth.");
+    } else {
+      setNotice("warn", "Clipboard access is unavailable in this browser, but the summary stays visible in the HUD.");
+    }
+  } catch (_error) {
+    setNotice("warn", "Could not copy the director summary automatically. The summary is still visible for manual copy.");
   }
 }
 
@@ -1709,6 +1773,34 @@ function directorPreviewCards(context) {
     </article>
   `);
 
+  const shareSummary = directorShareSummary({
+    runtime,
+    shippedStory,
+    blockedStory,
+    watchStory,
+    latestEvent
+  });
+
+  cards.push(`
+    <article class="list-card director-preview-card director-share-card">
+      <div class="list-meta">
+        ${badge("share card", "info")}
+        ${badge("derived", "purple")}
+      </div>
+      <p class="director-preview-kicker">Share this moment</p>
+      <h3>Portable episode card for streams, decks, and clips</h3>
+      <p class="director-share-summary">${escapeHtml(shareSummary)}</p>
+      <button
+        class="director-share-copy"
+        type="button"
+        data-action="copy-director-summary"
+        data-summary="${escapeHtml(shareSummary)}"
+      >
+        Copy episode summary
+      </button>
+    </article>
+  `);
+
   return cards;
 }
 
@@ -1846,6 +1938,22 @@ function directorWatchStory(context) {
 function outcomeFeelsPositive(outcome) {
   const text = String(outcome || "").toLowerCase();
   return ["success", "succeeded", "completed", "pass", "passed", "ok"].some((token) => text.includes(token));
+}
+
+function directorShareSummary(context) {
+  const { runtime, shippedStory, blockedStory, watchStory, latestEvent } = context;
+  const parts = [
+    `Forgeloop director update — status: ${runtime.status || "idle"}.`,
+    `Shipped: ${shippedStory.title}.`,
+    `Stuck: ${blockedStory.title}.`,
+    `Next: ${watchStory.title}.`
+  ];
+
+  if (latestEvent?.event_code || latestEvent?.event_type) {
+    parts.push(`Latest event: ${latestEvent.event_code || latestEvent.event_type}.`);
+  }
+
+  return parts.join(" ");
 }
 
 function directorRecapCards(context) {

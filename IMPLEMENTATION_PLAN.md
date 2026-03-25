@@ -116,6 +116,23 @@ Format:
     - Director Mode now surfaces a proof shelf that frames the current state as what shipped, what is stuck, and what to watch next.
     - The shelf stays tied to workflow outcomes, replayable events, ownership/start-gate truth, open questions, escalations, and backlog pressure rather than a new narration source.
 
+- [x] Add lightweight export / share framing for director moments
+  - Acceptance:
+    - Director Mode exposes a presentation-friendly broadcast frame without introducing a second product surface or backend.
+    - The HUD can produce a copyable episode summary derived from the same canonical runtime, queue, workflow, escalation, and event state already on screen.
+    - Browser proof verifies the broadcast-frame toggle and share card render in Director Mode.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+  - Non-goals:
+    - no asset export backend
+    - no screenshot generation endpoint
+    - no hidden summary store or detached “stream mode” control plane
+  - Shipped behavior:
+    - Director Mode now exposes a broadcast-frame toggle that trims the scene for presentation while staying on the same loopback truth.
+    - The proof shelf now includes a copyable episode card that summarizes what shipped, what is stuck, and what to watch next using only current snapshot/stream data.
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
@@ -564,7 +581,7 @@ Format:
     - keep the model additive and explicitly non-canonical
 - [ ] Add export / share framing for director moments only if it stays reviewable and derived
   - Scope for the later slice:
-    - lightweight “what shipped” or “episode recap” exports
+    - richer “what shipped” or “episode recap” exports
     - screenshots / output previews / milestone snapshots when the service can expose them cleanly
     - no second control plane or hidden summary store
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
