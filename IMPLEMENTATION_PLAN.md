@@ -80,6 +80,24 @@ Format:
     - Director Mode now exposes a showcase lane with runtime posture, workflow artifact, canonical backlog artifact, escalation draft, and event highlight cards when that evidence exists.
     - The lane stays purely derived from current loopback snapshot/stream data and does not introduce a second source of truth.
 
+- [x] Add an episode-recap rail with milestone-style last-beat / current-beat / next-up cards
+  - Acceptance:
+    - Director Mode exposes one recap rail that makes the current scene readable at a glance without inventing state.
+    - The rail uses only existing runtime, ownership, workflow, backlog, escalation, question, and event data.
+    - The three recap cards clearly answer: what just happened, what beat we are in now, and what decision or queue front is most likely to change what happens next.
+    - Manual browser proof verifies the recap rail renders in Director Mode.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+  - Non-goals:
+    - no fake lore or narrated chain-of-thought
+    - no new service endpoints or summary model
+    - no screenshot/diff backend yet
+  - Shipped behavior:
+    - Director Mode now opens with an Episode recap rail that summarizes the last beat, current beat, and next-up decision point using the same canonical loopback snapshot/stream.
+    - Recap cards stay evidence-linked to runtime, workflow outcomes, questions, escalations, queue front, and replayable events rather than inventing spectator-only state.
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
@@ -526,14 +544,11 @@ Format:
   - Scope for the later slice:
     - derive `headline`, `objective`, `stakes`, `next_move`, `queue_preview`, and recent highlights from existing runtime/coordination/workflow/backlog/event state
     - keep the model additive and explicitly non-canonical
-- [ ] Add bounded director notes / human intervention prompts after the spectator scene is stable
-  - Scope for the later slice:
-    - distilled operator-facing or spectator-facing notes derived from existing evidence
-    - no raw AI thinking, no invented state, no hidden memory surface
-- [ ] Add an artifact / preview showcase lane after the narrative priorities are clear
+- [ ] Add richer proof / preview cards after the recap rail proves the narrative shape
   - Scope for the later slice:
     - changed-file or proof-summary cards
     - screenshots / output previews / milestone snapshots when the service can expose them cleanly
+    - lightweight “what shipped” or “episode recap” exports only if they stay derived and reviewable
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 
 ## Checkpoint Cadence

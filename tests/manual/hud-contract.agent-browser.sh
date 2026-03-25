@@ -259,6 +259,7 @@ wait_for_text_contains "ownership panel leaves empty state" '#ownership-body' 's
 click_selector "director scene button responds" '#scene-director'
 wait_for_visible "director now panel renders" '#director-now'
 wait_for_text_contains "director now panel shows objective framing" '#director-now' 'Current objective'
+wait_for_visible "director recap rail renders" '#director-recap'
 wait_for_visible "director showcase panel renders" '#director-showcase'
 click_selector "operator scene button responds" '#scene-operator'
 wait_for_visible "operator runtime panel returns" '#runtime-body'

@@ -25,6 +25,7 @@ const refs = {
   sceneDirectorButton: document.getElementById("scene-director"),
   controlStatus: document.getElementById("control-status"),
   controlsBody: document.getElementById("controls-body"),
+  directorRecap: document.getElementById("director-recap"),
   directorNow: document.getElementById("director-now"),
   directorNext: document.getElementById("director-next"),
   directorQueue: document.getElementById("director-queue"),
@@ -415,7 +416,7 @@ function renderControls(snapshot) {
 }
 
 function renderDirectorMode(snapshot) {
-  if (!refs.directorNow || !refs.directorNext || !refs.directorQueue || !refs.directorFeed || !refs.directorShowcase) {
+  if (!refs.directorRecap || !refs.directorNow || !refs.directorNext || !refs.directorQueue || !refs.directorFeed || !refs.directorShowcase) {
     return;
   }
 
@@ -443,6 +444,19 @@ function renderDirectorMode(snapshot) {
   const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
   const feedCards = directorFeedCards({ timeline, events });
   const showcaseCards = directorShowcaseCards({ runtime, nextBacklog, featuredWorkflow, latestEscalation, events });
+  const recapCards = directorRecapCards({
+    runtime,
+    ownership,
+    topPlaybook,
+    featuredWorkflow,
+    nextBacklog,
+    openQuestion,
+    latestEscalation,
+    events
+  });
+
+  refs.directorRecap.className = "director-recap-grid";
+  refs.directorRecap.innerHTML = recapCards.join("");
 
   refs.directorNow.className = "director-subgrid";
   refs.directorNow.innerHTML = `
@@ -1631,6 +1645,155 @@ function directorShowcaseCards(context) {
   }
 
   return cards;
+}
+
+function directorRecapCards(context) {
+  const { runtime, ownership, topPlaybook, featuredWorkflow, nextBacklog, openQuestion, latestEscalation, events } = context;
+  const latestOutcome = featuredWorkflow?.history?.latest || null;
+  const recentEvent = events.slice().reverse().find(Boolean) || null;
+  const recentEventLabel = recentEvent?.event_code || recentEvent?.event_type || "event";
+  const recentEventTime = recentEvent?.occurred_at || recentEvent?.recorded_at || "unknown";
+
+  const actCard = `
+    <article class="list-card director-recap-card">
+      <div class="list-meta">
+        ${badge("act", "purple")}
+        ${runtime.status ? badge(runtime.status, badgeClass(runtime.status)) : ""}
+        ${runtime.transition ? badge(runtime.transition, "info") : ""}
+      </div>
+      <p class="director-recap-kicker">Current beat</p>
+      <h3>${escapeHtml(directorRecapActTitle({ runtime, ownership }))}</h3>
+      <p>${escapeHtml(runtime.reason || ownership.headline || "The runtime has not recorded a stronger act summary yet.")}</p>
+      <span class="event-time">${escapeHtml(runtime.surface ? `surface ${runtime.surface}` : "repo-local runtime")}</span>
+    </article>
+  `;
+
+  const proofTitle = latestOutcome
+    ? `${latestOutcome.action || "run"} ${latestOutcome.outcome || "outcome"}`
+    : recentEvent
+      ? `Latest proof beat: ${recentEventLabel}`
+      : nextBacklog
+        ? "Queue is primed for the next beat"
+        : "No proof beat has landed yet";
+  const proofDetail = latestOutcome
+    ? `${featuredWorkflow?.entry?.name || "Workflow pack"} recorded ${latestOutcome.outcome || "an outcome"} at ${latestOutcome.finished_at || latestOutcome.started_at || "unknown"}.`
+    : recentEvent
+      ? directorEventSummary(recentEvent)
+      : nextBacklog?.text || "The current snapshot does not yet expose a stronger proof moment than the canonical queue front.";
+  const proofMeta = latestOutcome
+    ? badge(latestOutcome.outcome || "outcome", workflowOutcomeBadgeClass(latestOutcome.outcome))
+    : recentEvent
+      ? badge(recentEventLabel, "info")
+      : badge("queue front", "good");
+
+  const proofCard = `
+    <article class="list-card director-recap-card">
+      <div class="list-meta">
+        ${badge("proof", "good")}
+        ${proofMeta}
+      </div>
+      <p class="director-recap-kicker">Last beat</p>
+      <h3>${escapeHtml(proofTitle)}</h3>
+      <p>${escapeHtml(proofDetail)}</p>
+      <span class="event-time">${escapeHtml(latestOutcome?.finished_at || latestOutcome?.started_at || recentEventTime)}</span>
+    </article>
+  `;
+
+  const decision = directorRecapDecision({ ownership, topPlaybook, openQuestion, latestEscalation, nextBacklog, runtime });
+  const decisionCard = `
+    <article class="list-card director-recap-card">
+      <div class="list-meta">
+        ${badge("decision", decision.kind)}
+        ${decision.cue ? badge(decision.cue, decision.cueKind || "purple") : ""}
+      </div>
+      <p class="director-recap-kicker">Next up</p>
+      <h3>${escapeHtml(decision.title)}</h3>
+      <p>${escapeHtml(decision.detail)}</p>
+      <span class="event-time">${escapeHtml(decision.footer)}</span>
+    </article>
+  `;
+
+  return [proofCard, actCard, decisionCard];
+}
+
+function directorRecapActTitle(context) {
+  const { runtime, ownership } = context;
+
+  if (runtime.status === "awaiting-human") return "The run is paused for a human call";
+  if (runtime.status === "blocked") return "The run hit resistance and is holding the line";
+  if (ownership.startAllowed === false) return "The start gate is shaping the next scene";
+  if (runtime.status === "running") return "A managed run is actively moving the project";
+  if (runtime.status === "recovered") return "The system has re-entered motion after a pause";
+  if (runtime.status === "paused") return "The control plane is paused on purpose";
+  return "The board is set and waiting for the next beat";
+}
+
+function directorRecapDecision(context) {
+  const { ownership, topPlaybook, openQuestion, latestEscalation, nextBacklog, runtime } = context;
+
+  if (latestEscalation) {
+    return {
+      kind: "bad",
+      cue: latestEscalation.requested_action || "handoff",
+      cueKind: "warn",
+      title: "Resolve the handoff before the queue drifts any further",
+      detail: latestEscalation.summary || "An escalation draft is already live in canonical repo-local artifacts.",
+      footer: "From ESCALATIONS.md"
+    };
+  }
+
+  if (openQuestion) {
+    return {
+      kind: "warn",
+      cue: "answer question",
+      cueKind: "warn",
+      title: "One human answer can unlock the next move",
+      detail: openQuestion.question || "There is an open question waiting in the repo-local coordination surface.",
+      footer: "From QUESTIONS.md"
+    };
+  }
+
+  if (ownership.startAllowed === false) {
+    return {
+      kind: ownership.failClosed ? "bad" : "warn",
+      cue: ownership.startGate.reason || "start gate",
+      cueKind: ownership.failClosed ? "bad" : "warn",
+      title: "Clear the start gate before launching another beat",
+      detail: ownership.detail || "A start-gate condition is blocking the next launch.",
+      footer: ownership.startGate.status || "gate state"
+    };
+  }
+
+  if (topPlaybook?.recommended_action) {
+    return {
+      kind: topPlaybook.apply_eligible ? "good" : "warn",
+      cue: topPlaybook.recommended_action,
+      cueKind: topPlaybook.apply_eligible ? "good" : "warn",
+      title: "Decide whether to follow the recommended playbook",
+      detail: topPlaybook.goal || topPlaybook.reason || "The coordination layer has a concrete recommendation ready.",
+      footer: "From coordination playbooks"
+    };
+  }
+
+  if (nextBacklog?.text) {
+    return {
+      kind: "info",
+      cue: nextBacklog.section || "backlog",
+      cueKind: "info",
+      title: "Reprioritize now if the queue front feels wrong",
+      detail: nextBacklog.text,
+      footer: `Backlog line ${nextBacklog.line_number || "—"}`
+    };
+  }
+
+  return {
+    kind: runtime.status === "idle" ? "info" : "purple",
+    cue: "observe",
+    cueKind: "info",
+    title: "Stay with the current scene until the next stronger signal lands",
+    detail: "There is no sharper human intervention point than continuing to observe the canonical runtime, queue, and event flow.",
+    footer: "No blocking decision recorded"
+  };
 }
 
 function directorEventSummary(event) {

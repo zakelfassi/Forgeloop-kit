@@ -482,9 +482,15 @@ h3 {
 .director-next-panel,
 .director-queue-panel,
 .director-feed-panel,
+.director-recap-panel,
 .director-showcase-panel {
   padding: 22px;
   min-height: 300px;
+}
+
+.director-recap-panel,
+.director-showcase-panel {
+  grid-column: span 12;
 }
 
 .director-now-panel,
@@ -494,10 +500,7 @@ h3 {
   grid-column: span 6;
 }
 
-.director-showcase-panel {
-  grid-column: span 12;
-}
-
+.director-recap-grid,
 .director-summary,
 .director-highlight,
 .director-queue-item,
@@ -525,6 +528,51 @@ h3 {
   gap: 12px;
 }
 
+.director-recap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.director-recap-card {
+  position: relative;
+  min-height: 220px;
+  overflow: hidden;
+}
+
+.director-recap-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -38% auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(126, 201, 255, 0.18), transparent 68%);
+  pointer-events: none;
+}
+
+.director-recap-card h3 {
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  line-height: 0.98;
+  max-width: 14ch;
+}
+
+.director-recap-card p {
+  max-width: 54ch;
+}
+
+.director-recap-kicker {
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.director-recap-card .event-time {
+  display: inline-flex;
+  width: fit-content;
+}
+
 .director-showcase-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -539,8 +587,35 @@ body[data-scene="operator"] .director-grid {
   display: none;
 }
 
+body[data-scene="director"] .command-deck,
+body[data-scene="director"] .controls-panel {
+  display: none;
+}
+
 body[data-scene="director"] .operator-scene {
   display: none;
+}
+
+body[data-scene="director"] .hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-block: 18px;
+}
+
+body[data-scene="director"] .hero h1 {
+  font-size: clamp(2rem, 3.6vw, 3.2rem);
+  max-width: 14ch;
+}
+
+body[data-scene="director"] .hero .lead,
+body[data-scene="director"] .hero-chips,
+body[data-scene="director"] .mission-card {
+  display: none;
+}
+
+body[data-scene="director"] .hero-meta {
+  gap: 10px;
+  min-width: min(340px, 100%);
 }
 
 .panel-head {
@@ -831,8 +906,13 @@ body[data-scene="director"] .operator-scene {
   .director-next-panel,
   .director-queue-panel,
   .director-feed-panel,
+  .director-recap-panel,
   .director-showcase-panel {
     grid-column: auto;
+  }
+
+  .director-recap-grid {
+    grid-template-columns: 1fr;
   }
 }
 
