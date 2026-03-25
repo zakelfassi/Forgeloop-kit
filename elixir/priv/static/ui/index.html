@@ -16,7 +16,7 @@
     />
     <link rel="stylesheet" href="/assets/app.css" />
   </head>
-  <body>
+  <body data-scene="operator">
     <div class="noise"></div>
     <div class="orb orb-a"></div>
     <div class="orb orb-b"></div>
@@ -35,6 +35,13 @@
             <span class="hero-chip">fail-closed</span>
             <span class="hero-chip">replayable events</span>
             <span class="hero-chip">manual-first</span>
+          </div>
+          <div class="scene-switch" aria-label="HUD scene switch">
+            <span class="scene-switch-label">Scene</span>
+            <div class="scene-switch-buttons" role="tablist" aria-label="HUD scenes">
+              <button id="scene-operator" class="scene-button" type="button" data-scene="operator" aria-pressed="true">Operator</button>
+              <button id="scene-director" class="scene-button" type="button" data-scene="director" aria-pressed="false">Director Mode</button>
+            </div>
           </div>
         </div>
 
@@ -77,6 +84,53 @@
         <div id="controls-body" class="stack empty">Waiting for control snapshot…</div>
       </section>
 
+      <section class="director-grid" id="director-mode">
+        <article class="panel director-now-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Now</h2>
+              <p class="subtle-copy">The current objective, why it matters, and whether it is safe to intervene.</p>
+            </div>
+            <span class="panel-tag">live</span>
+          </div>
+          <div id="director-now" class="stack empty">Waiting for director snapshot…</div>
+        </article>
+
+        <article class="panel director-next-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Next</h2>
+              <p class="subtle-copy">The most likely next move from the current coordination window and control flags.</p>
+            </div>
+            <span class="panel-tag">move</span>
+          </div>
+          <div id="director-next" class="stack empty">Waiting for next-move snapshot…</div>
+        </article>
+
+        <article class="panel director-queue-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Queue</h2>
+              <p class="subtle-copy">What is queued behind the active objective: backlog, workflows, human gates, and pressure.</p>
+            </div>
+            <span class="panel-tag">queue</span>
+          </div>
+          <div id="director-queue" class="stack empty">Waiting for queue snapshot…</div>
+        </article>
+
+        <article class="panel director-feed-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Live feed</h2>
+              <p class="subtle-copy">Recent interventions, signals, and replayable events that make the story legible in public.</p>
+            </div>
+            <span class="panel-tag">feed</span>
+          </div>
+          <div id="director-feed" class="stack empty">Waiting for live feed…</div>
+        </article>
+      </section>
+
+      <div class="operator-scene">
       <section class="priority-grid">
         <article class="panel runtime-panel" id="runtime-panel">
           <div class="panel-head">
@@ -190,6 +244,7 @@
           <div id="events-body" class="stack empty">No recent events.</div>
         </article>
       </section>
+      </div>
 
       <section class="footer-note panel">
         <p>

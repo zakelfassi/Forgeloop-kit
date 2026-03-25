@@ -7,6 +7,7 @@ const state = {
   snapshot: null,
   contract: null,
   api: null,
+  scene: "operator",
   latestEventId: null,
   refreshTimer: null,
   questionDrafts: {},
@@ -20,8 +21,14 @@ const refs = {
   pill: document.getElementById("connection-pill"),
   runtimeBrief: document.getElementById("runtime-brief"),
   canonicalBrief: document.getElementById("canonical-brief"),
+  sceneOperatorButton: document.getElementById("scene-operator"),
+  sceneDirectorButton: document.getElementById("scene-director"),
   controlStatus: document.getElementById("control-status"),
   controlsBody: document.getElementById("controls-body"),
+  directorNow: document.getElementById("director-now"),
+  directorNext: document.getElementById("director-next"),
+  directorQueue: document.getElementById("director-queue"),
+  directorFeed: document.getElementById("director-feed"),
   runtimeBody: document.getElementById("runtime-body"),
   ownershipBody: document.getElementById("ownership-body"),
   providerBody: document.getElementById("provider-body"),
@@ -38,6 +45,8 @@ boot();
 
 async function boot() {
   bindEvents();
+  hydrateScenePreference();
+  renderSceneToggle();
   setConnectionState("loading", "Booting…");
   renderNotice();
 
@@ -58,10 +67,59 @@ async function boot() {
 }
 
 function bindEvents() {
+  refs.sceneOperatorButton?.addEventListener("click", handleSceneClick);
+  refs.sceneDirectorButton?.addEventListener("click", handleSceneClick);
   refs.controlsBody.addEventListener("click", handleControlClick);
   refs.workflowsBody.addEventListener("click", handleControlClick);
   refs.questionsBody.addEventListener("input", handleQuestionInput);
   refs.questionsBody.addEventListener("click", handleQuestionClick);
+}
+
+function hydrateScenePreference() {
+  try {
+    const saved = window.localStorage.getItem("forgeloop-hud-scene");
+    if (saved === "director" || saved === "operator") {
+      state.scene = saved;
+    }
+  } catch (_error) {
+    state.scene = "operator";
+  }
+
+  document.body.dataset.scene = state.scene;
+}
+
+function handleSceneClick(event) {
+  const button = event.currentTarget;
+  const scene = button?.dataset?.scene;
+  if (!scene || scene === state.scene) return;
+
+  state.scene = scene;
+  try {
+    window.localStorage.setItem("forgeloop-hud-scene", scene);
+  } catch (_error) {
+    // ignore localStorage failures; scene state still applies for this session
+  }
+
+  document.body.dataset.scene = state.scene;
+  renderSceneToggle();
+  setNotice("info", scene === "director"
+    ? "Director Mode enabled. The scene is still derived from the same loopback truth."
+    : "Operator HUD enabled. Controls and proofs still target the same canonical state.");
+}
+
+function renderSceneToggle() {
+  const operatorActive = state.scene !== "director";
+  const directorActive = state.scene === "director";
+
+  if (refs.sceneOperatorButton) {
+    refs.sceneOperatorButton.classList.toggle("active", operatorActive);
+    refs.sceneOperatorButton.setAttribute("aria-pressed", String(operatorActive));
+  }
+
+  if (refs.sceneDirectorButton) {
+    refs.sceneDirectorButton.classList.toggle("active", directorActive);
+    refs.sceneDirectorButton.setAttribute("aria-pressed", String(directorActive));
+  }
 }
 
 async function fetchContract() {
@@ -284,6 +342,7 @@ function applySnapshot(snapshot) {
   state.latestEventId = eventCursorFromSnapshot(snapshot);
   state.snapshot = normalizedSnapshot;
   renderControls(normalizedSnapshot);
+  renderDirectorMode(normalizedSnapshot);
   renderRuntime(normalizedSnapshot.runtime_state, normalizedSnapshot.babysitter, normalizedSnapshot.control_flags, ownership);
   renderOwnership(ownership);
   renderProviders(normalizedSnapshot.provider_health);
@@ -352,6 +411,103 @@ function renderControls(snapshot) {
       </div>
     </div>
   `;
+}
+
+function renderDirectorMode(snapshot) {
+  if (!refs.directorNow || !refs.directorNext || !refs.directorQueue || !refs.directorFeed) {
+    return;
+  }
+
+  const runtime = snapshot.runtime_state || {};
+  const ownership = snapshot.ownership || normalizeOwnership(snapshot);
+  const coordination = snapshot.coordination || {};
+  const playbooks = Array.isArray(coordination.playbooks) ? coordination.playbooks : [];
+  const backlogItems = Array.isArray(snapshot.backlog?.items) ? snapshot.backlog.items : [];
+  const workflows = Array.isArray(snapshot.workflows?.workflows) ? snapshot.workflows.workflows : [];
+  const questions = Array.isArray(snapshot.questions) ? snapshot.questions : [];
+  const escalations = Array.isArray(snapshot.escalations) ? snapshot.escalations : [];
+  const events = Array.isArray(snapshot.events) ? snapshot.events : [];
+  const timeline = Array.isArray(coordination.timeline) ? coordination.timeline : [];
+  const flags = snapshot.control_flags || {};
+  const topPlaybook = playbooks.find((playbook) => playbook.status === "actionable") || playbooks[0] || null;
+  const activeWorkflow = workflows.find((workflow) => workflow.active_run) || null;
+  const nextBacklog = backlogItems[0] || null;
+  const openQuestion = questions.find((question) => question.status_kind !== "resolved") || null;
+  const latestEscalation = escalations[0] || null;
+  const objective = directorObjective({ runtime, coordination, nextBacklog, openQuestion, activeWorkflow, latestEscalation });
+  const stakes = directorStakes({ ownership, topPlaybook, openQuestion, latestEscalation });
+  const nextMove = directorNextMove({ ownership, flags, topPlaybook, activeWorkflow, openQuestion, nextBacklog });
+  const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
+  const feedCards = directorFeedCards({ timeline, events });
+
+  refs.directorNow.className = "director-subgrid";
+  refs.directorNow.innerHTML = `
+    <article class="list-card director-summary">
+      <div class="list-meta">
+        ${badge(runtime.status || "idle", badgeClass(runtime.status || "idle"))}
+        ${badge(`ownership ${ownership.summaryState}`, ownershipSummaryClass(ownership.summaryState))}
+        ${badge(`start gate ${ownership.startGate.status}`, ownershipGateClass(ownership.startGate.status))}
+        ${runtime.surface ? badge(runtime.surface, "purple") : ""}
+      </div>
+      <p class="eyebrow small">Current objective</p>
+      <h3 class="director-objective">${escapeHtml(objective)}</h3>
+      <p>${escapeHtml(runtime.reason || coordination.brief || "No runtime reason has been recorded yet.")}</p>
+    </article>
+    <article class="list-card director-highlight">
+      <div class="list-meta">
+        ${badge("stakes", stakes.kind)}
+        ${ownership.conflict ? badge("conflict", "bad") : ""}
+      </div>
+      <h3>${escapeHtml(ownership.headline)}</h3>
+      <p>${escapeHtml(stakes.detail)}</p>
+      <div class="metric-grid compact-grid">
+        ${metric("Status", runtime.status || "idle")}
+        ${metric("Transition", runtime.transition || "—")}
+        ${metric("Mode", runtime.mode || "—")}
+        ${metric("Babysitter", snapshot.babysitter?.["running?"] ? "running" : "idle")}
+      </div>
+    </article>
+  `;
+
+  refs.directorNext.className = "director-subgrid";
+  refs.directorNext.innerHTML = `
+    <article class="list-card director-highlight">
+      <div class="list-meta">
+        ${badge(nextMove.kind_label, nextMove.kind)}
+        ${nextMove.action ? badge(nextMove.action, nextMove.action_badge || "purple") : ""}
+      </div>
+      <h3>${escapeHtml(nextMove.title)}</h3>
+      <p>${escapeHtml(nextMove.detail)}</p>
+    </article>
+    ${topPlaybook ? `
+      <article class="list-card director-highlight">
+        <div class="list-meta">
+          ${badge(topPlaybook.status || "idle", coordinationStatusClass(topPlaybook.status))}
+          ${topPlaybook.recommended_action ? badge(`recommend ${topPlaybook.recommended_action}`, topPlaybook.apply_eligible ? "good" : "warn") : badge("manual review", "info")}
+        </div>
+        <h3>${escapeHtml(topPlaybook.title || topPlaybook.id || "Top playbook")}</h3>
+        <p>${escapeHtml(topPlaybook.goal || topPlaybook.reason || "No additional playbook summary is available.")}</p>
+      </article>
+    ` : `
+      <article class="list-card director-highlight">
+        <div class="list-meta">
+          ${badge("playbooks idle", "info")}
+        </div>
+        <h3>No coordination playbook is currently active</h3>
+        <p>The loopback service is not currently recommending an intervention beyond the canonical queue and runtime state.</p>
+      </article>
+    `}
+  `;
+
+  refs.directorQueue.className = queueCards.length ? "director-queue-list" : "stack empty";
+  refs.directorQueue.innerHTML = queueCards.length
+    ? queueCards.join("")
+    : "<p>No backlog, workflow, question, or escalation pressure is currently queued.</p>";
+
+  refs.directorFeed.className = feedCards.length ? "director-feed-list" : "stack empty";
+  refs.directorFeed.innerHTML = feedCards.length
+    ? feedCards.join("")
+    : "<p>No recent timeline or event signals are available yet.</p>";
 }
 
 function renderRuntime(runtime, babysitter, controlFlags, ownership) {
@@ -1034,6 +1190,266 @@ function renderEvents(events) {
       </article>
     `;
   }).join("");
+}
+
+function directorObjective(context) {
+  const { runtime, nextBacklog, openQuestion, activeWorkflow, latestEscalation } = context;
+
+  if (latestEscalation?.summary) return latestEscalation.summary;
+  if (openQuestion?.question) return openQuestion.question;
+  if (runtime?.reason) return runtime.reason;
+  if (activeWorkflow?.entry?.name) return `${activeWorkflow.entry.name} is the current quest`;
+  if (nextBacklog?.text) return nextBacklog.text;
+  return "Keep the loop observable, bounded, and worth following.";
+}
+
+function directorStakes(context) {
+  const { ownership, topPlaybook, openQuestion, latestEscalation } = context;
+
+  if (latestEscalation) {
+    return {
+      kind: "bad",
+      detail: latestEscalation.summary || "Forgeloop drafted an escalation artifact and needs a human decision now."
+    };
+  }
+
+  if (openQuestion) {
+    return {
+      kind: "warn",
+      detail: openQuestion.suggested_action || "A human gate is open and the loop will stay bounded until it is answered or resolved."
+    };
+  }
+
+  if (ownership.startAllowed === false) {
+    return {
+      kind: ownership.failClosed ? "bad" : "warn",
+      detail: ownership.detail || "Manual starts are currently blocked by ownership or active-run state."
+    };
+  }
+
+  if (topPlaybook?.reason) {
+    return {
+      kind: topPlaybook.status === "blocked" ? "bad" : "purple",
+      detail: topPlaybook.reason
+    };
+  }
+
+  return {
+    kind: "good",
+    detail: "The control room is live, the start gate is clear, and there is no immediate fail-closed pressure."
+  };
+}
+
+function directorNextMove(context) {
+  const { ownership, flags, topPlaybook, activeWorkflow, openQuestion, nextBacklog } = context;
+
+  if (ownership.startAllowed === false) {
+    return {
+      kind: ownership.failClosed ? "bad" : "warn",
+      kind_label: "blocked",
+      title: "Do not launch another run yet",
+      detail: ownership.detail || "Resolve the ownership or active-run blocker before intervening.",
+      action: ownership.startGate.reason || null,
+      action_badge: ownership.failClosed ? "bad" : "warn"
+    };
+  }
+
+  if (flags["pause_requested?"]) {
+    return {
+      kind: "warn",
+      kind_label: "pause queued",
+      title: "Hold while pause remains requested",
+      detail: "The canonical control files still contain [PAUSE], so the next cycle should stay stopped until the operator clears it.",
+      action: "pause",
+      action_badge: "warn"
+    };
+  }
+
+  if (topPlaybook?.recommended_action) {
+    return {
+      kind: topPlaybook.apply_eligible ? "good" : "warn",
+      kind_label: "recommended",
+      title: topPlaybook.title || "Follow the current playbook",
+      detail: topPlaybook.goal || topPlaybook.reason || "The coordination layer has a concrete suggested next move.",
+      action: topPlaybook.recommended_action,
+      action_badge: topPlaybook.apply_eligible ? "good" : "warn"
+    };
+  }
+
+  if (flags["replan_requested?"]) {
+    return {
+      kind: "purple",
+      kind_label: "replan queued",
+      title: "Let the next loop consume [REPLAN]",
+      detail: "A replan has already been requested in the canonical control files.",
+      action: "replan",
+      action_badge: "purple"
+    };
+  }
+
+  if (openQuestion) {
+    return {
+      kind: "warn",
+      kind_label: "human gate",
+      title: `Answer ${openQuestion.id || "the open question"}`,
+      detail: openQuestion.suggested_action || "The loop is waiting on operator judgment before it can proceed safely.",
+      action: "answer",
+      action_badge: "warn"
+    };
+  }
+
+  if (activeWorkflow?.entry?.name) {
+    return {
+      kind: "purple",
+      kind_label: "workflow active",
+      title: `Track ${activeWorkflow.entry.name}`,
+      detail: "A managed workflow pack is already carrying the current momentum; the next move is mostly observation unless the run blocks.",
+      action: activeWorkflow.active_run?.action || "run",
+      action_badge: "purple"
+    };
+  }
+
+  if (nextBacklog?.text) {
+    return {
+      kind: "good",
+      kind_label: "queue front",
+      title: "Advance the next canonical backlog item",
+      detail: nextBacklog.text,
+      action: nextBacklog.section || "backlog",
+      action_badge: "good"
+    };
+  }
+
+  return {
+    kind: "info",
+    kind_label: "observe",
+    title: "Stay on watch",
+    detail: "No stronger next move is currently derived from runtime, coordination, or queue state.",
+    action: null,
+    action_badge: "info"
+  };
+}
+
+function directorQueueCards(context) {
+  const { backlogItems, activeWorkflow, questions, escalations } = context;
+  const cards = [];
+
+  const backlogPreview = backlogItems.slice(0, 3);
+  if (backlogPreview.length) {
+    cards.push(`
+      <article class="list-card director-queue-item">
+        <div class="list-meta">
+          ${badge("backlog", "good")}
+          ${badge(`${backlogItems.length} queued`, "info")}
+        </div>
+        <h3>Canonical backlog front</h3>
+        <div class="stack">
+          ${backlogPreview.map((item) => `<p>${escapeHtml(item.text || item.raw_line || "Untitled backlog item")}</p>`).join("")}
+        </div>
+      </article>
+    `);
+  }
+
+  if (activeWorkflow) {
+    const latest = activeWorkflow.latest_activity_kind
+      ? `${activeWorkflow.latest_activity_kind} @ ${activeWorkflow.latest_activity_at || "unknown"}`
+      : "No workflow artifact yet.";
+    cards.push(`
+      <article class="list-card director-queue-item">
+        <div class="list-meta">
+          ${badge("workflow", "purple")}
+          ${activeWorkflow.active_run ? badge(`active ${activeWorkflow.active_run.action || "run"}`, "warn") : badge("idle", "info")}
+        </div>
+        <h3>${escapeHtml(activeWorkflow.entry?.name || "Workflow pack")}</h3>
+        <p>${escapeHtml(latest)}</p>
+      </article>
+    `);
+  }
+
+  if (questions.length || escalations.length) {
+    cards.push(`
+      <article class="list-card director-queue-item">
+        <div class="list-meta">
+          ${badge(`${questions.length} questions`, questions.length ? "warn" : "info")}
+          ${badge(`${escalations.length} escalations`, escalations.length ? "bad" : "info")}
+        </div>
+        <h3>Human pressure queue</h3>
+        <p>${escapeHtml(
+          escalations[0]?.summary
+            || questions[0]?.question
+            || "No active human gate is currently queued."
+        )}</p>
+      </article>
+    `);
+  }
+
+  return cards;
+}
+
+function directorFeedCards(context) {
+  const { timeline, events } = context;
+  const cards = [];
+  const recentTimeline = timeline.slice(0, 3);
+  const recentEvents = events.slice().reverse().slice(0, 4);
+
+  if (recentTimeline.length) {
+    cards.push(`
+      <article class="list-card director-feed-item">
+        <div class="list-meta">
+          ${badge("coordination", "purple")}
+          ${badge(`${recentTimeline.length} recent`, "info")}
+        </div>
+        <h3>Recent coordination window</h3>
+        <div class="stack">
+          ${recentTimeline.map((entry) => `
+            <div>
+              <strong>${escapeHtml(entry.title || entry.event_code || "Coordination event")}</strong>
+              <p class="subtle-copy">${escapeHtml(entry.detail || "No additional detail recorded.")}</p>
+              <span class="event-time">${escapeHtml(entry.occurred_at || "unknown")}</span>
+            </div>
+          `).join("")}
+        </div>
+      </article>
+    `);
+  }
+
+  if (recentEvents.length) {
+    cards.push(`
+      <article class="list-card director-feed-item">
+        <div class="list-meta">
+          ${badge("events", "info")}
+          ${badge(`${recentEvents.length} replayed`, "good")}
+        </div>
+        <h3>Latest replayable signals</h3>
+        <div class="stack">
+          ${recentEvents.map((event) => `
+            <div>
+              <strong>${escapeHtml(event.event_code || event.event_type || "event")}</strong>
+              <p class="subtle-copy">${escapeHtml(directorEventSummary(event))}</p>
+              <span class="event-time">${escapeHtml(event.occurred_at || event.recorded_at || "unknown")}</span>
+            </div>
+          `).join("")}
+        </div>
+      </article>
+    `);
+  }
+
+  return cards;
+}
+
+function directorEventSummary(event) {
+  if (event.reason) return event.reason;
+  if (event.action) return `action=${event.action}`;
+  if (event.mode) return `mode=${event.mode}`;
+  if (event.runtime_surface) return `surface=${event.runtime_surface}`;
+
+  const extra = Object.entries(event)
+    .filter(([key, value]) => value != null && !["event_id", "event_code", "event_type", "occurred_at", "recorded_at"].includes(key))
+    .slice(0, 2)
+    .map(([key, value]) => `${key}=${formatValue(value)}`)
+    .join(" · ");
+
+  return extra || "No extra payload.";
 }
 
 function renderNotice() {

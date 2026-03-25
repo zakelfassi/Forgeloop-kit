@@ -210,6 +210,61 @@ h3 {
   margin-top: 20px;
 }
 
+.scene-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.scene-switch-label {
+  color: rgba(255,255,255,0.58);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scene-switch-buttons {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.scene-button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  padding: 9px 13px;
+  text-transform: uppercase;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.scene-button:hover,
+.scene-button:focus-visible {
+  outline: none;
+  color: var(--text);
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+}
+
+.scene-button.active {
+  color: var(--acid);
+  background: rgba(183,255,60,0.08);
+  border-color: rgba(183,255,60,0.24);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.02);
+}
+
 .hero-chip,
 .panel-tag,
 .badge,
@@ -370,7 +425,8 @@ h3 {
 .inline-notice { margin-top: 12px; }
 
 .priority-grid,
-.mission-grid {
+.mission-grid,
+.director-grid {
   display: grid;
   gap: 20px;
 }
@@ -404,6 +460,11 @@ h3 {
   grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
+.director-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
 .coordination-panel,
 .workflows-panel,
 .questions-panel,
@@ -415,6 +476,60 @@ h3 {
 
 .events-panel {
   grid-column: span 12;
+}
+
+.director-now-panel,
+.director-next-panel,
+.director-queue-panel,
+.director-feed-panel {
+  padding: 22px;
+  min-height: 300px;
+}
+
+.director-now-panel,
+.director-next-panel,
+.director-queue-panel,
+.director-feed-panel {
+  grid-column: span 6;
+}
+
+.director-summary,
+.director-highlight,
+.director-queue-item,
+.director-feed-item {
+  display: grid;
+  gap: 10px;
+}
+
+.director-objective {
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  line-height: 0.94;
+  max-width: 14ch;
+}
+
+.director-subgrid {
+  display: grid;
+  gap: 16px;
+}
+
+.director-queue-list,
+.director-feed-list {
+  display: grid;
+  gap: 12px;
+}
+
+.director-feed-list .event-time,
+.director-queue-item .event-time {
+  display: inline-flex;
+  width: fit-content;
+}
+
+body[data-scene="operator"] .director-grid {
+  display: none;
+}
+
+body[data-scene="director"] .operator-scene {
+  display: none;
 }
 
 .panel-head {
@@ -686,7 +801,8 @@ h3 {
   .hero,
   .command-deck,
   .priority-grid,
-  .mission-grid {
+  .mission-grid,
+  .director-grid {
     grid-template-columns: 1fr;
   }
 
@@ -699,7 +815,11 @@ h3 {
   .workflows-panel,
   .questions-panel,
   .escalations-panel,
-  .events-panel {
+  .events-panel,
+  .director-now-panel,
+  .director-next-panel,
+  .director-queue-panel,
+  .director-feed-panel {
     grid-column: auto;
   }
 }
@@ -712,6 +832,10 @@ h3 {
   .hero,
   .command-deck,
   .controls-panel,
+  .director-now-panel,
+  .director-next-panel,
+  .director-queue-panel,
+  .director-feed-panel,
   .runtime-panel,
   .ownership-panel,
   .provider-panel,

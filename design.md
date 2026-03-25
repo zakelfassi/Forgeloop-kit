@@ -193,6 +193,13 @@ The first screen should answer:
 - no questions
 - no escalations
 
+### Broadcast / Director Mode
+- default spectator layout
+- chromeless / presentation-friendly layout
+- "now / next / queue / live feed" composition
+- active blocker / escalation moment
+- human intervention prompt
+- empty or low-signal repo state without fake drama
 ## Component guidance
 
 ### Landing page
@@ -210,6 +217,13 @@ The first screen should answer:
 - event stream that is readable but visually secondary
 - workflow cards that separate ready, running, invalid, and historical outcomes
 
+### Broadcast / Director Mode
+- a top-level scene switch, not a separate product
+- four dominant zones: now, next, queue, live feed
+- a strong current-objective headline derived from existing runtime + coordination state
+- a bounded intervention surface that can ask the human for one concrete decision
+- a spectator-friendly event ticker that stays evidence-linked
+- no hidden or non-canonical narration source
 ## Content tone
 - crisp
 - technical
@@ -244,7 +258,8 @@ Preferred language themes:
 - Do not obscure canonical file-first product behavior
 - Do not imply autonomous behavior the product does not actually provide
 - Keep implementation realistic for the current repo
-
+- Treat any stream/broadcast surface as a presentation layer over existing canonical state, not a new control plane
+- Do not expose raw AI chain-of-thought or private reasoning as part of the spectacle
 ## Initial redesign direction
 
 ### Landing page concept
@@ -252,6 +267,20 @@ A vibrant, psychedelic product narrative that feels like a studio-quality launch
 
 ### HUD concept
 A clearer RPG control-room layout with a dominant top band for runtime, ownership, objectives, and next actions. It should feel like an operator game interface for real systems work: dramatic, but still legible and trustworthy.
+
+## Broadcast / Director Mode concept
+An additive spectator-facing scene built on top of the same loopback contract. It should feel like streaming a game of software work: a strong "what is happening now" headline, a visible next move, an honest queue, and a live feed of evidence-backed events.
+
+The first version should stay client-side if possible and remix the current HUD data into four dominant zones:
+- **Now** — runtime status, current objective, ownership / danger state
+- **Next** — top playbook, recommended operator action, queued workflow or replan intent
+- **Queue** — top backlog items, active workflow, recent blockers or escalations
+- **Live feed** — curated event ticker, recent interventions, question / escalation movement
+
+Narration rules:
+- prefer distilled summaries derived from existing runtime, coordination, workflow, backlog, and event data
+- never present invented lore or hidden system state as canonical truth
+- never expose raw AI thinking; if commentary exists, it should be bounded, attributable, and clearly secondary to repo-local artifacts
 
 ## Success criteria
 The redesign is successful if:

@@ -18,6 +18,29 @@ Format:
 
 ## Next Up
 
+- [ ] Add a client-only Director Mode for the HUD so Forgeloop can feel stream-worthy without introducing a new control plane
+  - Acceptance:
+    - The HUD exposes a scene switch between the current operator view and an additive spectator-facing Director Mode.
+    - Director Mode renders only from existing loopback service surfaces (`/api/overview`, `/api/coordination`, `/api/events`, `/api/stream`, `/api/schema`) and does not introduce a second source of truth.
+    - The first-pass composition uses four dominant zones — now, next, queue, live feed — while keeping ownership/start-gate truth visible and actionable.
+    - Narration remains bounded and derived: no raw AI chain-of-thought, no invented backlog/runtime state, no hidden side channel.
+    - Existing operator controls, fail-closed semantics, and browser proof still work in both modes.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+    - `cd elixir && mix test`
+  - Likely touched files:
+    - `design.md`
+    - `elixir/priv/static/ui/index.html`
+    - `elixir/priv/static/ui/app.css`
+    - `elixir/priv/static/ui/app.js`
+  - Non-goals for this first slice:
+    - no service contract expansion by default
+    - no raw AI-thought surface
+    - no artifact showcase/diff-preview lane yet
+    - no separate streaming backend or non-repo-local state
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
@@ -460,6 +483,18 @@ Format:
     - `README.md`, `docs/README.md`, `docs/v2-roadmap.md`, and `index.html` now align on `v1.0.0` stable vs `main` as the v2 alpha / development track.
     - The public upgrade/evaluation path now explicitly points stable users at `./forgeloop.sh upgrade --from ...`, `./forgeloop.sh evals`, and `bash forgeloop/tests/run.sh` before trusting mainline V2 surfaces.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
+- [ ] Add a service-owned broadcast summary read model only if Director Mode becomes too client-heavy
+  - Scope for the later slice:
+    - derive `headline`, `objective`, `stakes`, `next_move`, `queue_preview`, and recent highlights from existing runtime/coordination/workflow/backlog/event state
+    - keep the model additive and explicitly non-canonical
+- [ ] Add bounded director notes / human intervention prompts after the spectator scene is stable
+  - Scope for the later slice:
+    - distilled operator-facing or spectator-facing notes derived from existing evidence
+    - no raw AI thinking, no invented state, no hidden memory surface
+- [ ] Add an artifact / preview showcase lane after the narrative priorities are clear
+  - Scope for the later slice:
+    - changed-file or proof-summary cards
+    - screenshots / output previews / milestone snapshots when the service can expose them cleanly
 - [ ] Reassess whether a richer multi-user/dashboard architecture is warranted after the local UI loop is proven
 
 ## Checkpoint Cadence
@@ -479,6 +514,7 @@ Format:
 - [ ] Forge `repo-local-coordination-regression` to run file + runtime-state + event-log + API regression checks for control-plane/UI changes
 - [ ] Forge `implementation-plan-curator` to keep this plan deduplicated, prioritized, and aligned with required tests
 - [ ] Forge `ui-proof-loop` to start the service, trigger one action, watch SSE, and verify files + gates end-to-end
+- [ ] Forge `director-mode-proof` to validate both operator and spectator HUD scenes against the same canonical snapshots without letting presentation drift into fake state
 
 ## Validation Gates
 
