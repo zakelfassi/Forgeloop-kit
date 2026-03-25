@@ -11,13 +11,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Run shell tests
-        run: bash tests/run.sh
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
           elixir-version: "1.17.3"
           otp-version: "27.0"
+      - name: Run shell tests
+        run: bash tests/run.sh
       - name: Run Elixir tests
         working-directory: elixir
         run: |

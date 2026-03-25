@@ -26,7 +26,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 
 ## Next Gaps To Close
 
-- Add more entrypoint smoke tests beyond the daemon.
+- Keep service and daemon entrypoint smoke tests green across repo-root and vendored layouts, and widen that posture to additional public surfaces only when the proof pays for itself.
 - Add a small quality score review cadence so repo quality is measured, not guessed.
 - Keep open PRs short-lived and rewrite stacked draft history into focused successors.
 - Keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows.

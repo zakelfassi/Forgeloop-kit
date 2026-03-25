@@ -60,6 +60,7 @@ wrapper_help="$(cd "$wrapper_target" && ./forgeloop.sh --help 2>&1)"
 [[ -L "$wrapper_target/CLAUDE.md" ]] || { echo "FAIL: wrapper install CLAUDE.md is not a symlink" >&2; exit 1; }
 [[ "$(readlink "$wrapper_target/CLAUDE.md")" == "AGENTS.md" ]] || { echo "FAIL: wrapper install CLAUDE.md points to $(readlink "$wrapper_target/CLAUDE.md")" >&2; exit 1; }
 
+assert_contains "$plain_output" "(cd ./forgeloop/elixir && mix forgeloop_v2.serve --repo ..)"
 assert_contains "$plain_output" "bash ./forgeloop/evals/run.sh"
 assert_not_contains_line "$plain_output" "  ./forgeloop/evals/run.sh"
 assert_contains "$plain_output" "./forgeloop/bin/self-host-proof.sh"
@@ -69,6 +70,7 @@ assert_contains "$plain_output" "./forgeloop/bin/loop.sh 5"
 assert_contains "$plain_output" "./forgeloop/bin/workflow.sh list"
 assert_order "$plain_output" "./forgeloop/bin/kickoff.sh \"<one paragraph project brief>\"" "./forgeloop/bin/loop.sh plan 1"
 
+assert_contains "$wrapper_output" "./forgeloop.sh serve"
 assert_contains "$wrapper_output" "./forgeloop.sh evals"
 assert_contains "$wrapper_output" "./forgeloop.sh self-host-proof"
 assert_contains "$wrapper_output" "./forgeloop.sh kickoff \"<one paragraph project brief>\""
@@ -77,6 +79,7 @@ assert_contains "$wrapper_output" "./forgeloop.sh build 5"
 assert_contains "$wrapper_output" "./forgeloop.sh workflow list"
 assert_order "$wrapper_output" "./forgeloop.sh kickoff \"<one paragraph project brief>\"" "./forgeloop.sh plan 1"
 assert_contains "$wrapper_help" "./forgeloop.sh kickoff \"<brief>\""
+assert_contains "$wrapper_help" "./forgeloop.sh serve [--host 127.0.0.1] [--port 4010]"
 assert_contains "$wrapper_help" "./forgeloop.sh self-host-proof"
 assert_order "$wrapper_help" "./forgeloop.sh kickoff \"<brief>\"" "./forgeloop.sh plan [max_iters] [--lite|--full] [--watch|--infinite]"
 
