@@ -437,6 +437,7 @@ function renderDirectorMode(snapshot) {
   const objective = directorObjective({ runtime, coordination, nextBacklog, openQuestion, activeWorkflow, latestEscalation });
   const stakes = directorStakes({ ownership, topPlaybook, openQuestion, latestEscalation });
   const nextMove = directorNextMove({ ownership, flags, topPlaybook, activeWorkflow, openQuestion, nextBacklog });
+  const interventionPrompt = directorInterventionPrompt({ ownership, flags, topPlaybook, openQuestion, nextBacklog, latestEscalation });
   const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
   const feedCards = directorFeedCards({ timeline, events });
 
@@ -497,6 +498,14 @@ function renderDirectorMode(snapshot) {
         <p>The loopback service is not currently recommending an intervention beyond the canonical queue and runtime state.</p>
       </article>
     `}
+    <article class="list-card director-highlight">
+      <div class="list-meta">
+        ${badge("human prompt", interventionPrompt.kind)}
+        ${interventionPrompt.cue ? badge(interventionPrompt.cue, interventionPrompt.cue_kind || "purple") : ""}
+      </div>
+      <h3>${escapeHtml(interventionPrompt.title)}</h3>
+      <p>${escapeHtml(interventionPrompt.detail)}</p>
+    </article>
   `;
 
   refs.directorQueue.className = queueCards.length ? "director-queue-list" : "stack empty";
@@ -1330,9 +1339,102 @@ function directorNextMove(context) {
   };
 }
 
+function directorInterventionPrompt(context) {
+  const { ownership, flags, topPlaybook, openQuestion, nextBacklog, latestEscalation } = context;
+
+  if (latestEscalation) {
+    return {
+      kind: "bad",
+      title: "Pause the show and review the escalation",
+      detail: latestEscalation.summary || "Forgeloop already drafted the handoff. The next useful human move is to inspect the escalation and decide how to resume.",
+      cue: latestEscalation.requested_action || "escalation",
+      cue_kind: "bad"
+    };
+  }
+
+  if (openQuestion) {
+    return {
+      kind: "warn",
+      title: "Answer the open human gate",
+      detail: openQuestion.question || "The runtime is waiting on operator judgment. Resolve the question to unblock the next safe move.",
+      cue: openQuestion.id || "question",
+      cue_kind: "warn"
+    };
+  }
+
+  if (ownership.startAllowed === false) {
+    return {
+      kind: ownership.failClosed ? "bad" : "warn",
+      title: "Decide whether to wait, reclaim, or repair state",
+      detail: ownership.detail || "The start gate is not clear, so the right human move is to inspect the blocker before launching anything new.",
+      cue: ownership.startGate.reason || "start-gate",
+      cue_kind: ownership.failClosed ? "bad" : "warn"
+    };
+  }
+
+  if (flags["replan_requested?"]) {
+    return {
+      kind: "purple",
+      title: "Watch the queue or reprioritize before the next cycle",
+      detail: "A replan is already queued. This is the clean moment to decide whether the backlog order still makes sense.",
+      cue: "replan",
+      cue_kind: "purple"
+    };
+  }
+
+  if (topPlaybook?.recommended_action) {
+    return {
+      kind: topPlaybook.apply_eligible ? "good" : "warn",
+      title: "Decide whether to follow the recommended playbook",
+      detail: topPlaybook.goal || topPlaybook.reason || "The coordination layer sees a concrete next move; the human can endorse it or keep observing.",
+      cue: topPlaybook.recommended_action,
+      cue_kind: topPlaybook.apply_eligible ? "good" : "warn"
+    };
+  }
+
+  if (nextBacklog?.text) {
+    return {
+      kind: "info",
+      title: "Reprioritize now if the queue feels wrong",
+      detail: `Current queue front: ${nextBacklog.text}`,
+      cue: nextBacklog.section || "backlog",
+      cue_kind: "info"
+    };
+  }
+
+  return {
+    kind: "info",
+    title: "Keep watching for the next real decision",
+    detail: "There is no urgent operator intervention prompt right now. Let the loop stay observable and bounded until the next stronger signal arrives.",
+    cue: "observe",
+    cue_kind: "info"
+  };
+}
+
 function directorQueueCards(context) {
   const { backlogItems, activeWorkflow, questions, escalations } = context;
   const cards = [];
+
+  cards.push(`
+    <article class="list-card director-queue-item">
+      <div class="list-meta">
+        ${badge("queue snapshot", "purple")}
+        ${badge(`${backlogItems.length} backlog`, backlogItems.length ? "good" : "info")}
+        ${badge(`${questions.length} questions`, questions.length ? "warn" : "info")}
+        ${badge(`${escalations.length} escalations`, escalations.length ? "bad" : "info")}
+      </div>
+      <h3>What is stacking up behind the current objective</h3>
+      <p>${escapeHtml(
+        escalations.length
+          ? "Human pressure is rising: the queue already contains escalation artifacts."
+          : questions.length
+            ? "The queue contains open human gates that can change what should happen next."
+            : backlogItems.length
+              ? "The canonical backlog is still the main source of what comes after the current beat."
+              : "There is no visible queue pressure behind the active objective right now."
+      )}</p>
+    </article>
+  `);
 
   const backlogPreview = backlogItems.slice(0, 3);
   if (backlogPreview.length) {

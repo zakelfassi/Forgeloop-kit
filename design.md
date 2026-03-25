@@ -277,6 +277,11 @@ The first version should stay client-side if possible and remix the current HUD 
 - **Queue** — top backlog items, active workflow, recent blockers or escalations
 - **Live feed** — curated event ticker, recent interventions, question / escalation movement
 
+The next polish pass should add:
+- one bounded human prompt that asks the most useful decision-oriented question in the current moment
+- stronger queue storytelling so spectators can tell what is waiting behind the active objective
+- sharper “why this matters now” copy without crossing into fake lore or invented state
+
 Narration rules:
 - prefer distilled summaries derived from existing runtime, coordination, workflow, backlog, and event data
 - never present invented lore or hidden system state as canonical truth

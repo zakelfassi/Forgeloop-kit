@@ -18,7 +18,7 @@ Format:
 
 ## Next Up
 
-- [ ] Add a client-only Director Mode for the HUD so Forgeloop can feel stream-worthy without introducing a new control plane
+- [x] Add a client-only Director Mode for the HUD so Forgeloop can feel stream-worthy without introducing a new control plane
   - Acceptance:
     - The HUD exposes a scene switch between the current operator view and an additive spectator-facing Director Mode.
     - Director Mode renders only from existing loopback service surfaces (`/api/overview`, `/api/coordination`, `/api/events`, `/api/stream`, `/api/schema`) and does not introduce a second source of truth.
@@ -40,6 +40,24 @@ Format:
     - no raw AI-thought surface
     - no artifact showcase/diff-preview lane yet
     - no separate streaming backend or non-repo-local state
+  - Shipped behavior:
+    - The HUD now exposes a persistent scene switch between Operator and Director Mode without changing the loopback service contract.
+    - Director Mode remixes existing runtime, ownership, coordination, backlog, workflow, question, escalation, and event data into now / next / queue / live feed zones.
+    - Browser proof now verifies scene switching and confirms Director Mode stays tied to the same canonical loopback truth as the operator HUD.
+
+- [ ] Add bounded director prompts and queue polish so Director Mode feels stream-worthy without inventing state
+  - Acceptance:
+    - Director Mode surfaces one concrete human prompt derived from the current ownership, coordination, queue, or escalation state.
+    - Queue cards tell a clearer story about what is stacking up behind the active objective.
+    - The added narration stays evidence-linked and derived from existing runtime, coordination, backlog, workflow, question, escalation, and event data.
+  - REQUIRED TESTS:
+    - `tests/manual/hud-contract.agent-browser.sh`
+    - `bash bin/self-host-proof.sh`
+    - `node --check elixir/priv/static/ui/app.js`
+  - Non-goals:
+    - no raw AI-thought surface
+    - no service-owned broadcast summary model yet
+    - no artifact-preview lane yet
 
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
