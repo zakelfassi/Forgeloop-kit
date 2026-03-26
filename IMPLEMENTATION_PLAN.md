@@ -133,6 +133,22 @@ Format:
     - Director Mode now exposes a broadcast-frame toggle that trims the scene for presentation while staying on the same loopback truth.
     - The proof shelf now includes a copyable episode card that summarizes what shipped, what is stuck, and what to watch next using only current snapshot/stream data.
 
+- [x] Add OpenClaw loopback integration smoke on top of the real service
+  - Acceptance:
+    - The real OpenClaw plugin can talk to the real loopback service over HTTP, not just mocked fetches.
+    - A bounded integration smoke proves overview, question-answer, coordination recommendation, and control actions against canonical repo files.
+    - The smoke stays same-host, loopback-only, and does not introduce a second control plane or hidden plugin state.
+  - REQUIRED TESTS:
+    - `bash tests/openclaw-plugin.test.sh`
+    - `bash tests/openclaw-loopback-smoke.test.sh`
+  - Non-goals:
+    - no long-lived OpenClaw orchestration loop
+    - no remote plugin topology changes
+    - no expansion beyond the existing bounded tool surface
+  - Shipped behavior:
+    - `tests/openclaw-loopback-smoke.test.sh` now starts the real Forgeloop service on a temporary repo, drives the real OpenClaw plugin over loopback HTTP, and verifies canonical question/control files change through the same service-owned control plane.
+    - The OpenClaw plugin README now includes a local-path install note aligned with the official OpenClaw plugin docs.
+
 - [x] Add daemon-integrated babysitter recovery and watchdog proof
   - Acceptance:
     - Stale babysitter heartbeat and active-run metadata are treated as stale rather than live after abrupt child loss.

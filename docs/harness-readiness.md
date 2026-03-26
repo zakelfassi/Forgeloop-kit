@@ -23,6 +23,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - `./forgeloop.sh self-host-proof` is the manual v2-alpha HUD/service proof for bounded self-hosting checks.
 - `.github/workflows/v2-alpha-proof.yml` is the manual/scheduled alpha proof cadence for shell, eval, Elixir, self-host, and screenshot regeneration.
 - `./bin/capture-product-screenshots.sh` regenerates the committed public screenshots from a seeded canonical demo repo instead of mocked UI states.
+- `tests/openclaw-plugin.test.sh` and `tests/openclaw-loopback-smoke.test.sh` keep the OpenClaw seam honest at both the contract and real loopback-integration layers.
 - `docs/runtime-control.md` defines the loop stop/escalation rules.
 - `ESCALATIONS.md`, `QUESTIONS.md`, and `REQUESTS.md` form the human handoff surface.
 - `.forgeloop/runtime-state.json` is the machine-readable runtime state surface.
@@ -42,7 +43,7 @@ Before calling v2 **beta**:
 - keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows
 - keep daemon-integrated babysitter child-run recovery and watchdog checks green as the managed path evolves
 - keep the loopback self-host proof stable across clean and dirty source checkouts
-- add integration-surface smoke tests for future plugin seams such as OpenClaw
+- keep integration-surface smoke tests for plugin seams such as OpenClaw green as the control plane evolves
 - tighten the parity/readiness docs so they describe landed behavior precisely instead of loosely
 
 Before making v2 the **prod-default** path:

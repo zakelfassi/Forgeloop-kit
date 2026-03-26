@@ -17,6 +17,17 @@ Workspace plugin that lets OpenClaw monitor and pilot Forgeloop through the loop
 - let this plugin target `http://127.0.0.1:4010` by default
 - if you need remote access, prefer Tailscale to reach that host rather than exposing the service publicly
 
+## Local dev install
+
+OpenClaw’s native plugin docs expect plugins to ship `openclaw.plugin.json` with inline `configSchema`, and support local-path installs for development. This plugin already follows that shape, so the local dev flow can stay simple:
+
+```bash
+openclaw plugins install /absolute/path/to/Forgeloop-kit/.openclaw/extensions/forgeloop
+openclaw plugins inspect forgeloop
+```
+
+Then point `plugins.entries.forgeloop.config.baseUrl` at your local Forgeloop service if you are not using the default `http://127.0.0.1:4010`.
+
 ## Tools
 
 - `forgeloop_overview`
