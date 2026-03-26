@@ -20,6 +20,8 @@ Pin to `v1.0.0` when you want the proven runtime without evaluating new surfaces
 
 `main` is **not** the stable track yet. It is also **not** beta yet.
 
+For the exact ship/no-ship checklist, see `v2-release-checklist.md`.
+
 ## What beta will mean
 
 The v2 track earns **beta** when the repo can say all of this truthfully:
@@ -36,7 +38,7 @@ Beta is therefore a **proof and trust milestone**, not just a feature-count mile
 
 Making v2 the **default** public runtime is a stricter call than calling it beta.
 
-That cutover should happen only when:
+That cutover should happen only when the stricter checklist in `v2-release-checklist.md` is met, including:
 
 - the beta gate is already met
 - the managed daemon path has earned trust as the recommended path

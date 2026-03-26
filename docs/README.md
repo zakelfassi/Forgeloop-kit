@@ -8,11 +8,12 @@ Start here to understand what Forgeloop actually guarantees. Read in this order:
 4. `workflows.md` — the workflow-pack lane: layout, artifacts, runner behavior
 5. `sandboxing.md` — running full-auto safely in disposable VMs/containers
 6. `v2-roadmap.md` — what's shipping on v2 alpha, what's deferred, what gates beta
-7. `elixir-parity-matrix.md` — bash-to-Elixir parity tracking
-8. `../evals/README.md` — the public proof suite
-9. `kickoff.md` — fresh-repo intake via `PROMPT_intake.md`
-10. `harness-readiness.md` — repo readiness checklist for agent work
-11. `../design.md` — v2 alpha visual direction for the landing page and HUD
+7. `v2-release-checklist.md` — current ship/no-ship call, release scoreboard, and the exact beta/prod-default checklist
+8. `elixir-parity-matrix.md` — bash-to-Elixir parity tracking
+9. `../evals/README.md` — the public proof suite
+10. `kickoff.md` — fresh-repo intake via `PROMPT_intake.md`
+11. `harness-readiness.md` — repo readiness checklist for agent work
+12. `../design.md` — v2 alpha visual direction for the landing page and HUD
 
 Useful commands:
 
@@ -26,7 +27,7 @@ Useful commands:
 
 Fresh repos should run `kickoff` before `plan` / `build`. Template-only installs will stop early with guidance.
 
-Choosing between v1 and v2? Read `release-tracks.md`. Already on v1 and evaluating v2? Read `v1-to-v2-upgrade.md`.
+Choosing between v1 and v2? Read `release-tracks.md`. Already on v1 and evaluating v2? Read `v1-to-v2-upgrade.md`. Trying to answer “are we ready to call beta or prod-default?” Read `v2-release-checklist.md`.
 
 GCP provisioning scripts live in `ops/gcp/`.
 

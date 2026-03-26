@@ -17,6 +17,8 @@ On `main` / the v2 alpha track, you also get the live HUD, real-time event strea
 
 Today, that means **serious alpha** — strong enough to evaluate with real proof, not yet the default production runtime.
 
+For the exact ship/no-ship bar, read `docs/v2-release-checklist.md`.
+
 ## What the product looks like
 
 These are real screenshots from the shipped HUD, rendered against a seeded demo repo for **Signalboard** and regenerated with `./bin/capture-product-screenshots.sh`.
@@ -202,7 +204,7 @@ Beta is still future work after parity and release hardening; see `docs/release-
 The practical release bar is now explicit:
 
 - **Alpha now:** shell/eval/Elixir/self-host proof plus reproducible product screenshots
-- **Beta later:** stronger babysitter/plugin/release-proof confidence across all public surfaces
+- **Beta later:** one reviewed pass of the full checklist in `docs/v2-release-checklist.md`
 - **Prod-default later still:** the managed path must earn trust without weakening the bash fallback story
 
 Typical stable → main evaluation path inside an installed repo:

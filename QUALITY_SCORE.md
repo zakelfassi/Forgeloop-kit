@@ -10,6 +10,24 @@
 - **`main` / v2** is now a **serious alpha**: the shell gate, eval harness, Elixir suite, self-host proof, public entrypoint smokes, and reproducible product screenshots are all part of the release story.
 - It is **not beta yet** and **not ready to become the default runtime** yet.
 
+## Release Scoreboard
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Shell gate | ✅ | `bash tests/run.sh` |
+| Scenario harness | ✅ | `bash evals/run.sh` |
+| Elixir suite | ✅ | `cd elixir && mix test` |
+| Self-host proof | ✅ | `./forgeloop.sh self-host-proof` |
+| Screenshot regeneration | ✅ | `./bin/capture-product-screenshots.sh` |
+| Public entrypoint smokes | ✅ | daemon, service, and workflow layout smokes are landed |
+| OpenClaw seam | ✅ | contract test + real loopback smoke are landed |
+| Babysitter recovery proof | ✅ | stale cleanup / daemon recovery proof is landed |
+| Docs alignment | ✅ | release/readiness/parity docs now share one release story |
+| Managed daemon trust as default | 🟡 | still an intentional release decision, not earned by momentum alone |
+| Bash fallback boringness | 🟡 | must stay explicit until default-runtime cutover is intentional |
+
+See `docs/v2-release-checklist.md` for the full ship/no-ship checklist.
+
 ## Promotion Rubric
 
 ### Alpha-ready now
@@ -25,13 +43,16 @@ Alpha is credible when all of these stay true:
 
 ### Beta gate
 
-Do **not** call v2 beta until all of these are true:
+Do **not** call v2 beta until the checklist in `docs/v2-release-checklist.md` is completed in one reviewed pass.
+
+In practice that means:
 
 - public entrypoint smokes stay green across repo-root and vendored layouts for daemon, service, and workflow paths
 - the alpha proof cadence stays green enough that release-review evidence is fresh, not one-off theater
 - disposable-worktree cleanup and babysitter recovery/watchdog checks are explicit and green
 - the OpenClaw/plugin seam has bounded smoke coverage, not just prose confidence
-- `docs/harness-readiness.md`, `docs/release-tracks.md`, `docs/v2-roadmap.md`, and `docs/elixir-parity-matrix.md` all reflect the same truth about what is landed and what is still deferred
+- the release/readiness/parity docs all reflect the same truth about what is landed and what is still deferred
+- a human release review explicitly decides “yes, this is beta”
 
 ### Prod-default gate
 

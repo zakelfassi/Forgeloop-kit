@@ -62,6 +62,8 @@ With parser/read-path groundwork and repo-safe mutation helpers now in place, El
 
 That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree, expose the current state over a local service without introducing a second source of truth, and route Elixir-daemon checklist work through the same babysitter/worktree substrate. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
 
+For the exact ship/no-ship checklist, see `v2-release-checklist.md`.
+
 ## Promotion Bar
 
 ### Alpha position now
@@ -74,7 +76,9 @@ Today’s claim should stay narrow and truthful:
 
 ### Beta promotion bar
 
-Do **not** promote v2 to `v2.0.0-beta.1` until all of these are true:
+Do **not** promote v2 to `v2.0.0-beta.1` until the checklist in `v2-release-checklist.md` is completed in one reviewed pass.
+
+That includes:
 
 1. daemon, service, and workflow public entrypoints are covered across repo-root and vendored layouts
 2. shell, eval, Elixir, self-host proof, and screenshot regeneration all belong to a repeatable release-proof cadence

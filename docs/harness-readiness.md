@@ -33,6 +33,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - **Harness-ready is not the same as prod-default.**
 - Today, the repo is strong enough to support a real **v2 alpha evaluation loop**: shell gate, evals, Elixir tests, self-host proof, and screenshot regeneration are all codified.
 - The harness is **not** yet saying “make v2 the default runtime.” It is saying “the alpha stack now has a repeatable proof path.”
+- For the actual release call and checklist, use `v2-release-checklist.md`.
 
 ## Beta / Prod-Default Gaps To Close
 

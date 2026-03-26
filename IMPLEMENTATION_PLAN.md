@@ -133,6 +133,19 @@ Format:
     - Director Mode now exposes a broadcast-frame toggle that trims the scene for presentation while staying on the same loopback truth.
     - The proof shelf now includes a copyable episode card that summarizes what shipped, what is stuck, and what to watch next using only current snapshot/stream data.
 
+- [x] Add a final v2 release checklist and scoreboard
+  - Acceptance:
+    - The repo has one explicit page that answers whether v2 is still alpha, ready for beta, or ready to become the default runtime.
+    - README, docs index, release-track docs, roadmap docs, quality score, and the landing page all point at the same release checklist instead of forcing the reader to synthesize it manually.
+    - The checklist stays tied to real proof surfaces and explicit human release review, not feature momentum.
+  - Non-goals:
+    - no runtime behavior change
+    - no premature beta or prod-default claim
+    - no new proof surface beyond the already landed gates
+  - Shipped behavior:
+    - `docs/v2-release-checklist.md` now serves as the single ship/no-ship checklist and release scoreboard for the v2 track.
+    - `QUALITY_SCORE.md`, `docs/README.md`, `docs/release-tracks.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, `README.md`, `docs/harness-readiness.md`, and `index.html` now all point at the same release checklist and use the same serious-alpha posture.
+
 - [x] Add OpenClaw loopback integration smoke on top of the real service
   - Acceptance:
     - The real OpenClaw plugin can talk to the real loopback service over HTTP, not just mocked fetches.
