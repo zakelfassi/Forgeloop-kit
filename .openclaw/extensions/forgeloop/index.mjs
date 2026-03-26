@@ -166,6 +166,7 @@ export default {
     api.registerTool(buildOverviewTool(api), { optional: true });
     api.registerTool(buildControlTool(api), { optional: true });
     api.registerTool(buildQuestionTool(api), { optional: true });
+    api.registerTool(buildSlotsTool(api), { optional: true });
     api.registerTool(buildOrchestrationTool(api), { optional: true });
   },
 };
@@ -216,6 +217,7 @@ function buildOverviewTool(api) {
       const backlogLabel = backlog.source?.label || "IMPLEMENTATION_PLAN.md";
       const coordination = data.coordination || null;
       const coordinationSummary = coordination?.summary?.playbooks || null;
+      const slots = data.slots || { items: [], counts: {}, limits: {} };
 
       const text = [
         `Forgeloop overview (${serviceBaseUrl(api)})`,
@@ -235,6 +237,7 @@ function buildOverviewTool(api) {
           ? `Active run: ${ownership.active_run.state} ${ownership.active_run.mode || ownership.active_run.action || "run"} via ${ownership.active_run.runtime_surface || "unknown"}`
           : null,
         `Babysitter: ${babysitter["running?"] ? `running ${babysitter.mode || "unknown"} as ${babysitter.runtime_surface || "unknown"}` : "idle"}`,
+        `Slots: ${slots.counts?.total || 0} total (${slots.counts?.active || 0} active, blocked=${slots.counts?.blocked || 0}, read_limit=${slots.limits?.read || 0})`,
         `Workflows: ${workflows.length} discovered (${activeWorkflowCount} active, failed=${workflowOutcomeCounts.failed || 0}, escalated=${workflowOutcomeCounts.escalated || 0}, start_failed=${workflowOutcomeCounts.start_failed || 0})`,
         coordination
           ? `Coordination: ${coordination.status || "idle"} (${coordinationSummary?.total || 0} playbooks, ${coordination.summary?.recommendations || 0} recommendations)`
@@ -288,6 +291,98 @@ function buildControlTool(api) {
       ].join("\n");
 
       return textResult(text);
+    },
+  };
+}
+
+function buildSlotsTool(api) {
+  return {
+    name: "forgeloop_slots",
+    description: "List, inspect, start, or stop parallel Forgeloop slots through the loopback service.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["action"],
+      properties: {
+        action: { type: "string", enum: ["list", "detail", "start", "stop"] },
+        slotId: { type: "string" },
+        lane: { type: "string", enum: ["checklist", "workflow"] },
+        slotAction: { type: "string", enum: ["plan", "preflight"] },
+        workflowName: { type: "string" },
+        branch: { type: "string" },
+        stopReason: { type: "string", enum: ["pause", "kill"], default: "pause" }
+      }
+    },
+    async execute(_id, params = {}) {
+      const action = params.action;
+      const slotsPaths = await resolveSlotsPaths(api);
+
+      if (action === "list") {
+        const payload = await requestJson(api, slotsPaths.list, { method: "GET" });
+        const data = payload?.data || {};
+        const text = [
+          `Forgeloop slots (${serviceBaseUrl(api)})`,
+          `Slots: ${data.counts?.total || 0} total / ${data.counts?.active || 0} active / ${data.counts?.blocked || 0} blocked`,
+          ...((Array.isArray(data.items) ? data.items : []).map((slot) => `${slot.slot_id}: ${slot.lane || "slot"} ${slot.action || "run"} → ${slot.status || "unknown"} via ${slot.runtime_surface || "unknown"}`)),
+          "",
+          JSON.stringify(data, null, 2)
+        ].join("\n");
+        return textResult(text);
+      }
+
+      if (action === "detail") {
+        if (!params.slotId) throw new Error("slotId is required for slot detail");
+        const payload = await requestJson(api, fillPathTemplate(slotsPaths.fetch, { slot_id: encodeURIComponent(params.slotId) }) || `/api/slots/${encodeURIComponent(params.slotId)}`, { method: "GET" });
+        return textResult([
+          `Forgeloop slot detail: ${params.slotId}`,
+          `Service: ${serviceBaseUrl(api)}`,
+          "",
+          JSON.stringify(payload?.data ?? payload, null, 2)
+        ].join("\n"));
+      }
+
+      if (action === "start") {
+        assertMutationsAllowed(api, "slots:start");
+        const lane = params.lane;
+        const slotAction = params.slotAction;
+        if (!lane || !slotAction) throw new Error("lane and slotAction are required to start a slot");
+        if (lane === "workflow" && !params.workflowName) throw new Error("workflowName is required for workflow slots");
+        const payload = await requestJson(api, slotsPaths.list, {
+          method: "POST",
+          body: compact({
+            lane,
+            action: slotAction,
+            workflow_name: params.workflowName,
+            branch: params.branch,
+            surface: "openclaw",
+            ephemeral: true
+          })
+        });
+        return textResult([
+          `Forgeloop slot started: ${payload?.data?.slot_id || "slot"}`,
+          `Service: ${serviceBaseUrl(api)}`,
+          "",
+          JSON.stringify(payload?.data ?? payload, null, 2)
+        ].join("\n"));
+      }
+
+      if (action === "stop") {
+        assertMutationsAllowed(api, "slots:stop");
+        if (!params.slotId) throw new Error("slotId is required to stop a slot");
+        const stopPath = fillPathTemplate(slotsPaths.stop, { slot_id: encodeURIComponent(params.slotId) }) || `/api/slots/${encodeURIComponent(params.slotId)}/stop`;
+        const payload = await requestJson(api, stopPath, {
+          method: "POST",
+          body: { reason: params.stopReason || "pause" }
+        });
+        return textResult([
+          `Forgeloop slot stop requested: ${params.slotId}`,
+          `Service: ${serviceBaseUrl(api)}`,
+          "",
+          JSON.stringify(payload?.data ?? payload, null, 2)
+        ].join("\n"));
+      }
+
+      throw new Error(`Unsupported slot action: ${action}`);
     },
   };
 }
@@ -1341,6 +1436,15 @@ function rememberEnvelopeApi(api, payload) {
   if (payload?.api && typeof payload.api === "object") {
     serviceApiMetadataCache.set(serviceBaseUrl(api), payload.api);
   }
+}
+
+async function resolveSlotsPaths(api) {
+  const endpoint = await resolveEndpoint(api, "slots");
+  return {
+    list: endpoint?.path || "/api/slots",
+    fetch: endpoint?.fetch_path_template || "/api/slots/{slot_id}",
+    stop: endpoint?.stop_path_template || "/api/slots/{slot_id}/stop"
+  };
 }
 
 async function resolveControlPaths(api) {

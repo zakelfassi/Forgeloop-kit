@@ -36,3 +36,4 @@ These are now present in Elixir v2, but they are still experimental extensions r
 - Elixir-daemon checklist `plan` / `build` actions now reuse that same babysitter + disposable-worktree substrate, and the public `./forgeloop.sh daemon` command now prefers that managed path while keeping the legacy bash daemon as an explicit fallback
 - the experimental Elixir daemon can now honor one explicit `[WORKFLOW]` request against a configured workflow target without bypassing that same managed path
 - the current OpenClaw seam is loopback-only and preserves the same control surfaces instead of bypassing them
+- phase-A multi-slot read coordination now exists as an experimental Elixir-only extension: checklist `plan` and workflow `preflight` can run in parallel slot-scoped disposable worktrees while repo-root runtime-state summarizes the coordinator with `mode: "slots"` / `transition: "coordinating"`

@@ -17,7 +17,8 @@ HOST="127.0.0.1"
 PORT="$((4400 + RANDOM % 400))"
 BASE_URL="http://${HOST}:${PORT}"
 TMP_REPO="$(mktemp -d)"
-SERVICE_LOG="$TMP_REPO/service.log"
+TMP_SUPPORT="$(mktemp -d)"
+SERVICE_LOG="$TMP_SUPPORT/service.log"
 SERVER_PID=""
 
 cleanup() {
@@ -25,7 +26,7 @@ cleanup() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -rf "$TMP_REPO"
+  rm -rf "$TMP_REPO" "$TMP_SUPPORT"
 }
 trap cleanup EXIT
 
@@ -54,7 +55,13 @@ wait_for_http() {
 }
 
 mkdir -p "$TMP_REPO/bin" "$TMP_REPO/lib" "$TMP_REPO/elixir/priv/static"
-cp "$ROOT_DIR/bin/loop.sh" "$TMP_REPO/bin/loop.sh"
+cat >"$TMP_REPO/bin/loop.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+trap 'exit 0' TERM INT
+sleep 30
+EOF
+chmod +x "$TMP_REPO/bin/loop.sh"
 cp -R "$ROOT_DIR/lib/." "$TMP_REPO/lib/"
 cp "$ROOT_DIR/config.sh" "$TMP_REPO/config.sh"
 cp -R "$ROOT_DIR/elixir/priv/static/ui" "$TMP_REPO/elixir/priv/static/ui"
@@ -91,13 +98,17 @@ cat >"$TMP_REPO/.forgeloop/runtime-state.json" <<'EOF'
   "branch": "main"
 }
 EOF
+cat >"$TMP_REPO/.gitignore" <<'EOF'
+.forgeloop/v2/
+EOF
 
 (
   cd "$TMP_REPO"
   git init >/dev/null
   git config user.email "tests@example.com"
   git config user.name "OpenClaw Smoke"
-  git add IMPLEMENTATION_PLAN.md REQUESTS.md QUESTIONS.md ESCALATIONS.md .forgeloop/runtime-state.json
+  git config commit.gpgsign false
+  git add .
   git commit -m "seed openclaw smoke fixture" >/dev/null
   git branch -M main >/dev/null 2>&1 || true
 )
@@ -165,6 +176,40 @@ assert.match(overviewBefore.content[0].text, /Forgeloop overview/);
 assert.match(overviewBefore.content[0].text, /Runtime: paused \/ build via loop on main/);
 assert.match(overviewBefore.content[0].text, /Questions: 1 total, 1 awaiting response/);
 assert.match(overviewBefore.content[0].text, /Flags: pause=yes/);
+
+const slotsBefore = await tools.forgeloop_slots.execute('slots-before', { action: 'list' });
+assert.match(slotsBefore.content[0].text, /Forgeloop slots/);
+assert.match(slotsBefore.content[0].text, /Slots: 0 total \/ 0 active \/ 0 blocked/);
+
+const slotStart = await tools.forgeloop_slots.execute('slot-start', {
+  action: 'start',
+  lane: 'checklist',
+  slotAction: 'plan'
+});
+const slotStartPayload = parsePayload(slotStart);
+const slotId = slotStartPayload.slot_id;
+assert.ok(typeof slotId === 'string' && slotId.length > 0);
+assert.equal(slotStartPayload.lane, 'checklist');
+assert.equal(slotStartPayload.action, 'plan');
+
+const slotsAfterStart = await tools.forgeloop_slots.execute('slots-after-start', { action: 'list' });
+assert.match(slotsAfterStart.content[0].text, new RegExp(`Slots: [1-9][0-9]* total \/ [1-9][0-9]* active \/ 0 blocked`));
+assert.match(slotsAfterStart.content[0].text, new RegExp(`${slotId}: checklist plan → (starting|running|stopping|completed|blocked) via openclaw`));
+
+const slotDetail = await tools.forgeloop_slots.execute('slot-detail', { action: 'detail', slotId });
+const slotDetailPayload = parsePayload(slotDetail);
+assert.equal(slotDetailPayload.slot_id, slotId);
+assert.equal(slotDetailPayload.write_class, 'read');
+assert.ok(typeof slotDetailPayload.coordination_paths?.requests === 'string' && slotDetailPayload.coordination_paths.requests.length > 0);
+
+const slotStop = await tools.forgeloop_slots.execute('slot-stop', {
+  action: 'stop',
+  slotId,
+  stopReason: 'kill'
+});
+const slotStopPayload = parsePayload(slotStop);
+assert.equal(slotStopPayload.slot_id, slotId);
+assert.ok(['stopping', 'completed', 'blocked'].includes(slotStopPayload.status));
 
 const answer = 'Use the Signalboard backlog first.';
 await tools.forgeloop_question.execute('answer', {

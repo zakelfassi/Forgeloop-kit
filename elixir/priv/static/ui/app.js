@@ -42,7 +42,8 @@ const refs = {
   workflowsBody: document.getElementById("workflows-body"),
   questionsBody: document.getElementById("questions-body"),
   escalationsBody: document.getElementById("escalations-body"),
-  eventsBody: document.getElementById("events-body")
+  eventsBody: document.getElementById("events-body"),
+  slotsBody: document.getElementById("slots-body")
 };
 
 boot();
@@ -79,6 +80,7 @@ function bindEvents() {
   refs.controlsBody.addEventListener("click", handleControlClick);
   refs.directorShowcase?.addEventListener("click", handleDirectorShowcaseClick);
   refs.workflowsBody.addEventListener("click", handleControlClick);
+  refs.slotsBody?.addEventListener("click", handleControlClick);
   refs.questionsBody.addEventListener("input", handleQuestionInput);
   refs.questionsBody.addEventListener("click", handleQuestionClick);
 }
@@ -276,6 +278,15 @@ function streamPath(limit) {
   return `${path}?limit=${normalizeLimit(limit)}`;
 }
 
+function slotsPath() {
+  return endpointPath("slots") || "/api/slots";
+}
+
+function slotStopPath(slotId) {
+  const endpoint = endpointDescriptor("slots") || {};
+  return fillPathTemplate(endpoint.stop_path_template, { slot_id: encodeURIComponent(slotId) }) || `/api/slots/${encodeURIComponent(slotId)}/stop`;
+}
+
 function controlPath(action) {
   const endpoint = endpointDescriptor("control") || {};
 
@@ -416,6 +427,7 @@ function applySnapshot(snapshot) {
   renderCoordination(normalizedSnapshot.coordination);
   renderTracker(normalizedSnapshot.tracker);
   renderWorkflows(normalizedSnapshot.workflows || {}, ownership);
+  renderSlots(normalizedSnapshot.slots || {}, ownership);
   renderQuestions(normalizedSnapshot.questions || []);
   renderEscalations(normalizedSnapshot.escalations || []);
   renderEvents(normalizedSnapshot.events || []);
@@ -439,6 +451,10 @@ function renderControls(snapshot) {
   const running = Boolean(babysitter["running?"]);
   const runtimeSurface = babysitter.runtime_surface || activeRun.runtime_surface || "—";
   const manualStartBlocked = ownership.startAllowed === false;
+  const slots = snapshot.slots || { counts: {}, limits: {} };
+  const activeSlots = Number(slots.counts?.active || 0);
+  const readSlotLimit = Number(slots.limits?.read || 0);
+  const slotStartBlocked = manualStartBlocked || (readSlotLimit > 0 && activeSlots >= readSlotLimit);
 
   refs.controlsBody.className = "stack";
   refs.controlsBody.innerHTML = `
@@ -475,6 +491,14 @@ function renderControls(snapshot) {
         </div>
         <p class="subtle-copy">Manual runs use <code>surface: "ui"</code> and still flow through the babysitter, worktree, and existing escalation chain.</p>
       </div>
+      <div class="control-card">
+        <h3>Parallel read slots</h3>
+        <div class="control-buttons">
+          ${controlButton("slot-plan", "Queue plan slot", { disabled: slotStartBlocked || isPending("slot-plan") })}
+        </div>
+        <p class="subtle-copy">Slots stay ephemeral, use separate disposable worktrees, and do not mutate the canonical repo-root coordination files directly.</p>
+        <p class="subtle-copy">Active read slots: <strong>${activeSlots}</strong> / <strong>${readSlotLimit || "—"}</strong>.</p>
+      </div>
     </div>
   `;
 }
@@ -505,7 +529,7 @@ function renderDirectorMode(snapshot) {
   const stakes = directorStakes({ ownership, topPlaybook, openQuestion, latestEscalation });
   const nextMove = directorNextMove({ ownership, flags, topPlaybook, activeWorkflow, openQuestion, nextBacklog });
   const interventionPrompt = directorInterventionPrompt({ ownership, flags, topPlaybook, openQuestion, nextBacklog, latestEscalation });
-  const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations });
+  const queueCards = directorQueueCards({ backlogItems, activeWorkflow, questions, escalations, slots: snapshot.slots || {} });
   const feedCards = directorFeedCards({ timeline, events });
   const previewCards = directorPreviewCards({
     runtime,
@@ -1199,11 +1223,69 @@ function renderWorkflows(workflowOverview, ownershipOverride) {
         ${historyList}
         <div class="control-buttons">
           ${controlButton("workflow-preflight", "Preflight", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:preflight`), workflowName })}
+          ${controlButton("workflow-slot-preflight", "Preflight slot", { disabled: workflowStartBlocked || isPending(`workflow-slot:${workflowName}:preflight`), workflowName })}
           ${controlButton("workflow-run", "Run", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:run`), workflowName })}
         </div>
       </article>
     `;
   }).join("")}`;
+}
+
+function renderSlots(slots, ownershipOverride) {
+  if (!refs.slotsBody) return;
+
+  const collection = slots || {};
+  const items = Array.isArray(collection.items) ? collection.items : [];
+  const counts = collection.counts || {};
+  const limits = collection.limits || {};
+  const ownership = ownershipOverride || (state.snapshot && state.snapshot.ownership) || normalizeOwnership(state.snapshot || {});
+
+  if (!items.length) {
+    refs.slotsBody.className = "stack empty";
+    refs.slotsBody.innerHTML = `<p>No active or historical slot runs yet.</p><p class="subtle-copy">Launch a plan slot from the action deck or a workflow preflight slot from a workflow card.</p>`;
+    return;
+  }
+
+  refs.slotsBody.className = "stack";
+  refs.slotsBody.innerHTML = `
+    <article class="list-card">
+      <div class="list-meta">
+        ${badge(`${counts.active || 0} active`, counts.active ? "warn" : "good")}
+        ${badge(`${counts.blocked || 0} blocked`, counts.blocked ? "bad" : "info")}
+        ${badge(`read limit ${limits.read || "—"}`, "info")}
+        ${badge(`owner ${ownership.runtimeOwner?.owner || "none"}`, ownership.runtimeOwner?.owner === "slots" ? "purple" : "info")}
+      </div>
+      <h3>Slot coordinator snapshot</h3>
+      <p>One coordinator owns the repo-level claim while each slot runs in its own disposable worktree with slot-local runtime and coordination files.</p>
+    </article>
+    ${items.map((slot) => {
+      const active = ["starting", "running", "stopping"].includes(slot.status);
+      return `
+        <article class="list-card slot-card">
+          <div class="list-meta">
+            ${badge(slot.status || "unknown", badgeClass(slot.status || "unknown"))}
+            ${badge(slot.lane || "slot", slot.lane === "workflow" ? "purple" : "info")}
+            ${slot.action ? badge(slot.action, "good") : ""}
+            ${slot.runtime_surface ? badge(slot.runtime_surface, "info") : ""}
+          </div>
+          <h3>${escapeHtml(slot.slot_id || "slot")}</h3>
+          <p>${escapeHtml(slot.workflow_name ? `${slot.workflow_name} (${slot.action || "preflight"})` : `${slot.lane || "slot"} ${slot.action || "run"}`)}</p>
+          <div class="metric-grid compact-grid">
+            ${metric("Write class", slot.write_class || "read")}
+            ${metric("Branch", slot.branch || "—")}
+            ${metric("Started", slot.started_at || "—")}
+            ${metric("Updated", slot.updated_at || "—")}
+          </div>
+          <p class="subtle-copy">Worktree: <code>${escapeHtml(slot.worktree_path || "preparing…")}</code></p>
+          <p class="subtle-copy">Slot root: <code>${escapeHtml(slot.slot_paths?.root || "—")}</code></p>
+          ${slot.blocked_reason ? `<p class="subtle-copy">Blocked: ${escapeHtml(slot.blocked_reason)}</p>` : ""}
+          <div class="control-buttons">
+            ${active ? controlButton("slot-stop", "Stop slot", { slotId: slot.slot_id, disabled: isPending(`slot-stop:${slot.slot_id}`) }) : ""}
+          </div>
+        </article>
+      `;
+    }).join("")}
+  `;
 }
 
 function renderQuestions(questions) {
@@ -1511,7 +1593,9 @@ function directorInterventionPrompt(context) {
 }
 
 function directorQueueCards(context) {
-  const { backlogItems, activeWorkflow, questions, escalations } = context;
+  const { backlogItems, activeWorkflow, questions, escalations, slots } = context;
+  const slotItems = Array.isArray(slots?.items) ? slots.items : [];
+  const activeSlotCount = Number(slots?.counts?.active || 0);
   const cards = [];
 
   cards.push(`
@@ -1521,6 +1605,7 @@ function directorQueueCards(context) {
         ${badge(`${backlogItems.length} backlog`, backlogItems.length ? "good" : "info")}
         ${badge(`${questions.length} questions`, questions.length ? "warn" : "info")}
         ${badge(`${escalations.length} escalations`, escalations.length ? "bad" : "info")}
+        ${badge(`${activeSlotCount} active slots`, activeSlotCount ? "purple" : "info")}
       </div>
       <h3>What is stacking up behind the current objective</h3>
       <p>${escapeHtml(
@@ -1547,6 +1632,19 @@ function directorQueueCards(context) {
         <div class="stack">
           ${backlogPreview.map((item) => `<p>${escapeHtml(item.text || item.raw_line || "Untitled backlog item")}</p>`).join("")}
         </div>
+      </article>
+    `);
+  }
+
+  if (slotItems.length) {
+    cards.push(`
+      <article class="list-card director-queue-item">
+        <div class="list-meta">
+          ${badge("parallel slots", "purple")}
+          ${badge(`${activeSlotCount} active`, activeSlotCount ? "warn" : "info")}
+        </div>
+        <h3>Slot queue</h3>
+        <p>${escapeHtml(slotItems.slice(0, 3).map((slot) => `${slot.slot_id} → ${slot.lane} ${slot.action} (${slot.status})`).join(" • ") || "No slot activity is currently visible.")}</p>
       </article>
     `);
   }
@@ -2167,6 +2265,16 @@ async function handleControlClick(event) {
     return;
   }
 
+  if (action === "slot-plan") {
+    await runAction("slot-plan", async () => {
+      await postJson(slotsPath(), { lane: "checklist", action: "plan", surface: "ui", ephemeral: true });
+      await refreshOverview("Plan slot launched via UI surface.");
+    }, {
+      conflictText: "A slot or managed run currently owns the repo-level coordinator claim. Let it settle before queueing another slot."
+    });
+    return;
+  }
+
   if (action === "run-plan" || action === "run-build") {
     const mode = action === "run-plan" ? "plan" : "build";
 
@@ -2189,6 +2297,30 @@ async function handleControlClick(event) {
       await refreshOverview(`${workflowName} ${workflowAction} launched via UI surface.`);
     }, {
       conflictText: "A babysitter run is already active. Wait for it to finish before launching another workflow action."
+    });
+    return;
+  }
+
+  if (action === "workflow-slot-preflight") {
+    const workflowName = button.dataset.workflowName;
+    const pendingKey = `workflow-slot:${workflowName}:preflight`;
+
+    await runAction(pendingKey, async () => {
+      await postJson(slotsPath(), { lane: "workflow", action: "preflight", workflow_name: workflowName, surface: "ui", ephemeral: true });
+      await refreshOverview(`${workflowName} preflight slot launched via UI surface.`);
+    }, {
+      conflictText: "The slot coordinator cannot admit another preflight slot right now. Let the current slots settle or clear the start gate first."
+    });
+    return;
+  }
+
+  if (action === "slot-stop") {
+    const slotId = button.dataset.slotId;
+    const pendingKey = `slot-stop:${slotId}`;
+
+    await runAction(pendingKey, async () => {
+      await postJson(slotStopPath(slotId), { reason: "kill" });
+      await refreshOverview(`${slotId} stop requested.`);
     });
   }
 }
@@ -2331,6 +2463,7 @@ async function runAction(key, fn, opts) {
     if (state.snapshot) {
       renderControls(state.snapshot);
       renderWorkflows(state.snapshot.workflows || {});
+      renderSlots(state.snapshot.slots || {});
     }
   }
 }
@@ -2428,19 +2561,28 @@ function controlButton(action, label, options) {
   if (action === "pause") classes.push("danger");
   if (action === "clear-pause") classes.push("secondary");
   if (action === "replan") classes.push("secondary");
-  if (["run-plan", "run-build", "workflow-preflight", "workflow-run"].includes(action)) classes.push("primary");
+  if (["run-plan", "run-build", "workflow-preflight", "workflow-slot-preflight", "workflow-run", "slot-plan"].includes(action)) classes.push("primary");
 
   const workflowNameAttr = opts.workflowName ? ` data-workflow-name="${escapeHtml(opts.workflowName)}"` : "";
+  const slotIdAttr = opts.slotId ? ` data-slot-id="${escapeHtml(opts.slotId)}"` : "";
   const idAttr = controlButtonId(action, opts);
-  return `<button class="${classes.join(" ")}"${idAttr} data-action="${escapeHtml(action)}"${workflowNameAttr} ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  return `<button class="${classes.join(" ")}"${idAttr} data-action="${escapeHtml(action)}"${workflowNameAttr}${slotIdAttr} ${opts.disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
 }
 
 function controlButtonId(action, options) {
   const opts = options || {};
 
   if (opts.workflowName) {
-    const workflowAction = action === "workflow-preflight" ? "preflight" : action === "workflow-run" ? "run" : action;
+    const workflowAction = action === "workflow-preflight" || action === "workflow-slot-preflight"
+      ? "preflight"
+      : action === "workflow-run"
+        ? "run"
+        : action;
     return ` id="workflow-${sanitizeButtonIdSegment(opts.workflowName)}-${sanitizeButtonIdSegment(workflowAction)}"`;
+  }
+
+  if (opts.slotId) {
+    return ` id="slot-${sanitizeButtonIdSegment(opts.slotId)}-${sanitizeButtonIdSegment(action)}"`;
   }
 
   return ` id="control-${sanitizeButtonIdSegment(action)}"`;

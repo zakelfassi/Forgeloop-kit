@@ -34,7 +34,7 @@ const basePluginConfig = {
 const { registrations, tools } = registerPlugin();
 assert.deepEqual(
   registrations.map(({ tool }) => tool.name).sort(),
-  ["forgeloop_control", "forgeloop_orchestrate", "forgeloop_overview", "forgeloop_question"]
+  ["forgeloop_control", "forgeloop_orchestrate", "forgeloop_overview", "forgeloop_question", "forgeloop_slots"]
 );
 assert.ok(registrations.every(({ opts }) => opts?.optional === true));
 
@@ -92,9 +92,38 @@ globalThis.fetch = async (url, options = {}) => {
               history: { latest: { action: "run", outcome: "failed", finished_at: "2026-03-21T00:00:02Z" } }
             }
           ]
+        },
+        slots: {
+          items: [
+            {
+              slot_id: "slot-1",
+              lane: "checklist",
+              action: "plan",
+              status: "running",
+              runtime_surface: "openclaw",
+              slot_paths: { root: "/tmp/slot-1" }
+            }
+          ],
+          counts: { total: 1, active: 1, blocked: 0 },
+          limits: { read: 3, write: 1 }
         }
       })
     });
+  }
+
+  if (parsed.pathname === "/api/slots" && (!parsed.search || parsed.search === "")) {
+    if ((options.method || "GET") === "POST") {
+      return okJson({ data: { slot_id: "slot-2", lane: "checklist", action: "plan", status: "starting", runtime_surface: "openclaw" } });
+    }
+    return okJson({ data: { items: [{ slot_id: "slot-1", lane: "checklist", action: "plan", status: "running", runtime_surface: "openclaw" }], counts: { total: 1, active: 1, blocked: 0 }, limits: { read: 3, write: 1 } } });
+  }
+
+  if (parsed.pathname === "/api/slots/slot-1") {
+    return okJson({ data: { slot_id: "slot-1", lane: "checklist", action: "plan", status: "running", runtime_surface: "openclaw", coordination_paths: { requests: "/tmp/slot-1/REQUESTS.md" } } });
+  }
+
+  if (parsed.pathname === "/api/slots/slot-1/stop") {
+    return okJson({ data: { slot_id: "slot-1", status: "stopping", runtime_surface: "openclaw" } });
   }
 
   if (parsed.pathname === "/api/events" && parsed.searchParams.get("limit") === "9" && !parsed.searchParams.get("after")) {
@@ -133,6 +162,7 @@ assert.match(overviewResult.content[0].text, /Tracker: 2 projected repo-local is
 assert.match(overviewResult.content[0].text, /Ownership: ready/);
 assert.match(overviewResult.content[0].text, /Start gate: allowed/);
 assert.match(overviewResult.content[0].text, /Ownership detail: No live ownership conflicts or malformed run metadata are blocking a manual start\./);
+assert.match(overviewResult.content[0].text, /Slots: 1 total \(1 active, blocked=0, read_limit=3\)/);
 assert.match(overviewResult.content[0].text, /Workflows: 1 discovered \(1 active, failed=1, escalated=0, start_failed=0\)/);
 assert.match(overviewResult.content[0].text, /Coordination: actionable \(1 playbooks, 1 recommendations\)/);
 assert.match(overviewResult.content[0].text, /Coordination brief: Actionable: Queue the next rebuild pass/);
@@ -156,6 +186,27 @@ assert.match(workflowControlResult.content[0].text, /workflow\": \"alpha\"/);
 assert.deepEqual(
   JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/workflows/alpha/preflight")).options.body),
   { surface: "openclaw" }
+);
+
+const slotListResult = await tools.forgeloop_slots.execute("slots-1", { action: "list" });
+assert.match(slotListResult.content[0].text, /Slots: 1 total \/ 1 active \/ 0 blocked/);
+assert.match(slotListResult.content[0].text, /slot-1: checklist plan → running via openclaw/);
+
+const slotDetailResult = await tools.forgeloop_slots.execute("slots-2", { action: "detail", slotId: "slot-1" });
+assert.match(slotDetailResult.content[0].text, /coordination_paths/);
+
+const slotStartResult = await tools.forgeloop_slots.execute("slots-3", { action: "start", lane: "checklist", slotAction: "plan" });
+assert.match(slotStartResult.content[0].text, /slot-2/);
+assert.deepEqual(
+  JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/slots") && (entry.options.method || "GET") === "POST").options.body),
+  { lane: "checklist", action: "plan", surface: "openclaw", ephemeral: true }
+);
+
+const slotStopResult = await tools.forgeloop_slots.execute("slots-4", { action: "stop", slotId: "slot-1", stopReason: "kill" });
+assert.match(slotStopResult.content[0].text, /slot-1/);
+assert.deepEqual(
+  JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/slots/slot-1/stop")).options.body),
+  { reason: "kill" }
 );
 
 const questionResult = await tools.forgeloop_question.execute("3", { action: "answer", questionId: "Q-1", answer: "Proceed." });
@@ -935,6 +986,7 @@ function makeOverview(overrides = {}) {
     events: overrides.events || [],
     workflows: overrides.workflows || { workflows: [] },
     coordination: overrides.coordination,
+    slots: overrides.slots || { items: [], counts: { total: 0, active: 0, blocked: 0 }, limits: { read: 0, write: 0 } },
     babysitter: { "running?": false, ...(overrides.babysitter || {}) }
   };
 }
@@ -953,7 +1005,8 @@ function makeSchema(overrides = {}) {
       provider_health: 1,
       babysitter: 1,
       runtime_owner: 1,
-      ownership: 1
+      ownership: 1,
+      slots: 1
     },
     endpoints: {
       overview: { path: "/api/overview" },
@@ -974,6 +1027,11 @@ function makeSchema(overrides = {}) {
         clear_pause_path: "/api/control/clear-pause",
         replan_path: "/api/control/replan",
         run_path: "/api/control/run"
+      },
+      slots: {
+        path: "/api/slots",
+        fetch_path_template: "/api/slots/{slot_id}",
+        stop_path_template: "/api/slots/{slot_id}/stop"
       },
       babysitter: { stop_path: "/api/babysitter/stop" },
       stream: { path: "/api/stream", snapshot_event: "snapshot", data_event: "event" }

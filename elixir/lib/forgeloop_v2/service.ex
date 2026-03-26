@@ -6,6 +6,8 @@ defmodule ForgeloopV2.ControlPlane.State do
     :driver,
     :driver_opts,
     :started_at,
+    :slot_coordinator_pid,
+    :slot_coordinator_ref,
     :babysitter_pid,
     :babysitter_ref,
     :babysitter_run_spec,
@@ -34,6 +36,7 @@ defmodule ForgeloopV2.ControlPlane do
     RunSpec,
     RuntimeLifecycle,
     RuntimeStateStore,
+    SlotCoordinator,
     ServiceOwnership,
     Tracker,
     WorkflowCatalog,
@@ -106,6 +109,12 @@ defmodule ForgeloopV2.ControlPlane do
   @spec ownership(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def ownership(server \\ __MODULE__), do: GenServer.call(server, :ownership)
 
+  @spec slots(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def slots(server \\ __MODULE__), do: GenServer.call(server, :slots)
+
+  @spec slot_fetch(GenServer.server(), String.t()) :: {:ok, map()} | :missing | {:error, term()}
+  def slot_fetch(server \\ __MODULE__, slot_id), do: GenServer.call(server, {:slot_fetch, slot_id})
+
   @spec pause(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def pause(server \\ __MODULE__), do: GenServer.call(server, :pause, :infinity)
 
@@ -145,25 +154,46 @@ defmodule ForgeloopV2.ControlPlane do
     GenServer.call(server, {:stop_run, reason}, :infinity)
   end
 
+  @spec start_slot(GenServer.server(), map() | keyword()) :: {:ok, map()} | {:error, term()}
+  def start_slot(server \\ __MODULE__, attrs) do
+    GenServer.call(server, {:start_slot, attrs}, :infinity)
+  end
+
+  @spec stop_slot(GenServer.server(), String.t(), :pause | :kill | String.t()) ::
+          {:ok, map()} | {:error, term()}
+  def stop_slot(server \\ __MODULE__, slot_id, reason \\ :pause) do
+    GenServer.call(server, {:stop_slot, slot_id, reason}, :infinity)
+  end
+
   @impl true
   def init(opts) do
     case Keyword.get(opts, :config) do
       %Config{} = config ->
-        state = %State{
-          config: config,
-          driver: Keyword.get(opts, :driver) || default_driver(config),
-          driver_opts: Keyword.get(opts, :driver_opts, []),
-          started_at: iso_now(),
-          last_action: nil,
-          last_result: nil
-        }
+        with {:ok, slot_coordinator_pid, slot_coordinator_ref} <-
+               start_slot_coordinator(config,
+                 driver: Keyword.get(opts, :driver) || default_driver(config),
+                 driver_opts: Keyword.get(opts, :driver_opts, [])
+               ) do
+          state = %State{
+            config: config,
+            driver: Keyword.get(opts, :driver) || default_driver(config),
+            driver_opts: Keyword.get(opts, :driver_opts, []),
+            started_at: iso_now(),
+            slot_coordinator_pid: slot_coordinator_pid,
+            slot_coordinator_ref: slot_coordinator_ref,
+            last_action: nil,
+            last_result: nil
+          }
 
-        Events.emit(config, :control_plane_started, %{
-          "surface" => "service",
-          "started_at" => state.started_at
-        })
+          Events.emit(config, :control_plane_started, %{
+            "surface" => "service",
+            "started_at" => state.started_at
+          })
 
-        {:ok, state}
+          {:ok, state}
+        else
+          {:error, reason} -> {:stop, reason}
+        end
 
       _ ->
         case Config.load(opts) do
@@ -174,9 +204,13 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   @impl true
-  def terminate(_reason, %State{config: config, babysitter_pid: pid}) do
+  def terminate(_reason, %State{config: config, babysitter_pid: pid, slot_coordinator_pid: slot_pid}) do
     if is_pid(pid) and Process.alive?(pid) do
       Process.exit(pid, :shutdown)
+    end
+
+    if is_pid(slot_pid) and Process.alive?(slot_pid) do
+      Process.exit(slot_pid, :shutdown)
     end
 
     Events.emit(config, :control_plane_stopped, %{
@@ -194,6 +228,7 @@ defmodule ForgeloopV2.ControlPlane do
        started_at: state.started_at,
        last_action: state.last_action,
        last_result: state.last_result,
+       slot_coordinator_started?: is_pid(state.slot_coordinator_pid),
        babysitter_mode: mode_from_run_spec(state.babysitter_run_spec),
        babysitter_branch: state.babysitter_branch,
        babysitter_runtime_surface: state.babysitter_runtime_surface
@@ -201,54 +236,61 @@ defmodule ForgeloopV2.ControlPlane do
   end
 
   def handle_call({:overview, opts}, _from, %State{} = state) do
-    reply =
-      with {:ok, runtime_state} <- read_runtime_state(state.config),
-           {:ok, runtime_owner} <- read_runtime_owner(state.config),
-           {:ok, backlog} <- read_backlog(state.config),
-           {:ok, control_flags} <- read_control_flags(state.config),
-           {:ok, questions} <- read_questions(state.config),
-           {:ok, escalations} <- read_escalations(state.config),
-           {:ok, provider_health} <- read_provider_health(state.config),
-           {:ok, workflow_overview} <- WorkflowService.overview(state.config),
-           {:ok, tracker} <- read_tracker(state.config, backlog, workflow_overview),
-           {:ok, event_result} <- read_events(state.config, opts),
-           {:ok, babysitter} <-
-             babysitter_status(state, Keyword.get(opts, :include_active_run?, true)),
-           {:ok, coordination} <-
-             evaluate_coordination(
-               %{
-                 runtime_state: runtime_state,
-                 backlog: backlog,
-                 control_flags: control_flags,
-                 questions: questions,
-                 babysitter: babysitter,
-                 events: event_result.items,
-                 events_meta: event_result.meta
-               },
-               opts
-             ) do
-        ownership = build_ownership(runtime_owner, babysitter)
+    case read_slots(state) do
+      {:ok, slots, next_state} ->
+        reply =
+          with {:ok, runtime_state} <- read_runtime_state(next_state.config),
+               {:ok, runtime_owner} <- read_runtime_owner(next_state.config),
+               {:ok, backlog} <- read_backlog(next_state.config),
+               {:ok, control_flags} <- read_control_flags(next_state.config),
+               {:ok, questions} <- read_questions(next_state.config),
+               {:ok, escalations} <- read_escalations(next_state.config),
+               {:ok, provider_health} <- read_provider_health(next_state.config),
+               {:ok, workflow_overview} <- WorkflowService.overview(next_state.config),
+               {:ok, tracker} <- read_tracker(next_state.config, backlog, workflow_overview),
+               {:ok, event_result} <- read_events(next_state.config, opts),
+               {:ok, babysitter} <-
+                 babysitter_status(next_state, Keyword.get(opts, :include_active_run?, true)),
+               {:ok, coordination} <-
+                 evaluate_coordination(
+                   %{
+                     runtime_state: runtime_state,
+                     backlog: backlog,
+                     control_flags: control_flags,
+                     questions: questions,
+                     babysitter: babysitter,
+                     events: event_result.items,
+                     events_meta: event_result.meta
+                   },
+                   opts
+                 ) do
+            ownership = build_ownership(runtime_owner, babysitter)
 
-        {:ok,
-         %{
-           runtime_state: runtime_state,
-           runtime_owner: runtime_owner_state(runtime_owner, ownership),
-           ownership: ownership,
-           backlog: backlog,
-           control_flags: control_flags,
-           tracker: tracker,
-           questions: questions,
-           escalations: escalations,
-           provider_health: provider_health,
-           events: event_result.items,
-           events_meta: event_result.meta,
-           coordination: coordination,
-           workflows: workflow_overview,
-           babysitter: babysitter
-         }}
-      end
+            {:ok,
+             %{
+               runtime_state: runtime_state,
+               runtime_owner: runtime_owner_state(runtime_owner, ownership),
+               ownership: ownership,
+               backlog: backlog,
+               control_flags: control_flags,
+               tracker: tracker,
+               questions: questions,
+               escalations: escalations,
+               provider_health: provider_health,
+               events: event_result.items,
+               events_meta: event_result.meta,
+               coordination: coordination,
+               workflows: workflow_overview,
+               babysitter: babysitter,
+               slots: slots
+             }}
+          end
 
-    {:reply, reply, state}
+        {:reply, reply, next_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call(:runtime, _from, %State{} = state) do
@@ -303,6 +345,20 @@ defmodule ForgeloopV2.ControlPlane do
       end
 
     {:reply, reply, state}
+  end
+
+  def handle_call(:slots, _from, %State{} = state) do
+    case read_slots(state) do
+      {:ok, slots, next_state} -> {:reply, {:ok, slots}, next_state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:slot_fetch, slot_id}, _from, %State{} = state) do
+    case ensure_slot_coordinator_instance(state) do
+      {:ok, next_state, pid} -> {:reply, SlotCoordinator.fetch_slot(pid, slot_id), next_state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call(:pause, _from, %State{} = state) do
@@ -393,7 +449,56 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  def handle_call({:start_slot, attrs}, _from, %State{} = state) do
+    case ensure_slot_coordinator_instance(state) do
+      {:ok, next_state, pid} ->
+        case SlotCoordinator.start_slot(pid, attrs) do
+          {:ok, payload} ->
+            {:reply, {:ok, payload},
+             %{next_state | last_action: :start_slot, last_result: :ok}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason},
+             %{next_state | last_action: :start_slot_failed, last_result: {:error, reason}}}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, reason},
+         %{state | last_action: :start_slot_failed, last_result: {:error, reason}}}
+    end
+  end
+
+  def handle_call({:stop_slot, slot_id, reason}, _from, %State{} = state) do
+    case ensure_slot_coordinator_instance(state) do
+      {:ok, next_state, pid} ->
+        case SlotCoordinator.stop_slot(pid, slot_id, reason) do
+          {:ok, payload} ->
+            {:reply, {:ok, payload},
+             %{next_state | last_action: {:stop_slot, slot_id}, last_result: :ok}}
+
+          {:error, stop_reason} ->
+            {:reply, {:error, stop_reason},
+             %{next_state | last_action: :stop_slot_failed, last_result: {:error, stop_reason}}}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, reason},
+         %{state | last_action: :stop_slot_failed, last_result: {:error, reason}}}
+    end
+  end
+
   @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{slot_coordinator_ref: ref} = state) do
+    next_state =
+      state
+      |> Map.put(:slot_coordinator_pid, nil)
+      |> Map.put(:slot_coordinator_ref, nil)
+      |> Map.put(:last_result, {:slot_coordinator_down, reason})
+      |> Map.put(:last_action, :slot_coordinator_down)
+
+    {:noreply, next_state}
+  end
+
   def handle_info({:DOWN, ref, :process, _pid, reason}, %State{babysitter_ref: ref} = state) do
     next_state =
       clear_babysitter(state)
@@ -575,6 +680,19 @@ defmodule ForgeloopV2.ControlPlane do
 
   defp read_tracker(config, backlog, workflow_overview) do
     Tracker.Service.repo_local_overview(config, backlog, workflow_overview)
+  end
+
+  defp read_slots(%State{} = state) do
+    case ensure_slot_coordinator_instance(state) do
+      {:ok, next_state, pid} ->
+        case SlotCoordinator.list_slots(pid) do
+          {:ok, slots} -> {:ok, slots, next_state}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp read_control_flags(config) do
@@ -1036,6 +1154,42 @@ defmodule ForgeloopV2.ControlPlane do
     end
   end
 
+  defp start_slot_coordinator(%Config{} = config, opts) do
+    case SlotCoordinator.start_link(
+           config: config,
+           driver: Keyword.get(opts, :driver),
+           driver_opts: Keyword.get(opts, :driver_opts, []),
+           name: nil
+         ) do
+      {:ok, pid} ->
+        Process.unlink(pid)
+        {:ok, pid, Process.monitor(pid)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp ensure_slot_coordinator_instance(%State{slot_coordinator_pid: pid} = state)
+       when is_pid(pid) do
+    if Process.alive?(pid) do
+      {:ok, state, pid}
+    else
+      ensure_slot_coordinator_instance(%{state | slot_coordinator_pid: nil, slot_coordinator_ref: nil})
+    end
+  end
+
+  defp ensure_slot_coordinator_instance(%State{} = state) do
+    with {:ok, pid, ref} <-
+           start_slot_coordinator(state.config,
+             driver: state.driver,
+             driver_opts: state.driver_opts
+           ) do
+      next_state = %{state | slot_coordinator_pid: pid, slot_coordinator_ref: ref}
+      {:ok, next_state, pid}
+    end
+  end
+
   defp runtime_owner_state(runtime_owner, ownership) do
     Map.put(runtime_owner, :start_allowed?, ownership.start_allowed?)
   end
@@ -1093,7 +1247,8 @@ defmodule ForgeloopV2.ServiceJSON do
       coordination:
         coordination(Map.get(payload, :coordination) || Map.get(payload, "coordination")),
       workflows: workflow_overview(payload.workflows),
-      babysitter: babysitter(payload.babysitter)
+      babysitter: babysitter(payload.babysitter),
+      slots: slots(Map.get(payload, :slots) || Map.get(payload, "slots"))
     }
   end
 
@@ -1380,6 +1535,16 @@ defmodule ForgeloopV2.ServiceJSON do
   end
 
   def action_result(result) when is_map(result), do: sanitize(result)
+
+  def slots(nil), do: %{items: [], counts: %{total: 0, active: 0, blocked: 0, completed: 0, failed: 0, stopped: 0}, limits: %{read: 0, write: 0}}
+
+  def slots(payload) when is_map(payload) do
+    %{
+      items: Enum.map(Map.get(payload, :items) || Map.get(payload, "items") || [], &sanitize/1),
+      counts: sanitize(Map.get(payload, :counts) || Map.get(payload, "counts") || %{}),
+      limits: sanitize(Map.get(payload, :limits) || Map.get(payload, "limits") || %{})
+    }
+  end
 
   defp workflow_entry(%WorkflowCatalogEntry{} = entry) do
     %{
@@ -1855,6 +2020,13 @@ defmodule ForgeloopV2.Service do
     end
   end
 
+  defp route(%{method: "GET", path: "/api/slots"}, _config, control_plane_pid) do
+    case ControlPlane.slots(control_plane_pid) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.slots(payload)})
+      {:error, reason} -> error_response(status_for_error(reason), reason)
+    end
+  end
+
   defp route(%{method: "GET", path: "/api/escalations"}, _config, control_plane_pid) do
     case ControlPlane.escalations(control_plane_pid) do
       {:ok, escalations} ->
@@ -1922,6 +2094,18 @@ defmodule ForgeloopV2.Service do
             error_response(status_for_error(reason), reason)
         end
 
+      ["api", "slots", slot_id] ->
+        case ControlPlane.slot_fetch(control_plane_pid, URI.decode(slot_id)) do
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          :missing ->
+            error_response(404, :not_found)
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
+        end
+
       ["api", "babysitter"] ->
         case ControlPlane.babysitter(control_plane_pid) do
           {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.babysitter(payload)})
@@ -1960,6 +2144,20 @@ defmodule ForgeloopV2.Service do
            Map.get(body, "mode"),
            branch: Map.get(body, "branch"),
            runtime_surface: Map.get(body, "surface", "ui")
+         ) do
+      {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+      {:error, reason} -> start_error_response(control_plane_pid, reason)
+    end
+  end
+
+  defp route(%{method: "POST", path: "/api/slots", json: body}, _config, control_plane_pid) do
+    case ControlPlane.start_slot(control_plane_pid,
+           lane: Map.get(body, "lane"),
+           action: Map.get(body, "action", Map.get(body, "mode")),
+           workflow_name: Map.get(body, "workflow_name", Map.get(body, "workflowName")),
+           branch: Map.get(body, "branch"),
+           runtime_surface: Map.get(body, "surface", "ui"),
+           ephemeral: Map.get(body, "ephemeral", true)
          ) do
       {:ok, payload} -> json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
       {:error, reason} -> start_error_response(control_plane_pid, reason)
@@ -2024,6 +2222,15 @@ defmodule ForgeloopV2.Service do
 
           {:error, reason} ->
             start_error_response(control_plane_pid, reason)
+        end
+
+      ["api", "slots", slot_id, "stop"] ->
+        case ControlPlane.stop_slot(control_plane_pid, URI.decode(slot_id), Map.get(body, "reason", "pause")) do
+          {:ok, payload} ->
+            json_response(200, %{ok: true, data: ServiceJSON.action_result(payload)})
+
+          {:error, reason} ->
+            error_response(status_for_error(reason), reason)
         end
 
       ["api", "questions", question_id, "answer"] ->
@@ -2231,6 +2438,8 @@ defmodule ForgeloopV2.Service do
   defp ownership_error_reason?({:active_runtime_owned_by, current}) when is_map(current), do: true
   defp ownership_error_reason?({:active_runtime_state_error, runtime_owner}) when is_map(runtime_owner), do: true
   defp ownership_error_reason?({:active_run_state_error, _reason}), do: true
+  defp ownership_error_reason?({:slot_capacity_reached, _class, _limit}), do: false
+  defp ownership_error_reason?({:slot_action_deferred, _lane, _action}), do: false
   defp ownership_error_reason?(_reason), do: false
 
   defp format_active_run_state_error(reason) when is_binary(reason), do: reason
@@ -2303,6 +2512,15 @@ defmodule ForgeloopV2.Service do
   defp error_code({:workflow_not_found, _}), do: "workflow_not_found"
   defp error_code({:invalid_runtime_surface, _}), do: "invalid_runtime_surface"
   defp error_code({:invalid_stop_reason, _}), do: "invalid_stop_reason"
+  defp error_code({:workflow_name_required, _}), do: "workflow_name_required"
+  defp error_code({:unsupported_slot_action, _, _}), do: "unsupported_slot_action"
+  defp error_code({:slot_action_deferred, _, _}), do: "slot_action_deferred"
+  defp error_code({:slot_capacity_reached, class, _limit}), do: "#{class}_slot_capacity_reached"
+  defp error_code({:slot_not_found, _}), do: "slot_not_found"
+  defp error_code(:slot_not_running), do: "slot_not_running"
+  defp error_code(:invalid_slot_lane), do: "invalid_slot_lane"
+  defp error_code(:invalid_slot_action), do: "invalid_slot_action"
+  defp error_code(:invalid_slot_request), do: "invalid_slot_request"
   defp error_code({:babysitter_unmanaged_active, _}), do: "babysitter_unmanaged_active"
   defp error_code({:active_runtime_owned_by, _}), do: "active_runtime_owned_by"
   defp error_code({:active_runtime_state_error, _}), do: "active_runtime_state_error"
@@ -2325,11 +2543,19 @@ defmodule ForgeloopV2.Service do
   defp status_for_error({:invalid_coordination_playbook, _}), do: 400
   defp status_for_error({:invalid_runtime_surface, _}), do: 400
   defp status_for_error({:invalid_stop_reason, _}), do: 400
+  defp status_for_error({:workflow_name_required, _}), do: 400
+  defp status_for_error({:unsupported_slot_action, _, _}), do: 400
+  defp status_for_error({:slot_action_deferred, _, _}), do: 409
+  defp status_for_error({:slot_capacity_reached, _, _}), do: 409
+  defp status_for_error(:invalid_slot_lane), do: 400
+  defp status_for_error(:invalid_slot_action), do: 400
+  defp status_for_error(:invalid_slot_request), do: 400
   defp status_for_error(:invalid_json_body), do: 400
   defp status_for_error(:unsupported_content_type), do: 415
   defp status_for_error(:invalid_http_request), do: 400
   defp status_for_error({:question_not_found, _}), do: 404
   defp status_for_error({:workflow_not_found, _}), do: 404
+  defp status_for_error({:slot_not_found, _}), do: 404
   defp status_for_error(:not_found), do: 404
   defp status_for_error({:question_conflict, _, _}), do: 409
   defp status_for_error({:babysitter_unmanaged_active, _}), do: 409
@@ -2339,6 +2565,7 @@ defmodule ForgeloopV2.Service do
   defp status_for_error(:babysitter_already_running), do: 409
   defp status_for_error(:babysitter_not_running), do: 409
   defp status_for_error(:babysitter_not_managed), do: 409
+  defp status_for_error(:slot_not_running), do: 409
   defp status_for_error(_), do: 500
 
   defp body_response(status, content_type, body) do

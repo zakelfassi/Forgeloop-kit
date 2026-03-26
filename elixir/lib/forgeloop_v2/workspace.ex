@@ -93,6 +93,7 @@ defmodule ForgeloopV2.Workspace do
     :runtime_dir,
     :workspace_root,
     :workspace_id,
+    :slot_id,
     :branch,
     :mode,
     :kind
@@ -106,6 +107,7 @@ defmodule ForgeloopV2.Workspace do
     branch = Keyword.get(opts, :branch, config.default_branch)
     mode = Keyword.get(opts, :mode, "daemon")
     kind = Keyword.get(opts, :kind, mode)
+    slot_id = Keyword.get(opts, :slot_id)
 
     with {:ok, validated_root} <- PathPolicy.validate_owned_path(config, workspace_root, :workspace) do
       {:ok,
@@ -114,7 +116,8 @@ defmodule ForgeloopV2.Workspace do
          forgeloop_root: config.forgeloop_root,
          runtime_dir: config.runtime_dir,
          workspace_root: validated_root,
-         workspace_id: workspace_id(config, branch, mode, kind),
+         workspace_id: workspace_id(config, branch, mode, kind, slot_id),
+         slot_id: slot_id,
          branch: branch,
          mode: mode,
          kind: kind
@@ -126,17 +129,27 @@ defmodule ForgeloopV2.Workspace do
   def metadata(%__MODULE__{} = workspace) do
     %{
       "workspace_id" => workspace.workspace_id,
+      "workspace_slot_id" => workspace.slot_id,
       "workspace_branch" => workspace.branch,
       "workspace_mode" => workspace.mode,
       "workspace_kind" => workspace.kind
     }
   end
 
-  defp workspace_id(config, branch, mode, kind) do
+  defp workspace_id(config, branch, mode, kind, slot_id) do
     repo_slug = config.repo_root |> Path.basename() |> String.replace(~r/[^a-zA-Z0-9_-]+/, "-")
-    base = Enum.join([repo_slug, branch, mode, kind], ":")
+    base = Enum.join([repo_slug, branch, mode, kind, slot_id || ""], ":")
     short_hash = :crypto.hash(:sha256, base) |> Base.encode16(case: :lower) |> binary_part(0, 8)
-    Enum.join([repo_slug, sanitize(branch), sanitize(mode), short_hash], "-")
+
+    [
+      repo_slug,
+      sanitize(branch),
+      sanitize(mode),
+      sanitize(slot_id),
+      short_hash
+    ]
+    |> Enum.reject(&is_nil_or_empty?/1)
+    |> Enum.join("-")
   end
 
   defp sanitize(value) do
@@ -145,4 +158,8 @@ defmodule ForgeloopV2.Workspace do
     |> String.replace(~r/[^a-zA-Z0-9_-]+/, "-")
     |> String.trim("-")
   end
+
+  defp is_nil_or_empty?(nil), do: true
+  defp is_nil_or_empty?(""), do: true
+  defp is_nil_or_empty?(_value), do: false
 end

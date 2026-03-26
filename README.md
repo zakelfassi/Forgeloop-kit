@@ -121,11 +121,13 @@ Forgeloop ships a real-time dashboard on top of the same file-backed state, so y
 What it gives you:
 
 - **Live state** — runtime status, blockers, questions, and ownership, updating in real time via SSE
-- **Interactive controls** — pause, resume, replan, answer questions, and launch one-off runs from the browser
+- **Interactive controls** — pause, resume, replan, answer questions, launch one-off runs, and inspect bounded parallel read slots from the browser
 - **No extra infrastructure** — no Phoenix, no database, no Node asset pipeline. Served directly by Elixir.
 - **Same source of truth** — reads and writes the same repo-local files as the CLI and daemon
 
-The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. See `docs/openclaw.md` for the plugin integration.
+The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. On the current alpha track, the same loopback surface can also expose experimental parallel read slots for checklist `plan` and workflow `preflight`, with slot-local runtime metadata under `.forgeloop/v2/slots/<slot-id>/...` while the repo-root runtime state summarizes the coordinator.
+
+See `docs/openclaw.md` for the plugin integration.
 
 For launch and release-review work, keep two additional habits:
 
@@ -241,7 +243,7 @@ When v2 reaches feature parity, it will be tagged `v2.0.0-beta.1`. See `elixir/R
 - `status` is the coarse operator state (`running`, `blocked`, `paused`, `awaiting-human`, `recovered`, `idle`)
 - `transition` carries the detailed lifecycle step (`planning`, `building`, `retrying`, `escalated`, `completed`, etc.)
 - `surface` tells you which surface wrote the state (`loop`, `daemon`, etc.)
-- `mode` tells you which run mode is active (`build`, `plan`, `tasks`, `daemon`, etc.)
+- `mode` tells you which run mode is active (`build`, `plan`, `tasks`, `daemon`, `slots`, etc.)
 
 ## Run safely
 

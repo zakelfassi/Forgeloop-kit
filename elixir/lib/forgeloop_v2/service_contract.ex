@@ -14,6 +14,7 @@ defmodule ForgeloopV2.ServiceContract do
     workflow_overview: 1,
     provider_health: 1,
     babysitter: 1,
+    slots: 1,
     runtime_owner: 1,
     ownership: 1
   }
@@ -39,6 +40,11 @@ defmodule ForgeloopV2.ServiceContract do
       fetch_path_template: "/api/workflows/{workflow_name}",
       preflight_path_template: "/api/workflows/{workflow_name}/preflight",
       run_path_template: "/api/workflows/{workflow_name}/run"
+    },
+    slots: %{
+      path: "/api/slots",
+      fetch_path_template: "/api/slots/{slot_id}",
+      stop_path_template: "/api/slots/{slot_id}/stop"
     },
     control: %{
       pause_path: "/api/control/pause",

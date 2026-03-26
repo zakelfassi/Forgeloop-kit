@@ -18,6 +18,31 @@ Format:
 
 ## Next Up
 
+- [x] Add experimental multi-slot read coordination on top of the managed babysitter/worktree path
+  - Acceptance:
+    - The loopback service exposes slot-aware APIs for list/start/detail/stop without replacing the existing single-run control plane.
+    - A slot coordinator owns the repo-level runtime claim while multiple read-class slots can run in parallel in separate disposable worktrees.
+    - Phase A admits only checklist `plan` and workflow `preflight` slots, with stable slot-scoped metadata under `.forgeloop/v2/slots/<slot-id>/...`.
+    - Repo-root `.forgeloop/runtime-state.json` stays authoritative and summarizes the coordinator with `mode: slots` and `transition: coordinating` instead of one child run.
+    - Read-class slots do not mutate canonical repo-root coordination files directly; slot-local evidence stays under the slot root.
+    - The HUD and OpenClaw seam both surface slot list/detail/start/stop behavior against the same loopback truth.
+  - REQUIRED TESTS:
+    - `cd elixir && mix test`
+    - `bash tests/service-entrypoint-layouts.test.sh`
+    - `bash tests/openclaw-plugin.test.sh`
+    - `bash tests/openclaw-loopback-smoke.test.sh`
+    - `bash tests/manual/hud-contract.agent-browser.sh`
+  - Non-goals:
+    - no write-class slot orchestration yet (`build`, workflow `run`)
+    - no queueing or priorities yet
+    - no automatic promotion or merge path
+    - no second control plane or repo-root artifact mutation from read slots
+  - Shipped behavior:
+    - `ForgeloopV2.Slots` and `ForgeloopV2.SlotCoordinator` now manage slot-scoped runtime metadata and parallel read-slot lifecycles above the existing babysitter/worktree substrate.
+    - The loopback service now exposes `/api/slots`, `/api/slots/:slot_id`, and `/api/slots/:slot_id/stop`, while `/api/overview` includes additive slot counts/summaries.
+    - The HUD now renders a slots rail and can launch checklist plan slots or workflow preflight slots from the same operator surface.
+    - The OpenClaw plugin now exposes `forgeloop_slots` for list/detail/start/stop against the real loopback service.
+
 - [x] Add a client-only Director Mode for the HUD so Forgeloop can feel stream-worthy without introducing a new control plane
   - Acceptance:
     - The HUD exposes a scene switch between the current operator view and an additive spectator-facing Director Mode.

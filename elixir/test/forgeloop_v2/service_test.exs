@@ -149,9 +149,13 @@ defmodule ForgeloopV2.ServiceTest do
     assert payload["data"]["contract_version"] == 1
     assert payload["data"]["payload_versions"]["coordination"] == 1
     assert payload["data"]["payload_versions"]["ownership"] == 1
+    assert payload["data"]["payload_versions"]["slots"] == 1
     assert payload["data"]["endpoints"]["overview"]["path"] == "/api/overview"
     assert payload["data"]["endpoints"]["stream"]["path"] == "/api/stream"
     assert payload["data"]["endpoints"]["questions"]["answer_path_template"] == "/api/questions/{question_id}/answer"
+    assert payload["data"]["endpoints"]["slots"]["path"] == "/api/slots"
+    assert payload["data"]["endpoints"]["slots"]["fetch_path_template"] == "/api/slots/{slot_id}"
+    assert payload["data"]["endpoints"]["slots"]["stop_path_template"] == "/api/slots/{slot_id}/stop"
   end
 
   test "service backlog endpoint matches orchestrator pending-work answer for the same plan file" do
@@ -342,6 +346,132 @@ defmodule ForgeloopV2.ServiceTest do
     assert {:ok, state} = RuntimeStateStore.read(config)
     assert state.status == "paused"
     assert state.surface == "service"
+  end
+
+  test "slot endpoints start, inspect, and stop parallel read slots while overview stays slot-aware" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    layout = create_ui_layout!(repo.repo_root)
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "service slot fixture"])
+    config = config_for!(repo.repo_root, app_root: layout.app_root, service_port: 0, shell_driver_enabled: true)
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    first =
+      post_json!(base_url <> "/api/slots", %{
+        "lane" => "checklist",
+        "action" => "plan",
+        "surface" => "ui"
+      })
+
+    second =
+      post_json!(base_url <> "/api/slots", %{
+        "lane" => "checklist",
+        "action" => "plan",
+        "surface" => "openclaw"
+      })
+
+    first_slot_id = first["data"]["slot_id"]
+    second_slot_id = second["data"]["slot_id"]
+    assert is_binary(first_slot_id)
+    assert is_binary(second_slot_id)
+    assert first_slot_id != second_slot_id
+
+    wait_until(fn ->
+      slots = get_json!(base_url <> "/api/slots")["data"]
+      slots["counts"]["active"] >= 2
+    end, 5_000)
+
+    overview = get_json!(base_url <> "/api/overview")
+    assert overview["data"]["slots"]["counts"]["active"] >= 2
+    assert overview["data"]["runtime_state"]["mode"] == "slots"
+    assert overview["data"]["runtime_state"]["transition"] == "coordinating"
+    assert overview["data"]["runtime_owner"]["current"]["owner"] == "slots"
+
+    slots_payload = get_json!(base_url <> "/api/slots")["data"]
+
+    slot_summary =
+      Enum.find(slots_payload["items"], fn item -> item["slot_id"] == first_slot_id end)
+
+    detail = get_json!(base_url <> "/api/slots/#{first_slot_id}")
+    assert detail["data"]["slot_id"] == first_slot_id
+    assert detail["data"]["lane"] == "checklist"
+    assert detail["data"]["action"] == "plan"
+    assert detail["data"]["runtime_surface"] == "ui"
+    assert is_binary(detail["data"]["worktree_path"])
+    assert String.starts_with?(slot_summary["slot_paths"]["root"], config.v2_state_dir)
+    assert detail["data"]["coordination_paths"]["requests"] != config.requests_file
+
+    stop_payload = post_json!(base_url <> "/api/slots/#{first_slot_id}/stop", %{"reason" => "kill"})
+    assert stop_payload["data"]["slot_id"] == first_slot_id
+
+    Process.sleep(100)
+
+    first_after_stop = get_json!(base_url <> "/api/slots/#{first_slot_id}")
+    second_after_stop = get_json!(base_url <> "/api/slots/#{second_slot_id}")
+
+    refute first_after_stop["data"]["status"] == "running"
+    assert second_after_stop["data"]["status"] in ["running", "stopping", "stopped", "completed", "blocked"]
+
+    _ = post_json!(base_url <> "/api/slots/#{second_slot_id}/stop", %{"reason" => "kill"})
+
+    assert File.read!(config.requests_file) == ""
+    assert File.read!(config.questions_file) == ""
+    assert File.read!(config.escalations_file) == ""
+  end
+
+  test "workflow preflight slots use the slot service endpoints without mutating canonical files" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+
+    runner_path =
+      write_executable!(Path.join(repo.repo_root, "bin/workflow-runner"), """
+      #!/usr/bin/env bash
+      set -euo pipefail
+      sleep 1
+      echo "workflow:$FORGELOOP_WORKFLOW_NAME:$FORGELOOP_RUNTIME_MODE"
+      """)
+
+    layout = create_ui_layout!(repo.repo_root)
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow slot fixture"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        workflow_runner: runner_path,
+        shell_driver_enabled: false
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    payload =
+      post_json!(base_url <> "/api/slots", %{
+        "lane" => "workflow",
+        "action" => "preflight",
+        "workflow_name" => "alpha",
+        "surface" => "service"
+      })
+
+    slot_id = payload["data"]["slot_id"]
+    assert payload["data"]["lane"] == "workflow"
+    assert payload["data"]["action"] == "preflight"
+
+    wait_until(fn ->
+      status = get_json!(base_url <> "/api/slots/#{slot_id}")["data"]["status"]
+      status == "completed"
+    end, 5_000)
+
+    detail = get_json!(base_url <> "/api/slots/#{slot_id}")
+    assert detail["data"]["workflow_name"] == "alpha"
+    assert detail["data"]["coordination_paths"]["requests"] != config.requests_file
+    assert File.read!(config.requests_file) == ""
+    assert File.read!(config.questions_file) == ""
+    assert File.read!(config.escalations_file) == ""
   end
 
   test "clear pause endpoint is idempotent and recovery stays daemon-driven" do

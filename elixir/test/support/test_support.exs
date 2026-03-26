@@ -28,6 +28,8 @@ defmodule ForgeloopV2.TestSupport do
         RuntimeStateStore,
         RunSpec,
         Service,
+        SlotCoordinator,
+        Slots,
         UIAssets,
         WorkflowHistory,
         Workspace,
