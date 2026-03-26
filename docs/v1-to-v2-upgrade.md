@@ -2,7 +2,7 @@
 
 This guide is for teams already on **Forgeloop v1.0.0** who want to try **v2 alpha** without risking their current setup.
 
-The short version: evaluate v2 on a branch or disposable clone. Keep v1 easy to restore. Run both proof suites before you commit.
+The short version: evaluate v2 on a branch or disposable clone. Keep v1 easy to restore. Run both proof suites before you commit. Treat today’s v2 as **serious alpha**, not a default-runtime replacement.
 
 See also:
 
@@ -122,6 +122,7 @@ These are the real acceptance criteria — not whether the demo boots:
 - are ownership conflicts surfaced clearly?
 - does it work in both repo-root and vendored layouts?
 - does the self-host proof pass?
+- would you still feel safe falling back to `FORGELOOP_DAEMON_RUNTIME=bash` if the managed path surprised you?
 
 ## Rollback posture
 

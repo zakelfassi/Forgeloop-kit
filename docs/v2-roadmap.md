@@ -24,6 +24,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
 - an additive service-owned `ownership` start-gate read model plus additive `error.ownership` context on blocked starts, so live conflicts, reclaimable claims, stale cleanup, and malformed metadata stay explicit across the HUD and OpenClaw seam
 - a static repo-local operator UI with replayable SSE-backed live updates, interactive control mutations, and no Node asset pipeline
 - a one-command manual `./forgeloop.sh self-host-proof` harness for the real loopback service + HUD path, using `agent-browser` plus a disposable proof-repo snapshot when git is available instead of mutating the live checkout
+- a seeded demo repo plus `./bin/capture-product-screenshots.sh` path for reproducible public HUD screenshots rendered from real loopback state
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including a shared service-owned coordination read model for HUD/OpenClaw, a bounded operator brief/timeline, one-window bounded playbooks/recommendations, and conservative optional one-action apply
 
 ## Coexistence Rule
@@ -61,19 +62,37 @@ With parser/read-path groundwork and repo-safe mutation helpers now in place, El
 
 That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree, expose the current state over a local service without introducing a second source of truth, and route Elixir-daemon checklist work through the same babysitter/worktree substrate. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
 
-## Next Acceptance Bar
+## Promotion Bar
 
-Elixir is not promoted by feature count. It is promoted by preserving the bash fail-closed contract:
+### Alpha position now
 
-1. pause instead of spin
-2. preserve the escalation artifact chain
-3. keep runtime-state transitions legible and constrained
-4. keep recovery explicit and safe
-5. keep repo-root and vendored layouts working
-6. make babysitter orchestration and service exposure as reviewable as the rest of the control plane
-7. make stale/crash ownership recovery and loopback error semantics explicit enough to release-review
+Today’s claim should stay narrow and truthful:
 
-The required local gates for each milestone are:
+- v2 is a **serious alpha** with a repeatable proof path
+- v1 is still the stable/public recommendation
+- v2 is suitable for demos, controlled evaluation, internal dogfooding, and project-by-project adoption where the team is deliberately evaluating the richer stack
+
+### Beta promotion bar
+
+Do **not** promote v2 to `v2.0.0-beta.1` until all of these are true:
+
+1. daemon, service, and workflow public entrypoints are covered across repo-root and vendored layouts
+2. shell, eval, Elixir, self-host proof, and screenshot regeneration all belong to a repeatable release-proof cadence
+3. disposable-worktree cleanup, babysitter recovery, and watchdog behavior are explicit and green enough for release review
+4. plugin seams such as OpenClaw have bounded smoke coverage rather than optimism-only documentation
+5. parity/readiness/release docs all agree on what is landed, what is still experimental, and what remains deferred
+
+### Prod-default bar
+
+Do **not** make v2 the default public runtime until all of these are true:
+
+1. the beta bar is already met
+2. there is no unresolved safety-critical drift around fail-closed pauses, escalation artifacts, runtime-state semantics, provider failover, or layout portability
+3. the managed daemon path has earned trust as the recommended path, not just the richer path
+4. the bash fallback/rollback story is still explicit, safe, and boring
+5. the cutover is an intentional release decision reflected in docs and upgrade guidance, not an accidental consequence of feature momentum
+
+## Required Local Gates
 
 ```bash
 bash tests/run.sh
@@ -81,6 +100,8 @@ bash evals/run.sh
 cd elixir && mix test
 # manual V2 alpha release proof
 ./forgeloop.sh self-host-proof
+# reproducible public HUD screenshots
+./bin/capture-product-screenshots.sh
 ```
 
 ## Explicit Deferrals

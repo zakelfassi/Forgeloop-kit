@@ -27,12 +27,27 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - `ESCALATIONS.md`, `QUESTIONS.md`, and `REQUESTS.md` form the human handoff surface.
 - `.forgeloop/runtime-state.json` is the machine-readable runtime state surface.
 
-## Next Gaps To Close
+## What Harness-Ready Means Today
 
-- Keep the public entrypoint smoke tests green across repo-root and vendored layouts, and widen that posture to additional public surfaces only when the proof pays for itself.
-- Keep the alpha proof workflow and screenshot regeneration path green enough that release-review evidence stays fresh instead of turning into once-run theater.
-- Keep open PRs short-lived and rewrite stacked draft history into focused successors.
-- Keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows.
-- Add daemon-integrated babysitter child-run recovery and watchdog checks.
-- Keep the new loopback self-host proof stable across clean and dirty source checkouts.
-- Add integration-surface smoke tests for future plugin seams such as OpenClaw.
+- **Harness-ready is not the same as prod-default.**
+- Today, the repo is strong enough to support a real **v2 alpha evaluation loop**: shell gate, evals, Elixir tests, self-host proof, and screenshot regeneration are all codified.
+- The harness is **not** yet saying “make v2 the default runtime.” It is saying “the alpha stack now has a repeatable proof path.”
+
+## Beta / Prod-Default Gaps To Close
+
+Before calling v2 **beta**:
+
+- keep the public entrypoint smoke tests green across repo-root and vendored layouts
+- keep the alpha proof workflow and screenshot regeneration path fresh enough for release review
+- keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows
+- add daemon-integrated babysitter child-run recovery and watchdog checks
+- keep the loopback self-host proof stable across clean and dirty source checkouts
+- add integration-surface smoke tests for future plugin seams such as OpenClaw
+- tighten the parity/readiness docs so they describe landed behavior precisely instead of loosely
+
+Before making v2 the **prod-default** path:
+
+- meet the beta gate first
+- keep the bash fallback path explicit and boring
+- prove there is no unresolved safety-critical drift between bash authority and managed Elixir behavior
+- make the default-runtime recommendation an intentional release decision, not an accidental shift caused by momentum

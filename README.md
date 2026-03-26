@@ -15,6 +15,8 @@ Works with Claude, Codex, or any LLM. Supports checklist-driven loops, structure
 
 On `main` / the v2 alpha track, you also get the live HUD, real-time event streams, the OpenClaw plugin, and a self-host proof harness. See `design.md` for the visual direction.
 
+Today, that means **serious alpha** — strong enough to evaluate with real proof, not yet the default production runtime.
+
 ## What the product looks like
 
 These are real screenshots from the shipped HUD, rendered against a seeded demo repo for **Signalboard** and regenerated with `./bin/capture-product-screenshots.sh`.
@@ -196,6 +198,12 @@ The operator contract is documented in:
 Pin to `v1.0.0` when you want the proven public release for active project work. Use `main` when you want to deliberately evaluate the richer V2 alpha operator stack: service, HUD, OpenClaw seam, managed daemon path, and self-host proof.
 
 Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track. If you are iterating on the v2 alpha launch story or public/operator visuals, read `design.md` too.
+
+The practical release bar is now explicit:
+
+- **Alpha now:** shell/eval/Elixir/self-host proof plus reproducible product screenshots
+- **Beta later:** stronger babysitter/plugin/release-proof confidence across all public surfaces
+- **Prod-default later still:** the managed path must earn trust without weakening the bash fallback story
 
 Typical stable → main evaluation path inside an installed repo:
 

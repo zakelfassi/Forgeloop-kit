@@ -18,7 +18,32 @@ Pin to `v1.0.0` when you want the proven runtime without evaluating new surfaces
 - **Runtime posture:** additive Elixir + bash coexistence work
 - **Best for:** teams who want the live dashboard, event streams, OpenClaw plugin, workflow packs, and the richer developer experience
 
-`main` is **not** the stable track yet. It is also **not** beta yet — that milestone comes after parity and release hardening.
+`main` is **not** the stable track yet. It is also **not** beta yet.
+
+## What beta will mean
+
+The v2 track earns **beta** when the repo can say all of this truthfully:
+
+- daemon, service, and workflow public entrypoints are covered across repo-root and vendored layouts
+- shell, eval, Elixir, self-host proof, and screenshot regeneration are part of a repeatable release-proof rhythm
+- babysitter/worktree cleanup and recovery checks are explicit enough for release review
+- plugin seams such as OpenClaw have bounded smoke coverage
+- release/readiness/parity docs all describe the same landed reality
+
+Beta is therefore a **proof and trust milestone**, not just a feature-count milestone.
+
+## What prod-default will mean
+
+Making v2 the **default** public runtime is a stricter call than calling it beta.
+
+That cutover should happen only when:
+
+- the beta gate is already met
+- the managed daemon path has earned trust as the recommended path
+- the bash fallback/rollback path is still explicit and safe
+- there is no unresolved safety-critical drift around fail-closed pauses, escalation artifacts, runtime-state semantics, provider failover, or layout portability
+
+Until then, v1 remains the stable/public recommendation and v2 remains the richer evaluation track.
 
 ## What stays true on both tracks
 
@@ -45,6 +70,7 @@ Choose **`main`** if you want:
 - replayable event streams
 - disposable-worktree isolation
 - the end-to-end self-host proof
+- a serious alpha that you can evaluate with real evidence
 
 ## Upgrade path from stable to main
 

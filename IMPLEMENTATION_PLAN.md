@@ -149,6 +149,19 @@ Format:
     - `tests/workflow-entrypoint-layouts.test.sh` now proves `./bin/workflow.sh` and `./forgeloop.sh workflow ...` in repo-root and vendored layouts.
     - Readiness/quality docs now treat workflow entrypoints as part of the paved public proof surface rather than an unspoken assumption.
 
+- [x] Define the beta and prod-default release bar explicitly
+  - Acceptance:
+    - `QUALITY_SCORE.md`, `docs/harness-readiness.md`, `docs/release-tracks.md`, and `docs/v2-roadmap.md` all agree on what alpha means now, what beta requires next, and what must still be true before v2 becomes the default public runtime.
+    - `README.md` and `docs/v1-to-v2-upgrade.md` reflect the same posture in user-facing language.
+    - The documented gates stay tied to real proof surfaces rather than a generic release process.
+  - Non-goals:
+    - no runtime behavior change
+    - no premature beta claim
+    - no silent cutover away from the stable v1 recommendation
+  - Shipped behavior:
+    - The repo now describes v2 as a serious alpha with an explicit beta gate and a stricter prod-default gate.
+    - Release/readiness docs now answer the product question directly: what must be true before v2 becomes the default public path?
+
 - [x] Codify an alpha release-proof cadence and reproducible product screenshot flow
   - Acceptance:
     - The repo exposes a manual/scheduled alpha-proof workflow that runs the shell gate, eval harness, Elixir tests, self-host proof, and screenshot regeneration outside default PR CI.
