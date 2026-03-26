@@ -18,6 +18,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 ## Current Paved Paths
 
 - `tests/run.sh` is the default shell test gate.
+- `tests/daemon-entrypoint-layouts.test.sh`, `tests/service-entrypoint-layouts.test.sh`, and `tests/workflow-entrypoint-layouts.test.sh` keep public entrypoints honest across repo-root and vendored layouts.
 - `evals/run.sh` is the scenario harness for runtime-state and pause/escalation behavior.
 - `./forgeloop.sh self-host-proof` is the manual v2-alpha HUD/service proof for bounded self-hosting checks.
 - `docs/runtime-control.md` defines the loop stop/escalation rules.
@@ -26,7 +27,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 
 ## Next Gaps To Close
 
-- Keep service and daemon entrypoint smoke tests green across repo-root and vendored layouts, and widen that posture to additional public surfaces only when the proof pays for itself.
+- Keep the public entrypoint smoke tests green across repo-root and vendored layouts, and widen that posture to additional public surfaces only when the proof pays for itself.
 - Add a small quality score review cadence so repo quality is measured, not guessed.
 - Keep open PRs short-lived and rewrite stacked draft history into focused successors.
 - Keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows.

@@ -12,6 +12,17 @@
 - `Repo hygiene`: stale PR stacks are rewritten into a few focused merge candidates.
 - `Agent legibility`: durable runtime rules live in `docs/`, not in scattered prompt text.
 
+## Current Evidence
+
+- Shell gate: `bash tests/run.sh`
+- Scenario harness: `bash evals/run.sh`
+- Elixir gate: `cd elixir && mix test`
+- Manual release proof: `./forgeloop.sh self-host-proof`
+- Public layout smokes:
+  - `tests/daemon-entrypoint-layouts.test.sh`
+  - `tests/service-entrypoint-layouts.test.sh`
+  - `tests/workflow-entrypoint-layouts.test.sh`
+
 ## Review Prompts
 
 - Does the loop stop safely on repeated identical failures?

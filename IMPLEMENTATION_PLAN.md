@@ -133,6 +133,22 @@ Format:
     - Director Mode now exposes a broadcast-frame toggle that trims the scene for presentation while staying on the same loopback truth.
     - The proof shelf now includes a copyable episode card that summarizes what shipped, what is stuck, and what to watch next using only current snapshot/stream data.
 
+- [x] Add workflow entrypoint smoke across repo-root and vendored layouts
+  - Acceptance:
+    - The public workflow lane entrypoints behave the same in repo-root and installed-wrapper layouts.
+    - A bounded smoke proves `list` and `preflight` through the public workflow entrypoints without relying on a real external runner.
+    - The smoke confirms workflow state roots, runtime surface/mode wiring, and wrapper help text stay correct.
+  - REQUIRED TESTS:
+    - `tests/workflow-entrypoint-layouts.test.sh`
+    - `bash tests/run.sh`
+  - Non-goals:
+    - no broader workflow orchestration changes
+    - no new workflow service contract
+    - no runtime-state semantics changes
+  - Shipped behavior:
+    - `tests/workflow-entrypoint-layouts.test.sh` now proves `./bin/workflow.sh` and `./forgeloop.sh workflow ...` in repo-root and vendored layouts.
+    - Readiness/quality docs now treat workflow entrypoints as part of the paved public proof surface rather than an unspoken assumption.
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.
