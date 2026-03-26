@@ -40,7 +40,7 @@ Before calling v2 **beta**:
 - keep the public entrypoint smoke tests green across repo-root and vendored layouts
 - keep the alpha proof workflow and screenshot regeneration path fresh enough for release review
 - keep disposable-worktree cleanliness and cleanup checks green as the babysitter grows
-- add daemon-integrated babysitter child-run recovery and watchdog checks
+- keep daemon-integrated babysitter child-run recovery and watchdog checks green as the managed path evolves
 - keep the loopback self-host proof stable across clean and dirty source checkouts
 - add integration-surface smoke tests for future plugin seams such as OpenClaw
 - tighten the parity/readiness docs so they describe landed behavior precisely instead of loosely

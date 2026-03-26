@@ -247,4 +247,58 @@ defmodule ForgeloopV2.BabysitterTest do
     refute File.exists?(stale_handle.metadata_file)
     assert Enum.empty?(Path.wildcard(Path.join(PathPolicy.workspace_root(config), "*")))
   end
+
+  test "abrupt babysitter death leaves stale heartbeat state that the next managed run cleans up" do
+    repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root, shell_driver_enabled: true, babysitter_shutdown_grace_ms: 50)
+
+    {:ok, pid} =
+      Babysitter.start_link(
+        config: config,
+        mode: :build,
+        driver: ForgeloopV2.WorkDrivers.ShellLoop,
+        heartbeat_interval_ms: 25,
+        shutdown_grace_ms: 50,
+        name: nil
+      )
+
+    assert :ok = Babysitter.start_run(pid)
+
+    wait_until(fn ->
+      Babysitter.snapshot(pid).running? and
+        match?({:active, _}, Worktree.active_run_state(config))
+    end)
+
+    snapshot = Babysitter.snapshot(pid)
+    active_run = Worktree.read_active_run(config) |> then(fn {:ok, payload} -> payload end)
+    metadata_file = Worktree.metadata_path(config, active_run["workspace_id"])
+
+    assert File.exists?(snapshot.worktree_path)
+    assert File.exists?(metadata_file)
+
+    Process.unlink(pid)
+    Process.exit(pid, :kill)
+
+    # Heartbeats are written with second-truncated timestamps, so give the stale
+    # classifier enough wall-clock time to cross that boundary before asserting.
+    Process.sleep(1_100)
+    wait_until(fn -> match?({:stale, _}, Worktree.active_run_state(config)) end, 5_000)
+
+    {:ok, pid2} =
+      Babysitter.start_link(
+        config: config,
+        mode: :build,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        heartbeat_interval_ms: 25,
+        name: nil
+      )
+
+    assert :ok = Babysitter.start_run(pid2)
+    wait_until(fn -> not Babysitter.snapshot(pid2).running? end)
+
+    refute File.exists?(snapshot.worktree_path)
+    refute File.exists?(metadata_file)
+    refute File.exists?(Worktree.active_run_path(config))
+    assert Enum.empty?(Path.wildcard(Path.join(PathPolicy.workspace_root(config), "*")))
+  end
 end

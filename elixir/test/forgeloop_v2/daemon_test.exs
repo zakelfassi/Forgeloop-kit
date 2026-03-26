@@ -318,6 +318,43 @@ defmodule ForgeloopV2.DaemonTest do
     wait_until(fn -> not Babysitter.snapshot(babysitter_pid).running? end)
   end
 
+  test "daemon recovers from stale babysitter heartbeat metadata before starting a fresh managed run" do
+    repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
+    config = config_for!(repo.repo_root)
+    {:ok, workspace} = Workspace.from_config(config, branch: "main", mode: "build", kind: "babysitter")
+    {:ok, stale_handle} = Worktree.prepare(config, workspace)
+
+    write_active_run!(config,
+      workspace_id: workspace.workspace_id,
+      mode: "build",
+      runtime_surface: "daemon",
+      last_heartbeat_at: ago_iso!(300)
+    )
+
+    assert match?({:stale, _}, Worktree.active_run_state(config))
+
+    {:ok, pid} =
+      Daemon.start_link(
+        config: config,
+        driver: ForgeloopV2.WorkDrivers.Noop,
+        schedule: false
+      )
+
+    Daemon.run_once(pid)
+    wait_until(fn -> not Daemon.snapshot(pid).running? end)
+
+    assert Daemon.snapshot(pid).last_action == :build
+    refute File.exists?(stale_handle.checkout_path)
+    refute File.exists?(stale_handle.metadata_file)
+    refute File.exists?(Worktree.active_run_path(config))
+    assert Enum.empty?(Path.wildcard(Path.join(PathPolicy.workspace_root(config), "*")))
+
+    event_types = Events.read_all(config) |> Enum.map(& &1["event_type"])
+    assert Enum.count(event_types, &(&1 == "worktree_cleaned")) >= 2
+    assert "babysitter_started" in event_types
+    assert "babysitter_completed" in event_types
+  end
+
   test "stale structured runtime ownership does not block daemon managed starts" do
     repo = create_git_repo_fixture!(plan_content: "- [ ] build\n")
     config = config_for!(repo.repo_root)

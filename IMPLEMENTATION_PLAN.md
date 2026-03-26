@@ -133,6 +133,21 @@ Format:
     - Director Mode now exposes a broadcast-frame toggle that trims the scene for presentation while staying on the same loopback truth.
     - The proof shelf now includes a copyable episode card that summarizes what shipped, what is stuck, and what to watch next using only current snapshot/stream data.
 
+- [x] Add daemon-integrated babysitter recovery and watchdog proof
+  - Acceptance:
+    - Stale babysitter heartbeat and active-run metadata are treated as stale rather than live after abrupt child loss.
+    - A fresh babysitter-managed run cleans up stale worktree metadata and leaves the workspace root empty again.
+    - The managed daemon can recover from stale babysitter metadata and still launch a fresh build run without widening runtime-state semantics.
+  - REQUIRED TESTS:
+    - `cd elixir && mix test test/forgeloop_v2/babysitter_test.exs test/forgeloop_v2/daemon_test.exs`
+  - Non-goals:
+    - no new watchdog subsystem
+    - no service contract expansion
+    - no runtime-state contract change
+  - Shipped behavior:
+    - `BabysitterTest` now proves abrupt babysitter death leaves stale heartbeat metadata that a later managed run cleans up before starting fresh work.
+    - `DaemonTest` now proves the managed daemon recovers from stale babysitter heartbeat metadata, cleans the old worktree, and still completes a fresh managed build run.
+
 - [x] Add workflow entrypoint smoke across repo-root and vendored layouts
   - Acceptance:
     - The public workflow lane entrypoints behave the same in repo-root and installed-wrapper layouts.
