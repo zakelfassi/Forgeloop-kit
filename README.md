@@ -15,6 +15,18 @@ Works with Claude, Codex, or any LLM. Supports checklist-driven loops, structure
 
 On `main` / the v2 alpha track, you also get the live HUD, real-time event streams, the OpenClaw plugin, and a self-host proof harness. See `design.md` for the visual direction.
 
+## What the product looks like
+
+These are real screenshots from the shipped HUD, rendered against a seeded demo repo for **Signalboard** and regenerated with `./bin/capture-product-screenshots.sh`.
+
+### Operator HUD
+
+![Forgeloop operator HUD screenshot](docs/assets/screenshots/forgeloop-operator-signalboard-demo.png)
+
+### Director Mode / broadcast frame
+
+![Forgeloop director mode screenshot](docs/assets/screenshots/forgeloop-director-signalboard-demo.png)
+
 ## The problem Forgeloop solves
 
 Agent runs fail. The question is what happens next.
@@ -62,6 +74,11 @@ On the v2 alpha track, there's also a full end-to-end proof that spins up the re
 ./forgeloop.sh self-host-proof
 ```
 
+For release hardening on the alpha track, the repo also includes:
+
+- `./bin/capture-product-screenshots.sh` — regenerate the public product screenshots from a seeded demo repo
+- `.github/workflows/v2-alpha-proof.yml` — manual/scheduled alpha proof cadence with uploaded proof artifacts
+
 See `evals/README.md` for details.
 
 ## Quickstart
@@ -106,11 +123,18 @@ What it gives you:
 
 The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. See `docs/openclaw.md` for the plugin integration.
 
+For launch and release-review work, keep two additional habits:
+
+- run `./forgeloop.sh self-host-proof` before calling the alpha stack demo-ready
+- regenerate the committed product screenshots with `./bin/capture-product-screenshots.sh` whenever the HUD materially changes
+
 If you are working inside this repo directly:
 
 ```bash
 cd elixir
 mix forgeloop_v2.serve --repo ..
+cd ..
+bash bin/capture-product-screenshots.sh
 ```
 
 ### Supported daemon control flags

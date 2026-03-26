@@ -316,6 +316,7 @@
       .track-card,
       .proof-card,
       .story-card,
+      .screenshot-card,
       .surface-card,
       .timeline-card,
       .final-card {
@@ -530,6 +531,7 @@
 
       .spotlight-grid,
       .story-grid,
+      .screenshot-grid,
       .surface-grid,
       .proof-grid,
       .tracks-grid,
@@ -540,6 +542,7 @@
 
       .spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .story-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .screenshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .surface-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .tracks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -560,6 +563,7 @@
       }
 
       .story-card,
+      .screenshot-card,
       .surface-card,
       .proof-card,
       .track-card,
@@ -609,6 +613,31 @@
         display: grid;
         grid-template-columns: 1.2fr 0.8fr;
         gap: 18px;
+      }
+
+      .screenshot-card {
+        padding: 18px;
+      }
+
+      .screenshot-frame {
+        margin-top: 16px;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.03);
+        box-shadow: var(--shadow-tight);
+      }
+
+      .screenshot-frame img {
+        width: 100%;
+        height: auto;
+      }
+
+      .screenshot-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
       }
 
       .signal-panel,
@@ -759,6 +788,7 @@
       @media (max-width: 1080px) {
         .hero,
         .signal-strip,
+        .screenshot-grid,
         .proof-grid,
         .tracks-grid,
         .final-card {
@@ -788,6 +818,7 @@
 
         .hero-strip,
         .story-grid,
+        .screenshot-grid,
         .surface-grid,
         .spotlight-grid,
         .timeline-grid {
@@ -827,6 +858,7 @@
 
         <div class="nav-links">
           <a class="nav-link" href="#why">Why</a>
+          <a class="nav-link" href="#screenshots">Screenshots</a>
           <a class="nav-link" href="#surfaces">Surfaces</a>
           <a class="nav-link" href="#proof">Proof</a>
           <a class="nav-link" href="#tracks">Release tracks</a>
@@ -980,9 +1012,47 @@
         </div>
       </section>
 
+      <section id="screenshots" class="section">
+        <div class="section-head">
+          <p class="eyebrow">03 // Product screenshots</p>
+          <h2 class="section-title">Real HUD shots, generated from a seeded demo repo.</h2>
+          <p class="section-copy">
+            These are real screenshots from the shipped loopback HUD, rendered against a canonical demo repo for <strong>Signalboard</strong> and regenerated with <code>./bin/capture-product-screenshots.sh</code>.
+          </p>
+        </div>
+
+        <div class="screenshot-grid">
+          <article class="screenshot-card panel">
+            <h3>Operator HUD</h3>
+            <p>The control-room view for real work: runtime truth, ownership, queue pressure, workflows, questions, escalations, and bounded manual actions.</p>
+            <div class="screenshot-meta">
+              <span class="status-chip live">real service</span>
+              <span class="status-chip lock">seeded repo state</span>
+              <span class="status-chip v2">reproducible</span>
+            </div>
+            <div class="screenshot-frame">
+              <img src="docs/assets/screenshots/forgeloop-operator-signalboard-demo.png" alt="Forgeloop operator HUD screenshot rendered against the Signalboard demo repo" loading="lazy" />
+            </div>
+          </article>
+
+          <article class="screenshot-card panel">
+            <h3>Director Mode / broadcast frame</h3>
+            <p>The spectator-facing scene: recap rail, now/next/queue/live-feed layout, proof shelf, and broadcast framing — still tied to the same canonical loopback truth.</p>
+            <div class="screenshot-meta">
+              <span class="status-chip v2">director mode</span>
+              <span class="status-chip live">broadcast frame</span>
+              <span class="status-chip lock">same truth</span>
+            </div>
+            <div class="screenshot-frame">
+              <img src="docs/assets/screenshots/forgeloop-director-signalboard-demo.png" alt="Forgeloop Director Mode screenshot rendered against the Signalboard demo repo" loading="lazy" />
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section id="proof" class="section signal-strip">
         <article class="proof-card panel proof-panel">
-          <p class="eyebrow">03 // Trust, verified</p>
+          <p class="eyebrow">04 // Trust, verified</p>
           <h3>Prove it works before you use it</h3>
           <p>
             Run the eval suite in under a minute. It tests the behaviors that actually matter: does it pause? Does it escalate? Does it preserve state?
@@ -1004,7 +1074,7 @@
         </article>
 
         <article class="proof-card panel proof-panel">
-          <p class="eyebrow">04 // End-to-end proof</p>
+          <p class="eyebrow">05 // End-to-end proof</p>
           <h3>Test the full stack in one command</h3>
           <p>
             Spins up the real HUD and service in an isolated repo, drives actual UI interactions, and saves screenshots as evidence. Run it before you demo.
@@ -1021,13 +1091,14 @@
             <li>drives the UI with <code>agent-browser</code></li>
             <li>checks pause, clear-pause, replan, and one-off plan behavior</li>
             <li>keeps screenshots and logs for review</li>
+            <li>alpha proof cadence is encoded in <code>.github/workflows/v2-alpha-proof.yml</code></li>
           </ul>
         </article>
       </section>
 
       <section id="tracks" class="section">
         <div class="section-head">
-          <p class="eyebrow">05 // Release tracks</p>
+          <p class="eyebrow">06 // Release tracks</p>
           <h2 class="section-title">Pick the track that matches your risk appetite.</h2>
           <p class="section-copy">
             v1 is battle-tested. v2 alpha has the dashboard, the live HUD, and the richer developer experience. Both share the same repo-local contract.
@@ -1068,7 +1139,7 @@
 
       <section class="section">
         <div class="section-head">
-          <p class="eyebrow">06 // How it works</p>
+          <p class="eyebrow">07 // How it works</p>
           <h2 class="section-title">Four steps from install to a run you trust.</h2>
           <p class="section-copy">
             Describe what you want to build. Let the agent loop against real checks. See shared state across every surface. Prove it works before you ship.
@@ -1110,7 +1181,7 @@
       <section id="install" class="section">
         <article class="final-card panel">
           <div>
-            <p class="eyebrow">07 // Quickstart</p>
+            <p class="eyebrow">08 // Quickstart</p>
             <h2>Four commands to see it for yourself.</h2>
             <p>
               Install into any repo. Spin up the dashboard. Run the proof. You'll know in under five minutes whether this is worth your time.

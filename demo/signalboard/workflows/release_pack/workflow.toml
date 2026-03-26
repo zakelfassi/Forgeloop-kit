@@ -1,0 +1,3 @@
+version = 1
+name = "release_pack"
+description = "Prepare the release-room branch for a guided demo run."

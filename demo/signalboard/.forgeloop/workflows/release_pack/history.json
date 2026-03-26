@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "run_id": "wf-release_pack-run-1742919300000-101",
+      "workflow_name": "release_pack",
+      "action": "run",
+      "outcome": "escalated",
+      "runtime_surface": "ui",
+      "branch": "signalboard/broadcast-room",
+      "started_at": "2026-03-25T17:18:00Z",
+      "finished_at": "2026-03-25T17:24:00Z",
+      "duration_ms": 360000,
+      "summary": "Release pack blocked on broadcast guest visibility policy for recap cards.",
+      "requested_action": "review",
+      "runtime_status": "awaiting-human",
+      "failure_kind": "question_waiting",
+      "error": "Awaiting product decision before continuing release-pack run.",
+      "artifact": {
+        "path": ".forgeloop/workflows/release_pack/last-run.txt",
+        "status": "available",
+        "updated_at": "2026-03-25T17:24:00Z",
+        "size_bytes": 196,
+        "error": null
+      }
+    },
+    {
+      "run_id": "wf-release_pack-preflight-1742917800000-100",
+      "workflow_name": "release_pack",
+      "action": "preflight",
+      "outcome": "succeeded",
+      "runtime_surface": "daemon",
+      "branch": "signalboard/broadcast-room",
+      "started_at": "2026-03-25T16:50:00Z",
+      "finished_at": "2026-03-25T16:53:00Z",
+      "duration_ms": 180000,
+      "summary": "Preflight checks passed for the release-room broadcast recap slice.",
+      "requested_action": "",
+      "runtime_status": "running",
+      "failure_kind": null,
+      "error": null,
+      "artifact": {
+        "path": ".forgeloop/workflows/release_pack/last-run.txt",
+        "status": "available",
+        "updated_at": "2026-03-25T16:53:00Z",
+        "size_bytes": 196,
+        "error": null
+      }
+    }
+  ]
+}

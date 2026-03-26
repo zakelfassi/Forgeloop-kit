@@ -1,0 +1,6 @@
+{
+  "claude_auth_failed": false,
+  "codex_auth_failed": false,
+  "claude_rate_limited_until": 0,
+  "codex_rate_limited_until": 0
+}

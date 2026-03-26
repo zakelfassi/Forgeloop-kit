@@ -149,6 +149,25 @@ Format:
     - `tests/workflow-entrypoint-layouts.test.sh` now proves `./bin/workflow.sh` and `./forgeloop.sh workflow ...` in repo-root and vendored layouts.
     - Readiness/quality docs now treat workflow entrypoints as part of the paved public proof surface rather than an unspoken assumption.
 
+- [x] Codify an alpha release-proof cadence and reproducible product screenshot flow
+  - Acceptance:
+    - The repo exposes a manual/scheduled alpha-proof workflow that runs the shell gate, eval harness, Elixir tests, self-host proof, and screenshot regeneration outside default PR CI.
+    - Public screenshots are regenerated from a seeded canonical demo repo rendered by the real HUD, not hand-made mockups.
+    - README, landing page, readiness docs, and quality-score docs all reference the same proof cadence and screenshot regeneration path.
+  - REQUIRED TESTS:
+    - `bash tests/run.sh`
+    - `cd elixir && mix test`
+    - `bash bin/self-host-proof.sh`
+    - `bash bin/capture-product-screenshots.sh`
+  - Non-goals:
+    - no new control plane for demos
+    - no fake spectator-only state
+    - no requirement that the heavy alpha-proof workflow run on every PR
+  - Shipped behavior:
+    - `.github/workflows/v2-alpha-proof.yml` now codifies the manual/scheduled alpha proof cadence and uploads the resulting proof artifacts.
+    - `bin/capture-product-screenshots.sh` now renders the real HUD against `demo/signalboard` and regenerates the committed operator/director screenshots.
+    - `README.md`, `index.html`, `docs/harness-readiness.md`, `QUALITY_SCORE.md`, and `design.md` now all treat proof cadence and reproducible screenshots as part of the launch-hardening story.
+
 - [x] Add an experimental native workflow-pack lane through Forgeloop’s fail-closed runtime contract
   - Acceptance:
     - `./forgeloop.sh workflow list|preflight|run` exists and wraps a configured workflow runner.

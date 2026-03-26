@@ -1,0 +1,61 @@
+name: V2 Alpha Proof
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 17 * * 1'
+
+jobs:
+  proof:
+    name: Alpha proof
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17.3"
+          otp-version: "27.0"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install agent-browser
+        run: |
+          npm install -g agent-browser
+          agent-browser install --with-deps
+
+      - name: Run shell tests
+        run: bash tests/run.sh
+
+      - name: Run evals
+        run: bash evals/run.sh
+
+      - name: Run Elixir tests
+        working-directory: elixir
+        run: |
+          mix deps.get
+          mix test
+
+      - name: Run self-host proof
+        env:
+          FORGELOOP_SELF_HOST_PROOF_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/self-host-proof
+        run: bash bin/self-host-proof.sh
+
+      - name: Capture product screenshots
+        env:
+          FORGELOOP_PRODUCT_SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/product-screenshots
+          FORGELOOP_PRODUCT_SCREENSHOT_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/product-screenshot-run
+        run: bash bin/capture-product-screenshots.sh
+
+      - name: Upload alpha proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-alpha-proof-artifacts
+          path: .artifacts
+          if-no-files-found: warn

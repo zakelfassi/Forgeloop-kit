@@ -1,0 +1,11 @@
+{
+  "previous_status": "running",
+  "status": "awaiting-human",
+  "transition": "escalated",
+  "surface": "service",
+  "mode": "workflow",
+  "reason": "Guest visibility policy still needs a human decision before the release-room recap can ship.",
+  "requested_action": "review",
+  "branch": "signalboard/broadcast-room",
+  "updated_at": "2026-03-25T17:42:00Z"
+}

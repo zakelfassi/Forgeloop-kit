@@ -31,6 +31,7 @@ The UI should make Forgeloop feel like:
 - The design should help explain this transition clearly.
 - The landing page should communicate both current capability and where the v2 track is headed.
 - The dashboard should feel production-ready even while some surfaces remain alpha.
+- Public screenshots should come from the real HUD rendered against a seeded canonical demo repo, not mocked composites.
 
 ## Core design goals
 
@@ -204,6 +205,7 @@ The first screen should answer:
 
 ### Landing page
 - hero statement with immediate product differentiation
+- real product screenshots sourced from the shipped HUD
 - release-track cards or equivalent structure
 - proof / trust section with commands and outcomes
 - roadmap / status surface that feels honest
