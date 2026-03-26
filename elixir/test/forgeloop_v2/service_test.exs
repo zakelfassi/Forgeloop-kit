@@ -348,7 +348,7 @@ defmodule ForgeloopV2.ServiceTest do
     assert state.surface == "service"
   end
 
-  test "slot endpoints start, inspect, and stop parallel read slots while overview stays slot-aware" do
+  test "slot endpoints start, inspect, and stop read and write slots while overview stays slot-aware" do
     repo = create_git_repo_fixture!(loop_script_body: @shell_sleep, plan_content: "- [ ] build\n")
     layout = create_ui_layout!(repo.repo_root)
     run_git!(repo.repo_root, ["add", "."])
@@ -368,7 +368,7 @@ defmodule ForgeloopV2.ServiceTest do
     second =
       post_json!(base_url <> "/api/slots", %{
         "lane" => "checklist",
-        "action" => "plan",
+        "action" => "build",
         "surface" => "openclaw"
       })
 
@@ -399,9 +399,27 @@ defmodule ForgeloopV2.ServiceTest do
     assert detail["data"]["lane"] == "checklist"
     assert detail["data"]["action"] == "plan"
     assert detail["data"]["runtime_surface"] == "ui"
+    assert detail["data"]["write_class"] == "read"
+    assert detail["data"]["coordination_scope"] == "slot_local"
     assert is_binary(detail["data"]["worktree_path"])
     assert String.starts_with?(slot_summary["slot_paths"]["root"], config.v2_state_dir)
     assert detail["data"]["coordination_paths"]["requests"] != config.requests_file
+
+    second_detail = get_json!(base_url <> "/api/slots/#{second_slot_id}")
+    assert second_detail["data"]["action"] == "build"
+    assert second_detail["data"]["write_class"] == "write"
+    assert second_detail["data"]["coordination_scope"] == "canonical"
+    assert second_detail["data"]["coordination_paths"]["requests"] == config.requests_file
+
+    write_conflict =
+      post_json_response!(base_url <> "/api/slots", %{
+        "lane" => "checklist",
+        "action" => "build",
+        "surface" => "service"
+      })
+
+    assert write_conflict.status == 409
+    assert write_conflict.body["error"]["reason"] == "write_slot_capacity_reached"
 
     stop_payload = post_json!(base_url <> "/api/slots/#{first_slot_id}/stop", %{"reason" => "kill"})
     assert stop_payload["data"]["slot_id"] == first_slot_id
@@ -414,11 +432,18 @@ defmodule ForgeloopV2.ServiceTest do
     refute first_after_stop["data"]["status"] == "running"
     assert second_after_stop["data"]["status"] in ["running", "stopping", "stopped", "completed", "blocked"]
 
-    _ = post_json!(base_url <> "/api/slots/#{second_slot_id}/stop", %{"reason" => "kill"})
-
     assert File.read!(config.requests_file) == ""
     assert File.read!(config.questions_file) == ""
     assert File.read!(config.escalations_file) == ""
+
+    _ = post_json!(base_url <> "/api/slots/#{second_slot_id}/stop", %{"reason" => "kill"})
+
+    wait_until(fn ->
+      status = get_json!(base_url <> "/api/slots/#{second_slot_id}")["data"]["status"]
+      status in ["stopped", "blocked", "failed", "completed"]
+    end, 5_000)
+
+    assert File.read!(config.requests_file) =~ "[PAUSE]"
   end
 
   test "workflow preflight slots use the slot service endpoints without mutating canonical files" do
@@ -469,6 +494,75 @@ defmodule ForgeloopV2.ServiceTest do
     detail = get_json!(base_url <> "/api/slots/#{slot_id}")
     assert detail["data"]["workflow_name"] == "alpha"
     assert detail["data"]["coordination_paths"]["requests"] != config.requests_file
+    assert File.read!(config.requests_file) == ""
+    assert File.read!(config.questions_file) == ""
+    assert File.read!(config.escalations_file) == ""
+  end
+
+  test "workflow run slots use canonical coordination files while staying slot-visible through the service" do
+    repo = create_git_repo_fixture!(plan_content: "# done\n")
+    create_workflow_package!(repo.repo_root, "alpha")
+
+    runner_path =
+      write_executable!(Path.join(repo.repo_root, "bin/workflow-runner"), """
+      #!/usr/bin/env bash
+      set -euo pipefail
+      if [[ "${1:-}" != "run" ]]; then
+        echo "unexpected:$*" >&2
+        exit 2
+      fi
+      shift
+      mode="run"
+      if [[ "${1:-}" == "--preflight" ]]; then
+        mode="preflight"
+        shift
+      fi
+      workflow="${1:-unknown}"
+      echo "workflow:${workflow}:${mode}"
+      sleep 1
+      """)
+
+    layout = create_ui_layout!(repo.repo_root)
+
+    run_git!(repo.repo_root, ["add", "."])
+    run_git!(repo.repo_root, ["commit", "-m", "workflow run slot fixture"])
+
+    config =
+      config_for!(repo.repo_root,
+        app_root: layout.app_root,
+        service_port: 0,
+        workflow_runner: runner_path,
+        shell_driver_enabled: false
+      )
+
+    {:ok, pid, base_url} = start_service!(config)
+    on_exit(fn -> Process.exit(pid, :shutdown) end)
+
+    payload =
+      post_json!(base_url <> "/api/slots", %{
+        "lane" => "workflow",
+        "action" => "run",
+        "workflow_name" => "alpha",
+        "surface" => "openclaw"
+      })
+
+    slot_id = payload["data"]["slot_id"]
+    assert payload["data"]["lane"] == "workflow"
+    assert payload["data"]["action"] == "run"
+    assert payload["data"]["write_class"] == "write"
+    assert payload["data"]["coordination_scope"] == "canonical"
+
+    wait_until(fn ->
+      status = get_json!(base_url <> "/api/slots/#{slot_id}")["data"]["status"]
+      status == "completed"
+    end, 5_000)
+
+    detail = get_json!(base_url <> "/api/slots/#{slot_id}")
+    assert detail["data"]["workflow_name"] == "alpha"
+    assert detail["data"]["coordination_scope"] == "canonical"
+    assert detail["data"]["coordination_paths"]["requests"] == config.requests_file
+    assert detail["data"]["coordination_paths"]["questions"] == config.questions_file
+    assert detail["data"]["coordination_paths"]["escalations"] == config.escalations_file
     assert File.read!(config.requests_file) == ""
     assert File.read!(config.questions_file) == ""
     assert File.read!(config.escalations_file) == ""

@@ -54,7 +54,7 @@ wait_for_http() {
   exit 1
 }
 
-mkdir -p "$TMP_REPO/bin" "$TMP_REPO/lib" "$TMP_REPO/elixir/priv/static"
+mkdir -p "$TMP_REPO/bin" "$TMP_REPO/lib" "$TMP_REPO/elixir/priv/static" "$TMP_REPO/workflows/alpha"
 cat >"$TMP_REPO/bin/loop.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -62,6 +62,30 @@ trap 'exit 0' TERM INT
 sleep 30
 EOF
 chmod +x "$TMP_REPO/bin/loop.sh"
+cat >"$TMP_REPO/bin/workflow-runner" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "run" ]]; then
+  echo "unexpected:$*" >&2
+  exit 2
+fi
+shift
+mode="run"
+if [[ "${1:-}" == "--preflight" ]]; then
+  mode="preflight"
+  shift
+fi
+workflow="${1:-unknown}"
+echo "workflow:${workflow}:${mode}"
+sleep 1
+EOF
+chmod +x "$TMP_REPO/bin/workflow-runner"
+cat >"$TMP_REPO/workflows/alpha/workflow.toml" <<'EOF'
+version = 1
+EOF
+cat >"$TMP_REPO/workflows/alpha/workflow.dot" <<'EOF'
+digraph Alpha {}
+EOF
 cp -R "$ROOT_DIR/lib/." "$TMP_REPO/lib/"
 cp "$ROOT_DIR/config.sh" "$TMP_REPO/config.sh"
 cp -R "$ROOT_DIR/elixir/priv/static/ui" "$TMP_REPO/elixir/priv/static/ui"
@@ -99,7 +123,7 @@ cat >"$TMP_REPO/.forgeloop/runtime-state.json" <<'EOF'
 }
 EOF
 cat >"$TMP_REPO/.gitignore" <<'EOF'
-.forgeloop/v2/
+.forgeloop/
 EOF
 
 (
@@ -117,7 +141,8 @@ EOF
   cd "$ROOT_DIR/elixir"
   mix deps.get >/dev/null
   mix compile >/dev/null
-  mix forgeloop_v2.serve --repo "$TMP_REPO" --host "$HOST" --port "$PORT" >"$SERVICE_LOG" 2>&1
+  FORGELOOP_WORKFLOW_RUNNER="$TMP_REPO/bin/workflow-runner" \
+    mix forgeloop_v2.serve --repo "$TMP_REPO" --host "$HOST" --port "$PORT" >"$SERVICE_LOG" 2>&1
 ) &
 SERVER_PID=$!
 
@@ -169,6 +194,16 @@ function parsePayload(result) {
   return JSON.parse(text.slice(start));
 }
 
+async function waitForSlotStatus(tools, slotId, matcher, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const detail = parsePayload(await tools.forgeloop_slots.execute(`slot-wait-${slotId}`, { action: 'detail', slotId }));
+    if (matcher(detail.status, detail)) return detail;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`timed out waiting for slot ${slotId}`);
+}
+
 const tools = registerPlugin();
 
 const overviewBefore = await tools.forgeloop_overview.execute('overview-before', { limit: 6 });
@@ -210,6 +245,47 @@ const slotStop = await tools.forgeloop_slots.execute('slot-stop', {
 const slotStopPayload = parsePayload(slotStop);
 assert.equal(slotStopPayload.slot_id, slotId);
 assert.ok(['stopping', 'completed', 'blocked'].includes(slotStopPayload.status));
+
+const buildSlot = await tools.forgeloop_slots.execute('slot-build', {
+  action: 'start',
+  lane: 'checklist',
+  slotAction: 'build'
+});
+const buildSlotPayload = parsePayload(buildSlot);
+const buildSlotId = buildSlotPayload.slot_id;
+assert.equal(buildSlotPayload.write_class, 'write');
+assert.equal(buildSlotPayload.coordination_scope, 'canonical');
+
+const buildSlotDetail = parsePayload(await tools.forgeloop_slots.execute('slot-build-detail', { action: 'detail', slotId: buildSlotId }));
+assert.equal(buildSlotDetail.coordination_paths.requests, path.join(repoRoot, 'REQUESTS.md'));
+assert.equal(buildSlotDetail.coordination_paths.questions, path.join(repoRoot, 'QUESTIONS.md'));
+assert.equal(buildSlotDetail.coordination_paths.escalations, path.join(repoRoot, 'ESCALATIONS.md'));
+
+const buildSlotStop = await tools.forgeloop_slots.execute('slot-build-stop', {
+  action: 'stop',
+  slotId: buildSlotId,
+  stopReason: 'kill'
+});
+const buildSlotStopPayload = parsePayload(buildSlotStop);
+assert.equal(buildSlotStopPayload.slot_id, buildSlotId);
+assert.ok(['stopping', 'completed', 'blocked'].includes(buildSlotStopPayload.status));
+assert.match(fs.readFileSync(path.join(repoRoot, 'REQUESTS.md'), 'utf8'), /\[PAUSE\]/);
+
+const workflowRun = await tools.forgeloop_slots.execute('workflow-run-slot', {
+  action: 'start',
+  lane: 'workflow',
+  slotAction: 'run',
+  workflowName: 'alpha'
+});
+const workflowRunPayload = parsePayload(workflowRun);
+const workflowRunSlotId = workflowRunPayload.slot_id;
+assert.equal(workflowRunPayload.write_class, 'write');
+assert.equal(workflowRunPayload.coordination_scope, 'canonical');
+const workflowRunDetail = await waitForSlotStatus(tools, workflowRunSlotId, (status) => ['completed', 'blocked', 'failed'].includes(status));
+assert.equal(workflowRunDetail.workflow_name, 'alpha');
+assert.equal(workflowRunDetail.coordination_scope, 'canonical');
+assert.equal(workflowRunDetail.coordination_paths.requests, path.join(repoRoot, 'REQUESTS.md'));
+assert.match(workflowRunDetail.last_result, /workflow run completed for alpha|completed|slot_process_down/);
 
 const answer = 'Use the Signalboard backlog first.';
 await tools.forgeloop_question.execute('answer', {

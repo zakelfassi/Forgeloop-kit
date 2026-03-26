@@ -26,7 +26,7 @@ Forgeloop v2 is an **experimental Elixir parity layer** growing beside the defau
 - a one-command manual `./forgeloop.sh self-host-proof` harness for the real loopback service + HUD path, using `agent-browser` plus a disposable proof-repo snapshot when git is available instead of mutating the live checkout
 - a seeded demo repo plus `./bin/capture-product-screenshots.sh` path for reproducible public HUD screenshots rendered from real loopback state
 - a repo-local OpenClaw workspace plugin seam that targets the same loopback control plane instead of bypassing it, including a shared service-owned coordination read model for HUD/OpenClaw, a bounded operator brief/timeline, one-window bounded playbooks/recommendations, and conservative optional one-action apply
-- an experimental multi-slot coordinator for parallel read-heavy managed runs, with slot-scoped worktree/runtime metadata plus slot-aware HUD/service/OpenClaw read models
+- an experimental multi-slot coordinator for parallel managed runs, with slot-scoped worktree/runtime metadata plus slot-aware HUD/service/OpenClaw read models: parallel read slots (`plan`, workflow `preflight`) and one serialized write slot (`build`, workflow `run`)
 
 ## Coexistence Rule
 
@@ -60,7 +60,7 @@ With parser/read-path groundwork and repo-safe mutation helpers now in place, El
 2. a bounded single-child babysitter/supervisor above the child loop
 3. canonical repo-root artifacts preserved while shell execution happens inside the disposable checkout
 4. a loopback-only JSON control-plane service layered on top of the same file-first state
-5. a bounded slot coordinator above that service for parallel read-class worktree runs (`plan` and workflow `preflight`) without widening the root fail-closed contract
+5. a bounded slot coordinator above that service for slot-scoped worktree runs without widening the root fail-closed contract: parallel read-class work (`plan`, workflow `preflight`) plus one serialized write-class slot (`build`, workflow `run`)
 
 That experimental slice preserves the same fail-closed artifact chain while making it possible to let Forgeloop work on Forgeloop inside a disposable worktree, expose the current state over a local service without introducing a second source of truth, and route Elixir-daemon checklist work through the same babysitter/worktree substrate. In phase 1, that service-backed backlog is still the implementation plan file, not a full native-Elixir planner replacement or tracker unification layer.
 
@@ -120,7 +120,7 @@ These are still out of scope for the current phase:
 - event compaction/indexed search beyond the current bounded replay/tail API
 - long-lived worktree orchestration beyond the current managed daemon launcher
 - daemon-integrated UI/OpenClaw orchestration beyond the current shared coordination read model, bounded brief/timeline, single-window bounded OpenClaw playbook/apply seam, slot-aware read surfaces, and `[WORKFLOW]` request
-- multi-slot write-class orchestration beyond the current read-slot coordinator (`build`, workflow `run`, promotion, queueing, and priorities)
+- multi-slot orchestration beyond the current bounded slot coordinator (more than one active write slot, promotion, queueing, and priorities)
 - checkpoint-resume semantics and broader workflow orchestration beyond the current bounded history sidecar
 - graph workflows
 - exact checkpoint/resume

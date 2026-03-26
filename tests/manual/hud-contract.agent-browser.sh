@@ -286,8 +286,13 @@ wait_for_json_expr "overview shows replan requested" '/api/overview?limit=5' '.d
 
 click_selector "queue slot button responds" '#control-slot-plan'
 wait_for_text_contains "slot notice renders" '#control-status' 'Plan slot launched via UI surface.'
-wait_for_json_expr "overview exposes a started slot" '/api/overview?limit=20' '.data.slots.counts.total >= 1 and any(.data.slots.items[]; .lane == "checklist" and .action == "plan")'
+wait_for_json_expr "overview exposes a started plan slot" '/api/overview?limit=20' '.data.slots.counts.total >= 1 and any(.data.slots.items[]; .lane == "checklist" and .action == "plan")'
 wait_for_text_contains "slots panel reflects slot coordinator" '#slots-body' 'Slot coordinator snapshot'
+
+click_selector "queue build slot button responds" '#control-slot-build'
+wait_for_text_contains "build slot notice renders" '#control-status' 'Build slot launched via UI surface.'
+wait_for_json_expr "overview exposes a started build slot" '/api/overview?limit=20' '.data.slots.counts.total >= 1 and any(.data.slots.items[]; .lane == "checklist" and .action == "build" and .write_class == "write")'
+wait_for_text_contains "slots panel reflects canonical write coordination" '#slots-body' 'canonical'
 
 click_selector "run-plan button responds" '#control-run-plan'
 wait_for_text_contains "run-plan notice renders" '#control-status' 'plan run launched via UI surface.'

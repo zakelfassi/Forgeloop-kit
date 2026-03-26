@@ -452,9 +452,14 @@ function renderControls(snapshot) {
   const runtimeSurface = babysitter.runtime_surface || activeRun.runtime_surface || "—";
   const manualStartBlocked = ownership.startAllowed === false;
   const slots = snapshot.slots || { counts: {}, limits: {} };
+  const slotItems = Array.isArray(slots.items) ? slots.items : [];
   const activeSlots = Number(slots.counts?.active || 0);
+  const activeReadSlots = slotItems.filter((slot) => ["starting", "running", "stopping"].includes(slot.status) && slot.write_class !== "write").length;
+  const activeWriteSlots = slotItems.filter((slot) => ["starting", "running", "stopping"].includes(slot.status) && slot.write_class === "write").length;
   const readSlotLimit = Number(slots.limits?.read || 0);
-  const slotStartBlocked = manualStartBlocked || (readSlotLimit > 0 && activeSlots >= readSlotLimit);
+  const writeSlotLimit = Number(slots.limits?.write || 0);
+  const readSlotStartBlocked = manualStartBlocked || (readSlotLimit > 0 && activeReadSlots >= readSlotLimit);
+  const writeSlotStartBlocked = manualStartBlocked || (writeSlotLimit > 0 && activeWriteSlots >= writeSlotLimit);
 
   refs.controlsBody.className = "stack";
   refs.controlsBody.innerHTML = `
@@ -492,12 +497,13 @@ function renderControls(snapshot) {
         <p class="subtle-copy">Manual runs use <code>surface: "ui"</code> and still flow through the babysitter, worktree, and existing escalation chain.</p>
       </div>
       <div class="control-card">
-        <h3>Parallel read slots</h3>
+        <h3>Parallel slots</h3>
         <div class="control-buttons">
-          ${controlButton("slot-plan", "Queue plan slot", { disabled: slotStartBlocked || isPending("slot-plan") })}
+          ${controlButton("slot-plan", "Queue plan slot", { disabled: readSlotStartBlocked || isPending("slot-plan") })}
+          ${controlButton("slot-build", "Queue build slot", { disabled: writeSlotStartBlocked || isPending("slot-build") })}
         </div>
-        <p class="subtle-copy">Slots stay ephemeral, use separate disposable worktrees, and do not mutate the canonical repo-root coordination files directly.</p>
-        <p class="subtle-copy">Active read slots: <strong>${activeSlots}</strong> / <strong>${readSlotLimit || "—"}</strong>.</p>
+        <p class="subtle-copy">Read slots stay ephemeral, use separate disposable worktrees, and keep coordination evidence slot-local. Write slots still run in isolated worktrees, but preserve canonical repo-root coordination files.</p>
+        <p class="subtle-copy">Active read slots: <strong>${activeReadSlots}</strong> / <strong>${readSlotLimit || "—"}</strong>. Active write slots: <strong>${activeWriteSlots}</strong> / <strong>${writeSlotLimit || "—"}</strong>.</p>
       </div>
     </div>
   `;
@@ -1224,6 +1230,7 @@ function renderWorkflows(workflowOverview, ownershipOverride) {
         <div class="control-buttons">
           ${controlButton("workflow-preflight", "Preflight", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:preflight`), workflowName })}
           ${controlButton("workflow-slot-preflight", "Preflight slot", { disabled: workflowStartBlocked || isPending(`workflow-slot:${workflowName}:preflight`), workflowName })}
+          ${controlButton("workflow-slot-run", "Run slot", { disabled: workflowStartBlocked || isPending(`workflow-slot:${workflowName}:run`), workflowName })}
           ${controlButton("workflow-run", "Run", { disabled: workflowStartBlocked || isPending(`workflow:${workflowName}:run`), workflowName })}
         </div>
       </article>
@@ -1242,7 +1249,7 @@ function renderSlots(slots, ownershipOverride) {
 
   if (!items.length) {
     refs.slotsBody.className = "stack empty";
-    refs.slotsBody.innerHTML = `<p>No active or historical slot runs yet.</p><p class="subtle-copy">Launch a plan slot from the action deck or a workflow preflight slot from a workflow card.</p>`;
+    refs.slotsBody.innerHTML = `<p>No active or historical slot runs yet.</p><p class="subtle-copy">Launch a plan/build slot from the action deck or a workflow preflight/run slot from a workflow card.</p>`;
     return;
   }
 
@@ -1253,6 +1260,7 @@ function renderSlots(slots, ownershipOverride) {
         ${badge(`${counts.active || 0} active`, counts.active ? "warn" : "good")}
         ${badge(`${counts.blocked || 0} blocked`, counts.blocked ? "bad" : "info")}
         ${badge(`read limit ${limits.read || "—"}`, "info")}
+        ${badge(`write limit ${limits.write || "—"}`, "purple")}
         ${badge(`owner ${ownership.runtimeOwner?.owner || "none"}`, ownership.runtimeOwner?.owner === "slots" ? "purple" : "info")}
       </div>
       <h3>Slot coordinator snapshot</h3>
@@ -1272,6 +1280,7 @@ function renderSlots(slots, ownershipOverride) {
           <p>${escapeHtml(slot.workflow_name ? `${slot.workflow_name} (${slot.action || "preflight"})` : `${slot.lane || "slot"} ${slot.action || "run"}`)}</p>
           <div class="metric-grid compact-grid">
             ${metric("Write class", slot.write_class || "read")}
+            ${metric("Coordination", slot.coordination_scope || (slot.write_class === "write" ? "canonical" : "slot_local"))}
             ${metric("Branch", slot.branch || "—")}
             ${metric("Started", slot.started_at || "—")}
             ${metric("Updated", slot.updated_at || "—")}
@@ -2265,12 +2274,16 @@ async function handleControlClick(event) {
     return;
   }
 
-  if (action === "slot-plan") {
-    await runAction("slot-plan", async () => {
-      await postJson(slotsPath(), { lane: "checklist", action: "plan", surface: "ui", ephemeral: true });
-      await refreshOverview("Plan slot launched via UI surface.");
+  if (action === "slot-plan" || action === "slot-build") {
+    const slotAction = action === "slot-plan" ? "plan" : "build";
+
+    await runAction(action, async () => {
+      await postJson(slotsPath(), { lane: "checklist", action: slotAction, surface: "ui", ephemeral: true });
+      await refreshOverview(`${slotAction} slot launched via UI surface.`);
     }, {
-      conflictText: "A slot or managed run currently owns the repo-level coordinator claim. Let it settle before queueing another slot."
+      conflictText: slotAction === "build"
+        ? "The slot coordinator cannot admit another write slot right now. Let the active write slot finish or clear the start gate first."
+        : "A slot or managed run currently owns the repo-level coordinator claim. Let it settle before queueing another slot."
     });
     return;
   }
@@ -2301,15 +2314,18 @@ async function handleControlClick(event) {
     return;
   }
 
-  if (action === "workflow-slot-preflight") {
+  if (action === "workflow-slot-preflight" || action === "workflow-slot-run") {
     const workflowName = button.dataset.workflowName;
-    const pendingKey = `workflow-slot:${workflowName}:preflight`;
+    const slotAction = action === "workflow-slot-preflight" ? "preflight" : "run";
+    const pendingKey = `workflow-slot:${workflowName}:${slotAction}`;
 
     await runAction(pendingKey, async () => {
-      await postJson(slotsPath(), { lane: "workflow", action: "preflight", workflow_name: workflowName, surface: "ui", ephemeral: true });
-      await refreshOverview(`${workflowName} preflight slot launched via UI surface.`);
+      await postJson(slotsPath(), { lane: "workflow", action: slotAction, workflow_name: workflowName, surface: "ui", ephemeral: true });
+      await refreshOverview(`${workflowName} ${slotAction} slot launched via UI surface.`);
     }, {
-      conflictText: "The slot coordinator cannot admit another preflight slot right now. Let the current slots settle or clear the start gate first."
+      conflictText: slotAction === "run"
+        ? "The slot coordinator cannot admit another write workflow slot right now. Let the active write slot finish or clear the start gate first."
+        : "The slot coordinator cannot admit another preflight slot right now. Let the current slots settle or clear the start gate first."
     });
     return;
   }
@@ -2561,7 +2577,7 @@ function controlButton(action, label, options) {
   if (action === "pause") classes.push("danger");
   if (action === "clear-pause") classes.push("secondary");
   if (action === "replan") classes.push("secondary");
-  if (["run-plan", "run-build", "workflow-preflight", "workflow-slot-preflight", "workflow-run", "slot-plan"].includes(action)) classes.push("primary");
+  if (["run-plan", "run-build", "workflow-preflight", "workflow-slot-preflight", "workflow-slot-run", "workflow-run", "slot-plan", "slot-build"].includes(action)) classes.push("primary");
 
   const workflowNameAttr = opts.workflowName ? ` data-workflow-name="${escapeHtml(opts.workflowName)}"` : "";
   const slotIdAttr = opts.slotId ? ` data-slot-id="${escapeHtml(opts.slotId)}"` : "";

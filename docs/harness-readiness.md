@@ -27,7 +27,7 @@ This repo is harness-ready when an agent can discover the rules, run the validat
 - `docs/runtime-control.md` defines the loop stop/escalation rules.
 - `ESCALATIONS.md`, `QUESTIONS.md`, and `REQUESTS.md` form the human handoff surface.
 - `.forgeloop/runtime-state.json` is the machine-readable runtime state surface.
-- `.forgeloop/v2/slots/<slot-id>/...` now carries slot-local runtime and coordination evidence for experimental parallel read slots without overwriting the canonical repo-root control files.
+- `.forgeloop/v2/slots/<slot-id>/...` now carries slot-scoped runtime and coordination evidence for the experimental multi-slot surface: parallel read slots stay slot-local, while the single active write slot still preserves canonical repo-root coordination files.
 
 ## What Harness-Ready Means Today
 
@@ -46,7 +46,7 @@ Before calling v2 **beta**:
 - keep daemon-integrated babysitter child-run recovery and watchdog checks green as the managed path evolves
 - keep the loopback self-host proof stable across clean and dirty source checkouts
 - keep integration-surface smoke tests for plugin seams such as OpenClaw green as the control plane evolves
-- keep slot-aware service/HUD/OpenClaw proofs green as the read-slot coordinator evolves
+- keep slot-aware service/HUD/OpenClaw proofs green as the bounded multi-slot coordinator evolves
 - tighten the parity/readiness docs so they describe landed behavior precisely instead of loosely
 
 Before making v2 the **prod-default** path:

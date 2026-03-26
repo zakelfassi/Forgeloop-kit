@@ -113,9 +113,10 @@ globalThis.fetch = async (url, options = {}) => {
 
   if (parsed.pathname === "/api/slots" && (!parsed.search || parsed.search === "")) {
     if ((options.method || "GET") === "POST") {
-      return okJson({ data: { slot_id: "slot-2", lane: "checklist", action: "plan", status: "starting", runtime_surface: "openclaw" } });
+      const requestBody = JSON.parse(options.body);
+      return okJson({ data: { slot_id: "slot-2", lane: requestBody.lane, action: requestBody.action, status: "starting", runtime_surface: "openclaw", write_class: ["build", "run"].includes(requestBody.action) ? "write" : "read", coordination_scope: ["build", "run"].includes(requestBody.action) ? "canonical" : "slot_local" } });
     }
-    return okJson({ data: { items: [{ slot_id: "slot-1", lane: "checklist", action: "plan", status: "running", runtime_surface: "openclaw" }], counts: { total: 1, active: 1, blocked: 0 }, limits: { read: 3, write: 1 } } });
+    return okJson({ data: { items: [{ slot_id: "slot-1", lane: "checklist", action: "plan", status: "running", runtime_surface: "openclaw", write_class: "read", coordination_scope: "slot_local" }], counts: { total: 1, active: 1, blocked: 0 }, limits: { read: 3, write: 1 } } });
   }
 
   if (parsed.pathname === "/api/slots/slot-1") {
@@ -200,6 +201,20 @@ assert.match(slotStartResult.content[0].text, /slot-2/);
 assert.deepEqual(
   JSON.parse(fetchCalls.find((entry) => entry.url.endsWith("/api/slots") && (entry.options.method || "GET") === "POST").options.body),
   { lane: "checklist", action: "plan", surface: "openclaw", ephemeral: true }
+);
+
+const buildSlotResult = await tools.forgeloop_slots.execute("slots-3b", { action: "start", lane: "checklist", slotAction: "build" });
+assert.match(buildSlotResult.content[0].text, /"write_class": "write"/);
+assert.deepEqual(
+  JSON.parse(fetchCalls.filter((entry) => entry.url.endsWith("/api/slots") && (entry.options.method || "GET") === "POST")[1].options.body),
+  { lane: "checklist", action: "build", surface: "openclaw", ephemeral: true }
+);
+
+const workflowRunSlotResult = await tools.forgeloop_slots.execute("slots-3c", { action: "start", lane: "workflow", slotAction: "run", workflowName: "alpha" });
+assert.match(workflowRunSlotResult.content[0].text, /"action": "run"/);
+assert.deepEqual(
+  JSON.parse(fetchCalls.filter((entry) => entry.url.endsWith("/api/slots") && (entry.options.method || "GET") === "POST")[2].options.body),
+  { lane: "workflow", action: "run", workflow_name: "alpha", surface: "openclaw", ephemeral: true }
 );
 
 const slotStopResult = await tools.forgeloop_slots.execute("slots-4", { action: "stop", slotId: "slot-1", stopReason: "kill" });

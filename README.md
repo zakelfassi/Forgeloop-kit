@@ -121,11 +121,16 @@ Forgeloop ships a real-time dashboard on top of the same file-backed state, so y
 What it gives you:
 
 - **Live state** — runtime status, blockers, questions, and ownership, updating in real time via SSE
-- **Interactive controls** — pause, resume, replan, answer questions, launch one-off runs, and inspect bounded parallel read slots from the browser
+- **Interactive controls** — pause, resume, replan, answer questions, launch one-off runs, inspect bounded parallel slots from the browser, and run one serialized write slot without leaving the HUD
 - **No extra infrastructure** — no Phoenix, no database, no Node asset pipeline. Served directly by Elixir.
 - **Same source of truth** — reads and writes the same repo-local files as the CLI and daemon
 
-The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. On the current alpha track, the same loopback surface can also expose experimental parallel read slots for checklist `plan` and workflow `preflight`, with slot-local runtime metadata under `.forgeloop/v2/slots/<slot-id>/...` while the repo-root runtime state summarizes the coordinator.
+The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. On the current alpha track, the same loopback surface can also expose experimental parallel slots backed by disposable worktrees:
+
+- parallel read slots for checklist `plan` and workflow `preflight`
+- one serialized write slot for checklist `build` or workflow `run`
+
+Slot metadata lives under `.forgeloop/v2/slots/<slot-id>/...`, while repo-root runtime state stays authoritative and summarizes the coordinator.
 
 See `docs/openclaw.md` for the plugin integration.
 

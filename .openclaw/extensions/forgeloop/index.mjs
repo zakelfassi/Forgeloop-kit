@@ -307,7 +307,7 @@ function buildSlotsTool(api) {
         action: { type: "string", enum: ["list", "detail", "start", "stop"] },
         slotId: { type: "string" },
         lane: { type: "string", enum: ["checklist", "workflow"] },
-        slotAction: { type: "string", enum: ["plan", "preflight"] },
+        slotAction: { type: "string", enum: ["plan", "build", "preflight", "run"] },
         workflowName: { type: "string" },
         branch: { type: "string" },
         stopReason: { type: "string", enum: ["pause", "kill"], default: "pause" }

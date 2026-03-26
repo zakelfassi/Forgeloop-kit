@@ -175,13 +175,14 @@ defmodule ForgeloopV2.SlotCoordinator do
 
   defp do_start_slot(%State{} = state, attrs) do
     with {:ok, request} <- normalize_start_attrs(attrs),
-         :ok <- ensure_phase_a_allowed(request.run_spec),
+         :ok <- ensure_slot_action_allowed(request.run_spec),
          :ok <- ensure_start_gate(state),
          :ok <- ensure_slot_capacity(state, request.write_class),
          {:ok, next_state} <- ensure_claim(state),
          slot_id <- generate_slot_id(),
          :ok <- Slots.initialize_slot_files(next_state.config, slot_id),
-         slot_config = Slots.slot_config(next_state.config, slot_id),
+         coordination_scope = coordination_scope_for(request.write_class),
+         slot_config = Slots.slot_config(next_state.config, slot_id, coordination_scope),
          {:ok, pid} <-
            Babysitter.start_link(
              config: slot_config,
@@ -208,6 +209,7 @@ defmodule ForgeloopV2.SlotCoordinator do
           branch: request.branch,
           ephemeral: request.ephemeral,
           write_class: request.write_class,
+          coordination_scope: Atom.to_string(coordination_scope),
           status: if(snapshot.running?, do: "running", else: "starting"),
           runtime_surface: request.runtime_surface,
           worktree_path: snapshot.worktree_path,
@@ -229,6 +231,7 @@ defmodule ForgeloopV2.SlotCoordinator do
         "branch" => slot.branch,
         "runtime_surface" => slot.runtime_surface,
         "write_class" => slot.write_class,
+        "coordination_scope" => slot.coordination_scope,
         "worktree_path" => slot.worktree_path,
         "ephemeral" => slot.ephemeral
       })
@@ -336,7 +339,7 @@ defmodule ForgeloopV2.SlotCoordinator do
 
     reason_from_runtime =
       hydrated_slot.blocked_reason ||
-        runtime_reason(config, slot.slot_id)
+        runtime_reason(config, hydrated_slot)
 
     status =
       cond do
@@ -461,9 +464,9 @@ defmodule ForgeloopV2.SlotCoordinator do
   defp normalize_action(nil), do: nil
   defp normalize_action(value), do: value |> to_string() |> String.trim() |> blank_to_nil()
 
-  defp ensure_phase_a_allowed(%RunSpec{lane: :checklist, action: :plan}), do: :ok
-  defp ensure_phase_a_allowed(%RunSpec{lane: :workflow, action: :preflight}), do: :ok
-  defp ensure_phase_a_allowed(%RunSpec{} = spec), do: {:error, {:slot_action_deferred, RunSpec.lane_string(spec), RunSpec.action_string(spec)}}
+  defp ensure_slot_action_allowed(%RunSpec{lane: :checklist, action: action}) when action in [:plan, :build], do: :ok
+  defp ensure_slot_action_allowed(%RunSpec{lane: :workflow, action: action}) when action in [:preflight, :run], do: :ok
+  defp ensure_slot_action_allowed(%RunSpec{} = spec), do: {:error, {:slot_action_deferred, RunSpec.lane_string(spec), RunSpec.action_string(spec)}}
 
   defp ensure_start_gate(%State{} = state) do
     with :ok <- ensure_runtime_owner_available(state.config),
@@ -587,8 +590,8 @@ defmodule ForgeloopV2.SlotCoordinator do
     state
   end
 
-  defp runtime_reason(%Config{} = config, slot_id) do
-    slot_config = Slots.slot_config(config, slot_id)
+  defp runtime_reason(%Config{} = config, %Slot{} = slot) do
+    slot_config = Slots.slot_config(config, slot.slot_id, coordination_scope_for_slot(slot))
 
     case RuntimeStateStore.read(slot_config) do
       {:ok, state} -> blank_to_nil(state.reason)
@@ -643,6 +646,13 @@ defmodule ForgeloopV2.SlotCoordinator do
   defp generate_slot_id do
     "slot-" <> Integer.to_string(System.unique_integer([:positive]))
   end
+
+  defp coordination_scope_for("write"), do: :canonical
+  defp coordination_scope_for(_write_class), do: :slot_local
+
+  defp coordination_scope_for_slot(%Slot{coordination_scope: "canonical"}), do: :canonical
+  defp coordination_scope_for_slot(%Slot{write_class: "write"}), do: :canonical
+  defp coordination_scope_for_slot(%Slot{}), do: :slot_local
 
   defp default_driver(config) do
     if config.shell_driver_enabled do

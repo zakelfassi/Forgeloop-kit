@@ -161,7 +161,7 @@ That service reuses the same file-first control plane rather than introducing a 
 - workflow status snapshots plus managed workflow actions
 - provider health derived from the existing provider-state file + provider events
 - babysitter status plus manual babysitter `plan` / `build` start/stop
-- slot coordinator summaries plus slot-local detail for parallel read slots (`plan` and workflow `preflight`)
+- slot coordinator summaries plus slot-local detail for experimental multi-slot runs: parallel read slots (`plan`, workflow `preflight`) and one serialized write slot (`build`, workflow `run`)
 - a live SSE stream that bootstraps with one snapshot and then replays/live-streams canonical events
 - interactive UI controls for pause, clear-pause, replan, question answer/resolve, one-off `plan` / `build`, and bounded slot start/stop for parallel read slots
 
@@ -173,8 +173,9 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - question answer / resolve requests still update `QUESTIONS.md` without faking `recovered`
 - manual UI runs still flow through `Loop.run/3` via the babysitter path instead of a new executor, and record `surface: "ui"`
 - manual UI/OpenClaw slot starts now flow through a shared slot coordinator that owns the repo-level runtime claim and launches slot-scoped disposable worktrees underneath it
-- in the current phase, only read-class slots are admitted in parallel: checklist `plan` and workflow `preflight`
+- in the current phase, read-class slots can run in parallel (`plan`, workflow `preflight`), while write-class slots are serialized to one active slot at a time (`build`, workflow `run`)
 - read-class slots keep canonical repo-root coordination files untouched; any slot-local blocker evidence lives under the slot root instead of mutating `REQUESTS.md`, `QUESTIONS.md`, or `ESCALATIONS.md`
+- the current write-class slot keeps canonical repo-root coordination files authoritative while still writing slot-scoped runtime/worktree metadata for inspection
 - the repo now also ships an OpenClaw workspace plugin seam at `.openclaw/extensions/forgeloop/`; manual runs launched there record `surface: "openclaw"`
 - that OpenClaw seam now shares a service-owned coordination read model with the HUD via `/api/coordination` plus `overview.coordination`, including a bounded operator brief/timeline over the same replay window, falls back to local `/api/events` evaluation only for older services, and, with separate explicit opt-in, can still apply at most one pause / clear-pause / replan action through the same control-plane helpers
 - in phase 1, backlog visibility resolves from the configured implementation plan file rather than a unified tracker/tasks abstraction
@@ -185,7 +186,7 @@ Operator mutations still go through the same helpers and runtime-state transitio
 - JSON and SSE snapshot/event envelopes now carry additive top-level `api` metadata so the HUD and OpenClaw can follow one service-owned loopback contract without changing the underlying file-first control plane
 - `/api/overview` now also exposes an additive `ownership` read model that summarizes start-gate state across live-owner conflicts, reclaimable dead claims, stale active-run cleanup, and malformed metadata while keeping raw `runtime_owner` / `babysitter` fields available for compatibility
 - manual start surfaces now auto-clean stale babysitter metadata before launching, while malformed ownership or active-run files block starts fail-closed with stable reason codes plus additive `error.ownership` context for operator-facing clients
-- `/api/slots`, `/api/slots/:slot_id`, and `/api/slots/:slot_id/stop` now expose the current parallel read-slot surface without changing the underlying file-first control plane
+- `/api/slots`, `/api/slots/:slot_id`, and `/api/slots/:slot_id/stop` now expose the current experimental multi-slot surface without changing the underlying file-first control plane
 - canonical repo files and the existing JSON endpoints remain authoritative
 
 Still intentionally deferred here:

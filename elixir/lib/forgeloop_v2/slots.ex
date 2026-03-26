@@ -10,6 +10,7 @@ defmodule ForgeloopV2.Slots.Slot do
     :branch,
     :ephemeral,
     :write_class,
+    :coordination_scope,
     :status,
     :runtime_surface,
     :worktree_path,
@@ -70,19 +71,39 @@ defmodule ForgeloopV2.Slots do
   def slot_escalations_path(%Config{} = config, slot_id),
     do: Path.join(slot_coordination_dir(config, slot_id), "ESCALATIONS.md")
 
-  @spec slot_config(Config.t(), String.t()) :: Config.t()
-  def slot_config(%Config{} = base_config, slot_id) when is_binary(slot_id) and slot_id != "" do
+  @spec slot_config(Config.t(), String.t(), :slot_local | :canonical) :: Config.t()
+  def slot_config(%Config{} = base_config, slot_id, coordination_scope \\ :slot_local)
+      when is_binary(slot_id) and slot_id != "" do
     slot_root = slot_dir(base_config, slot_id)
+
+    coordination_files =
+      case coordination_scope do
+        :canonical ->
+          %{
+            requests_file: base_config.requests_file,
+            questions_file: base_config.questions_file,
+            escalations_file: base_config.escalations_file,
+            plan_file: base_config.plan_file
+          }
+
+        :slot_local ->
+          %{
+            requests_file: slot_requests_path(base_config, slot_id),
+            questions_file: slot_questions_path(base_config, slot_id),
+            escalations_file: slot_escalations_path(base_config, slot_id),
+            plan_file: slot_plan_path(base_config, slot_id)
+          }
+      end
 
     %Config{
       base_config
       | runtime_dir: slot_root,
         runtime_state_file: slot_runtime_state_path(base_config, slot_id),
         v2_state_dir: Path.join(slot_root, "v2"),
-        requests_file: slot_requests_path(base_config, slot_id),
-        questions_file: slot_questions_path(base_config, slot_id),
-        escalations_file: slot_escalations_path(base_config, slot_id),
-        plan_file: slot_plan_path(base_config, slot_id)
+        requests_file: coordination_files.requests_file,
+        questions_file: coordination_files.questions_file,
+        escalations_file: coordination_files.escalations_file,
+        plan_file: coordination_files.plan_file
     }
   end
 
@@ -172,6 +193,7 @@ defmodule ForgeloopV2.Slots do
       branch: slot.branch,
       ephemeral: slot.ephemeral,
       write_class: slot.write_class,
+      coordination_scope: effective_coordination_scope(slot),
       status: slot.status,
       runtime_surface: slot.runtime_surface,
       worktree_path: slot.worktree_path,
@@ -185,7 +207,7 @@ defmodule ForgeloopV2.Slots do
 
   @spec detail(Config.t(), Slot.t()) :: map()
   def detail(%Config{} = config, %Slot{} = slot) do
-    slot_config = slot_config(config, slot.slot_id)
+    slot_config = slot_config(config, slot.slot_id, effective_coordination_scope_atom(slot))
     runtime_state = read_runtime_state(slot_config)
     questions = read_questions(slot_config)
     escalations = read_escalations(slot_config)
@@ -215,6 +237,7 @@ defmodule ForgeloopV2.Slots do
       "branch" => slot.branch,
       "ephemeral" => slot.ephemeral,
       "write_class" => slot.write_class,
+      "coordination_scope" => effective_coordination_scope(slot),
       "status" => slot.status,
       "runtime_surface" => slot.runtime_surface,
       "worktree_path" => slot.worktree_path,
@@ -240,6 +263,7 @@ defmodule ForgeloopV2.Slots do
              branch: string_value(payload, "branch"),
              ephemeral: truthy?(payload, "ephemeral"),
              write_class: string_value(payload, "write_class"),
+             coordination_scope: blank_to_nil(string_value(payload, "coordination_scope")),
              status: string_value(payload, "status"),
              runtime_surface: string_value(payload, "runtime_surface"),
              worktree_path: blank_to_nil(string_value(payload, "worktree_path")),
@@ -263,7 +287,7 @@ defmodule ForgeloopV2.Slots do
   end
 
   defp hydrate(%Config{} = config, %Slot{} = slot) do
-    slot_config = slot_config(config, slot.slot_id)
+    slot_config = slot_config(config, slot.slot_id, effective_coordination_scope_atom(slot))
     runtime_state = read_runtime_state(slot_config)
     events = read_events(slot_config)
     latest_event = List.last(events)
@@ -330,6 +354,19 @@ defmodule ForgeloopV2.Slots do
     slot_config = slot_config(config, slot_id)
     _ = ForgeloopV2.Worktree.cleanup_stale(slot_config)
     :ok
+  end
+
+  defp effective_coordination_scope(%Slot{coordination_scope: scope}) when scope in ["canonical", "slot_local"],
+    do: scope
+
+  defp effective_coordination_scope(%Slot{write_class: "write"}), do: "canonical"
+  defp effective_coordination_scope(%Slot{}), do: "slot_local"
+
+  defp effective_coordination_scope_atom(slot) do
+    case effective_coordination_scope(slot) do
+      "canonical" -> :canonical
+      _ -> :slot_local
+    end
   end
 
   defp maybe_copy(source, target) do

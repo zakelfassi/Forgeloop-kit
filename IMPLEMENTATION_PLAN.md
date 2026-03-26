@@ -43,6 +43,29 @@ Format:
     - The HUD now renders a slots rail and can launch checklist plan slots or workflow preflight slots from the same operator surface.
     - The OpenClaw plugin now exposes `forgeloop_slots` for list/detail/start/stop against the real loopback service.
 
+- [x] Extend the bounded multi-slot coordinator with one serialized write-class slot
+  - Acceptance:
+    - The slot coordinator admits exactly one active write slot at a time while preserving parallel read slots.
+    - Phase B supports checklist `build` and workflow `run` as write-class slots, while keeping canonical repo-root coordination files authoritative for that one write owner.
+    - Slot-scoped metadata and service/HUD/OpenClaw read models stay stable for both read and write slots.
+    - OpenClaw loopback smoke and browser HUD proof both cover the write-slot surface in addition to the read-slot surface.
+  - REQUIRED TESTS:
+    - `cd elixir && mix test`
+    - `bash tests/openclaw-plugin.test.sh`
+    - `bash tests/openclaw-loopback-smoke.test.sh`
+    - `bash tests/manual/hud-contract.agent-browser.sh`
+    - `bash tests/run.sh`
+    - `bash evals/run.sh`
+    - `bash bin/self-host-proof.sh`
+  - Non-goals:
+    - no more than one active write slot
+    - no queueing or priorities yet
+    - no automatic promotion or merge path yet
+  - Shipped behavior:
+    - The slot coordinator now treats checklist `build` and workflow `run` as write-class slots, keeps them serialized to one active write slot, and preserves canonical repo-root coordination files for that slot while still writing slot-scoped runtime/worktree metadata.
+    - The loopback service, HUD, and OpenClaw seam now expose and launch both read and write slots against the same slot-aware control plane.
+    - The OpenClaw loopback smoke and browser HUD proof now exercise write-slot start/detail/stop behavior in addition to the Phase A read-slot path.
+
 - [x] Add a client-only Director Mode for the HUD so Forgeloop can feel stream-worthy without introducing a new control plane
   - Acceptance:
     - The HUD exposes a scene switch between the current operator view and an additive spectator-facing Director Mode.
