@@ -1,19 +1,19 @@
-# Upgrading from Stable v1 to the V2 Alpha Track
+# Upgrading from Stable v1 to the V2 Beta Track
 
-This guide is for teams already on **Forgeloop v1.0.0** who want to try **v2 alpha** without risking their current setup.
+This guide is for teams already on **Forgeloop v1.0.0** who want to try **v2 beta** without risking their current setup.
 
-The short version: evaluate v2 on a branch or disposable clone. Keep v1 easy to restore. Run both proof suites before you commit. Treat today’s v2 as **serious alpha**, not a default-runtime replacement.
+The short version: evaluate v2 on a branch or disposable clone. Keep v1 easy to restore. Run both proof suites before you commit. Treat today’s v2 as **beta**, not a default-runtime replacement.
 
 See also:
 
 - `docs/release-tracks.md`
 - `docs/runtime-control.md`
 - `docs/v2-roadmap.md`
-- `../design.md` for the current landing-page / HUD launch direction on the alpha track
+- `../design.md` for the current landing-page / HUD launch direction on the beta track
 
-## What changes on the V2 alpha track
+## What changes on the V2 beta track
 
-v2 alpha is not just a runtime swap — it adds a broader developer experience:
+v2 beta is not just a runtime swap — it adds a broader developer experience:
 
 - **Live dashboard** with real-time state, blockers, and interactive controls
 - **Event streams** you can replay and inspect
@@ -64,7 +64,7 @@ That sequence gives you a fast confidence check:
 
 - updated vendored kit contents from the newer checkout
 - the public safe-autonomy proof (`evals`)
-- the manual alpha release proof for the real loopback service/HUD path (`self-host-proof`)
+- the manual beta release proof for the real loopback service/HUD path (`self-host-proof`)
 - the broader shell regression suite from the vendored kit
 
 ## Recommended post-upgrade checks
@@ -98,7 +98,7 @@ Check these files after normal runs and after any pause/escalation path:
 - `ESCALATIONS.md`
 - `.forgeloop/runtime-state.json`
 
-## Daemon posture while evaluating alpha
+## Daemon posture while evaluating beta
 
 If you want the newer docs/service/HUD/operator surfaces but want to stay on the legacy public daemon path, force it explicitly:
 
@@ -110,7 +110,7 @@ Use that during evaluation when you want:
 
 - newer surfaces and docs
 - explicit legacy daemon behavior
-- lower risk while comparing alpha work against stable expectations
+- lower risk while comparing beta work against stable expectations
 
 ## What to pay attention to during evaluation
 
@@ -142,7 +142,7 @@ If v2 doesn't earn your trust yet, roll back:
 - [ ] Review canonical repo-local artifacts after a normal run
 - [ ] Review canonical repo-local artifacts after a pause/escalation path
 - [ ] Decide whether daemon evaluation should stay on `FORGELOOP_DAEMON_RUNTIME=bash`
-- [ ] Record findings before adopting the alpha track more broadly
+- [ ] Record findings before adopting the beta track more broadly
 
 ## Read next
 

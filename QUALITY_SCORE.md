@@ -2,13 +2,13 @@
 
 ## Current Grade
 
-`B+`
+`A-`
 
 ## Current Posture
 
 - **v1.0.0** is still the production/stable track.
-- **`main` / v2** is now a **serious alpha**: the shell gate, eval harness, Elixir suite, self-host proof, public entrypoint smokes, and reproducible product screenshots are all part of the release story.
-- It is **not beta yet** and **not ready to become the default runtime** yet.
+- **`main` / v2** is now a **beta track**: the shell gate, eval harness, Elixir suite, self-host proof, public entrypoint smokes, and reproducible product screenshots are all part of the release story.
+- It is **not** ready to become the default runtime yet.
 
 ## Release Scoreboard
 
@@ -30,9 +30,9 @@ See `docs/v2-release-checklist.md` for the full ship/no-ship checklist.
 
 ## Promotion Rubric
 
-### Alpha-ready now
+### Beta-ready now
 
-Alpha is credible when all of these stay true:
+Beta is credible because all of these are now true:
 
 - shell regressions pass via `bash tests/run.sh`
 - fail-closed runtime scenarios pass via `bash evals/run.sh`
@@ -48,7 +48,7 @@ Do **not** call v2 beta until the checklist in `docs/v2-release-checklist.md` is
 In practice that means:
 
 - public entrypoint smokes stay green across repo-root and vendored layouts for daemon, service, and workflow paths
-- the alpha proof cadence stays green enough that release-review evidence is fresh, not one-off theater
+- the beta proof cadence stays green enough that release-review evidence is fresh, not one-off theater
 - disposable-worktree cleanup and babysitter recovery/watchdog checks are explicit and green
 - the OpenClaw/plugin seam has bounded smoke coverage, not just prose confidence
 - the release/readiness/parity docs all reflect the same truth about what is landed and what is still deferred
@@ -75,8 +75,8 @@ Do **not** make v2 the default public runtime until all of these are true:
   - `tests/daemon-entrypoint-layouts.test.sh`
   - `tests/service-entrypoint-layouts.test.sh`
   - `tests/workflow-entrypoint-layouts.test.sh`
-- Alpha proof workflow:
-  - `.github/workflows/v2-alpha-proof.yml`
+- Beta proof workflow:
+  - `.github/workflows/v2-beta-proof.yml`
 
 ## Review Prompts
 

@@ -14,17 +14,17 @@ Pin to `v1.0.0` when you want the proven runtime without evaluating new surfaces
 ## Main track
 
 - **Branch:** `main`
-- **Status:** **v2 alpha / development track**
+- **Status:** **v2 beta / development track**
 - **Runtime posture:** additive Elixir + bash coexistence work
-- **Best for:** teams who want the live dashboard, event streams, OpenClaw plugin, workflow packs, and the richer developer experience
+- **Best for:** teams who want the live dashboard, event streams, OpenClaw plugin, workflow packs, and the richer developer experience without waiting for prod-default cutover
 
-`main` is **not** the stable track yet. It is also **not** beta yet.
+`main` is **not** the stable/default track yet. It is now the beta track.
 
 For the exact ship/no-ship checklist, see `v2-release-checklist.md`.
 
-## What beta will mean
+## What beta means now
 
-The v2 track earns **beta** when the repo can say all of this truthfully:
+The v2 track has earned **beta** because the repo can now say all of this truthfully:
 
 - daemon, service, and workflow public entrypoints are covered across repo-root and vendored layouts
 - shell, eval, Elixir, self-host proof, and screenshot regeneration are part of a repeatable release-proof rhythm
@@ -72,7 +72,7 @@ Choose **`main`** if you want:
 - replayable event streams
 - disposable-worktree isolation
 - the end-to-end self-host proof
-- a serious alpha that you can evaluate with real evidence
+- a beta track you can evaluate with real evidence before trusting it as the default runtime
 
 ## Upgrade path from stable to main
 

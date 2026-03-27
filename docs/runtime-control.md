@@ -212,7 +212,7 @@ That suite is curated to demonstrate:
 - auth failover
 - entrypoint portability
 
-For the current `main` / v2 alpha track, there is also a separate manual release proof for the real loopback service + HUD path:
+For the current `main` / v2 beta track, there is also a separate manual release proof for the real loopback service + HUD path:
 
 ```bash
 ./forgeloop.sh self-host-proof

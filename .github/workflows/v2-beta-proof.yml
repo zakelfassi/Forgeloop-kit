@@ -1,4 +1,4 @@
-name: V2 Alpha Proof
+name: V2 Beta Proof
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   proof:
-    name: Alpha proof
+    name: Beta proof
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,10 +52,10 @@ jobs:
           FORGELOOP_PRODUCT_SCREENSHOT_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/product-screenshot-run
         run: bash bin/capture-product-screenshots.sh
 
-      - name: Upload alpha proof artifacts
+      - name: Upload beta proof artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-alpha-proof-artifacts
+          name: v2-beta-proof-artifacts
           path: .artifacts
           if-no-files-found: warn

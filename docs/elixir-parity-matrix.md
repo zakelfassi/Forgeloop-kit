@@ -4,14 +4,14 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 
 | Contract | Bash proof surface | Elixir proof surface | Status |
 |---------|--------------------|----------------------|--------|
-| Pause via `[PAUSE]` writes `paused` runtime state | `evals/scenarios/daemon-paused-flag.sh` | `elixir/test/forgeloop_v2/daemon_test.exs` | Covered on alpha track |
-| Repeated failure stops and escalates with repo-local artifacts | `tests/failure-escalation.test.sh`, `evals/scenarios/repeated-failure-state.sh` | `elixir/test/forgeloop_v2/failure_tracker_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | Covered on alpha track |
-| Repeated unanswered blocker escalates instead of spinning | `tests/daemon-blocker-escalation.test.sh` | `elixir/test/forgeloop_v2/blocker_detector_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | Covered on alpha track |
-| Runtime-state transitions stay legible and constrained | `tests/runtime-state-model.test.sh` | `elixir/test/forgeloop_v2/runtime_state_store_test.exs`, `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs` | Covered on alpha track |
-| Recovery is explicit and safe | bash pause/resume behavior in daemon flows | `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/orchestrator_test.exs`, `elixir/test/forgeloop_v2/babysitter_test.exs` | Covered on alpha track |
-| Provider auth/rate-limit failover preserves forward progress | `tests/llm-auth-failover.test.sh` | `elixir/test/forgeloop_v2/llm_router_test.exs`, `elixir/test/forgeloop_v2/provider_health_test.exs` | Covered on alpha track |
-| Repo-root and vendored layouts both work | `tests/daemon-entrypoint-layouts.test.sh`, `tests/service-entrypoint-layouts.test.sh`, `tests/workflow-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/repo_paths_test.exs` | Covered on alpha track |
-| Runtime ownership reclaim + fail-closed malformed ownership stay reviewable across bash, daemon, and loopback starts | `tests/runtime-ownership-reclaim.test.sh`, `tests/daemon-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs`, `elixir/test/forgeloop_v2/service_test.exs`, `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/babysitter_test.exs` | Covered on alpha track |
+| Pause via `[PAUSE]` writes `paused` runtime state | `evals/scenarios/daemon-paused-flag.sh` | `elixir/test/forgeloop_v2/daemon_test.exs` | Covered on beta track |
+| Repeated failure stops and escalates with repo-local artifacts | `tests/failure-escalation.test.sh`, `evals/scenarios/repeated-failure-state.sh` | `elixir/test/forgeloop_v2/failure_tracker_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | Covered on beta track |
+| Repeated unanswered blocker escalates instead of spinning | `tests/daemon-blocker-escalation.test.sh` | `elixir/test/forgeloop_v2/blocker_detector_test.exs`, `elixir/test/forgeloop_v2/events_test.exs` | Covered on beta track |
+| Runtime-state transitions stay legible and constrained | `tests/runtime-state-model.test.sh` | `elixir/test/forgeloop_v2/runtime_state_store_test.exs`, `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs` | Covered on beta track |
+| Recovery is explicit and safe | bash pause/resume behavior in daemon flows | `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/orchestrator_test.exs`, `elixir/test/forgeloop_v2/babysitter_test.exs` | Covered on beta track |
+| Provider auth/rate-limit failover preserves forward progress | `tests/llm-auth-failover.test.sh` | `elixir/test/forgeloop_v2/llm_router_test.exs`, `elixir/test/forgeloop_v2/provider_health_test.exs` | Covered on beta track |
+| Repo-root and vendored layouts both work | `tests/daemon-entrypoint-layouts.test.sh`, `tests/service-entrypoint-layouts.test.sh`, `tests/workflow-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/repo_paths_test.exs` | Covered on beta track |
+| Runtime ownership reclaim + fail-closed malformed ownership stay reviewable across bash, daemon, and loopback starts | `tests/runtime-ownership-reclaim.test.sh`, `tests/daemon-entrypoint-layouts.test.sh` | `elixir/test/forgeloop_v2/runtime_lifecycle_test.exs`, `elixir/test/forgeloop_v2/service_test.exs`, `elixir/test/forgeloop_v2/daemon_test.exs`, `elixir/test/forgeloop_v2/babysitter_test.exs` | Covered on beta track |
 
 ## Notes
 
@@ -20,8 +20,8 @@ This matrix tracks the operator-visible contracts that bash already proves and t
 - A green Elixir unit suite is necessary but not sufficient; the bash proof surface must stay green while parity expands.
 - Elixir now also has locked repo-safe mutation helpers for `REQUESTS.md` / `QUESTIONS.md`, a loopback control-plane service + interactive operator UI, a repo-local OpenClaw plugin seam for that same service, a read-only repo-local tracker projection for canonical backlog items + workflow packs, and managed workflow control/visibility over workflow artifacts; in phase 1 that service/UI backlog is the configured implementation plan file (`FORGELOOP_IMPLEMENTATION_PLAN_FILE`, default `IMPLEMENTATION_PLAN.md`), and that groundwork helps future UI/plugin work but is not yet a full bash-parity contract on its own.
 - The current release hardening bar now also expects a shared loopback ownership/start-gate read model plus additive `error.ownership` context for blocked starts, not just raw runtime-owner visibility or green happy-path service tests.
-- The current v2 alpha release bar now also includes a manual `./forgeloop.sh self-host-proof` pass for the real HUD/service path; it is intentionally separate from `evals` and CI.
-- Coverage here means the alpha track has explicit proof surfaces for the listed contract. Promotion to beta or prod-default is still governed by `v2-release-checklist.md`, not by this table alone.
+- The current v2 beta release bar now also includes a manual `./forgeloop.sh self-host-proof` pass for the real HUD/service path; it is intentionally separate from `evals` and CI.
+- Coverage here means the beta track has explicit proof surfaces for the listed contract. Promotion to prod-default is still governed by `v2-release-checklist.md`, not by this table alone.
 
 ## Current experimental v2-only extensions
 

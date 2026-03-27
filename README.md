@@ -1,6 +1,6 @@
 # Forgeloop
 
-[![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 alpha](https://img.shields.io/badge/main-v2%20alpha-5b66ff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
+[![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 beta](https://img.shields.io/badge/main-v2%20beta-7c5cff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
 
 > **Forgeloop stops coding agents from spinning.** Install it in any repo. When Claude, Codex, or any LLM agent starts thrashing on the same failure, Forgeloop pauses the run, preserves every artifact, and gives you a clean next step instead of a wasted API bill.
 
@@ -13,9 +13,9 @@ Forgeloop vendors into your repo and gives you:
 
 Works with Claude, Codex, or any LLM. Supports checklist-driven loops, structured task execution, and workflow packs.
 
-On `main` / the v2 alpha track, you also get the live HUD, real-time event streams, the OpenClaw plugin, and a self-host proof harness. See `design.md` for the visual direction.
+On `main` / the v2 beta track, you also get the live HUD, real-time event streams, the OpenClaw plugin, and a self-host proof harness. See `design.md` for the visual direction.
 
-Today, that means **serious alpha** — strong enough to evaluate with real proof, not yet the default production runtime.
+Today, that means **beta** — strong enough for broader evaluation and early production pilots, but still not the default production runtime.
 
 For the exact ship/no-ship bar, read `docs/v2-release-checklist.md`.
 
@@ -72,16 +72,16 @@ The eval suite tests the things that actually matter:
 - does auth failover work?
 - does it behave the same in different repo layouts?
 
-On the v2 alpha track, there's also a full end-to-end proof that spins up the real dashboard and drives it with a browser:
+On the v2 beta track, there's also a full end-to-end proof that spins up the real dashboard and drives it with a browser:
 
 ```bash
 ./forgeloop.sh self-host-proof
 ```
 
-For release hardening on the alpha track, the repo also includes:
+For release hardening on the beta track, the repo also includes:
 
 - `./bin/capture-product-screenshots.sh` — regenerate the public product screenshots from a seeded demo repo
-- `.github/workflows/v2-alpha-proof.yml` — manual/scheduled alpha proof cadence with uploaded proof artifacts
+- `.github/workflows/v2-beta-proof.yml` — manual/scheduled beta proof cadence with uploaded proof artifacts
 
 See `evals/README.md` for details.
 
@@ -92,7 +92,7 @@ In the target repo:
 ```bash
 ./forgeloop.sh serve
 ./forgeloop.sh evals
-./forgeloop.sh self-host-proof                  # Optional V2 alpha release proof
+./forgeloop.sh self-host-proof                  # Optional V2 beta release proof
 ./forgeloop.sh kickoff "<one paragraph project brief>"   # Fresh repo path
 ./forgeloop.sh plan 1
 ./forgeloop.sh build 10
@@ -109,7 +109,7 @@ For continuous operation:
 
 That daemon is **interval-based**. It does not watch git in real time. It periodically checks the repo and control files, then decides whether to plan, build, pause, deploy, or ingest logs.
 
-## Live dashboard (v2 alpha)
+## Live dashboard (v2 beta)
 
 Forgeloop ships a real-time dashboard on top of the same file-backed state, so you can see and steer live runs without reading raw files:
 
@@ -125,7 +125,7 @@ What it gives you:
 - **No extra infrastructure** — no Phoenix, no database, no Node asset pipeline. Served directly by Elixir.
 - **Same source of truth** — reads and writes the same repo-local files as the CLI and daemon
 
-The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. On the current alpha track, the same loopback surface can also expose experimental parallel slots backed by disposable worktrees:
+The dashboard also exposes a versioned API at `/api/schema` that the OpenClaw plugin uses. On the current beta track, the same loopback surface can also expose experimental parallel slots backed by disposable worktrees:
 
 - parallel read slots for checklist `plan` and workflow `preflight`
 - one serialized write slot for checklist `build` or workflow `run`
@@ -136,7 +136,7 @@ See `docs/openclaw.md` for the plugin integration.
 
 For launch and release-review work, keep two additional habits:
 
-- run `./forgeloop.sh self-host-proof` before calling the alpha stack demo-ready
+- run `./forgeloop.sh self-host-proof` before calling the beta stack demo-ready
 - regenerate the committed product screenshots with `./bin/capture-product-screenshots.sh` whenever the HUD materially changes
 
 If you are working inside this repo directly:
@@ -202,17 +202,16 @@ The operator contract is documented in:
 | Version | Status | Runtime | Pin to it |
 |---------|--------|---------|-----------|
 | [v1.0.0](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) | **Stable** | Bash | `git checkout v1.0.0` |
-| `main` | **V2 alpha / development** | Elixir + Bash | `git checkout main` |
+| `main` | **V2 beta / development** | Elixir + Bash | `git checkout main` |
 
-Pin to `v1.0.0` when you want the proven public release for active project work. Use `main` when you want to deliberately evaluate the richer V2 alpha operator stack: service, HUD, OpenClaw seam, managed daemon path, and self-host proof.
+Pin to `v1.0.0` when you want the proven public release for active project work. Use `main` when you want the richer V2 beta operator stack: service, HUD, OpenClaw seam, managed daemon path, and self-host proof.
 
-Beta is still future work after parity and release hardening; see `docs/release-tracks.md` and `docs/elixir-parity-matrix.md` before treating `main` as anything stronger than an alpha track. If you are iterating on the v2 alpha launch story or public/operator visuals, read `design.md` too.
+`main` is now the beta track, not the stable/default track. If you are iterating on the v2 launch story or public/operator visuals, read `design.md` too.
 
 The practical release bar is now explicit:
 
-- **Alpha now:** shell/eval/Elixir/self-host proof plus reproducible product screenshots
-- **Beta later:** one reviewed pass of the full checklist in `docs/v2-release-checklist.md`
-- **Prod-default later still:** the managed path must earn trust without weakening the bash fallback story
+- **Beta now:** shell/eval/Elixir/self-host proof plus reproducible product screenshots passed in reviewed release review
+- **Prod-default later:** the managed path must earn trust without weakening the bash fallback story
 
 Typical stable → main evaluation path inside an installed repo:
 
@@ -223,11 +222,11 @@ Typical stable → main evaluation path inside an installed repo:
 bash forgeloop/tests/run.sh
 ```
 
-For the full stable-to-alpha posture, fallback guidance, rollback path, and review checklist, read `docs/v1-to-v2-upgrade.md`.
+For the full stable-to-beta posture, fallback guidance, rollback path, and review checklist, read `docs/v1-to-v2-upgrade.md`.
 
 ## Elixir v2 foundation
 
-The v2 alpha track is built on an Elixir foundation in `elixir/`. It powers the live dashboard, the managed daemon, and disposable-worktree isolation — while the stable bash runtime stays available as a fallback.
+The v2 beta track is built on an Elixir foundation in `elixir/`. It powers the live dashboard, the managed daemon, and disposable-worktree isolation — while the stable bash runtime stays available as a fallback.
 
 Three Elixir surfaces ship today:
 

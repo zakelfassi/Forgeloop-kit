@@ -1,8 +1,8 @@
 # Elixir v2 Roadmap
 
-This page describes the current **v2 alpha / development track on `main`**.
+This page describes the current **v2 beta / development track on `main`**.
 
-Forgeloop v2 is an **experimental Elixir parity layer** growing beside the default bash runtime, not a stable or beta release claim. See `docs/release-tracks.md` for the stable-v1 vs mainline-v2 track split.
+Forgeloop v2 is an **experimental Elixir parity layer** growing beside the default bash runtime, not a stable or prod-default release claim. See `docs/release-tracks.md` for the stable-v1 vs mainline-v2 track split.
 
 ## Current Position
 
@@ -68,19 +68,17 @@ For the exact ship/no-ship checklist, see `v2-release-checklist.md`.
 
 ## Promotion Bar
 
-### Alpha position now
+### Beta position now
 
 Today’s claim should stay narrow and truthful:
 
-- v2 is a **serious alpha** with a repeatable proof path
+- v2 is now a **beta track** with a reviewed proof path
 - v1 is still the stable/public recommendation
 - v2 is suitable for demos, controlled evaluation, internal dogfooding, and project-by-project adoption where the team is deliberately evaluating the richer stack
 
-### Beta promotion bar
+### What earned beta
 
-Do **not** promote v2 to `v2.0.0-beta.1` until the checklist in `v2-release-checklist.md` is completed in one reviewed pass.
-
-That includes:
+The reviewed pass captured in `v2-release-checklist.md` established that:
 
 1. daemon, service, and workflow public entrypoints are covered across repo-root and vendored layouts
 2. shell, eval, Elixir, self-host proof, and screenshot regeneration all belong to a repeatable release-proof cadence
@@ -104,7 +102,7 @@ Do **not** make v2 the default public runtime until all of these are true:
 bash tests/run.sh
 bash evals/run.sh
 cd elixir && mix test
-# manual V2 alpha release proof
+# manual V2 beta release proof
 ./forgeloop.sh self-host-proof
 # reproducible public HUD screenshots
 ./bin/capture-product-screenshots.sh

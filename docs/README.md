@@ -3,17 +3,17 @@
 Start here to understand what Forgeloop actually guarantees. Read in this order:
 
 1. `runtime-control.md` — the fail-closed contract: pauses, escalations, runtime state, and daemon behavior
-2. `release-tracks.md` — v1 stable vs v2 alpha: how to choose
-3. `v1-to-v2-upgrade.md` — upgrading from stable to alpha with commands, fallback, and rollback
+2. `release-tracks.md` — v1 stable vs v2 beta: how to choose
+3. `v1-to-v2-upgrade.md` — upgrading from stable to beta with commands, fallback, and rollback
 4. `workflows.md` — the workflow-pack lane: layout, artifacts, runner behavior
 5. `sandboxing.md` — running full-auto safely in disposable VMs/containers
-6. `v2-roadmap.md` — what's shipping on v2 alpha, what's deferred, what gates beta
+6. `v2-roadmap.md` — what's shipping on v2 beta, what's deferred, what gates prod-default
 7. `v2-release-checklist.md` — current ship/no-ship call, release scoreboard, and the exact beta/prod-default checklist
 8. `elixir-parity-matrix.md` — bash-to-Elixir parity tracking
 9. `../evals/README.md` — the public proof suite
 10. `kickoff.md` — fresh-repo intake via `PROMPT_intake.md`
 11. `harness-readiness.md` — repo readiness checklist for agent work
-12. `../design.md` — v2 alpha visual direction for the landing page and HUD
+12. `../design.md` — v2 beta visual direction for the landing page and HUD
 
 Useful commands:
 

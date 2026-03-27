@@ -27,10 +27,10 @@ The UI should make Forgeloop feel like:
 ## Release context
 
 - Stable track: v1.0.0
-- Current main branch: v2 alpha
+- Current main branch: v2 beta
 - The design should help explain this transition clearly.
 - The landing page should communicate both current capability and where the v2 track is headed.
-- The dashboard should feel production-ready even while some surfaces remain alpha.
+- The dashboard should feel production-ready even while some surfaces remain beta-only or non-default.
 - Public screenshots should come from the real HUD rendered against a seeded canonical demo repo, not mocked composites.
 
 ## Core design goals
@@ -149,7 +149,7 @@ Motion should feel intentional and system-like:
 1. Hero: what Forgeloop is in one sentence
 2. Why it exists: fail-closed vs agent thrash
 3. How it works: canonical files, runtime state, escalations, daemon/service/HUD
-4. Release tracks: v1 stable vs v2 alpha
+4. Release tracks: v1 stable vs v2 beta
 5. Operator surfaces: CLI, HUD, OpenClaw seam, self-host proof
 6. Proof section: evals + self-host proof
 7. Workflow / roadmap direction

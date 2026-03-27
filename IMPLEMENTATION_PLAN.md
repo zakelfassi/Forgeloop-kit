@@ -183,7 +183,7 @@ Format:
 
 - [x] Add a final v2 release checklist and scoreboard
   - Acceptance:
-    - The repo has one explicit page that answers whether v2 is still alpha, ready for beta, or ready to become the default runtime.
+    - The repo has one explicit page that answers whether v2 is beta and what still blocks default-runtime cutover.
     - README, docs index, release-track docs, roadmap docs, quality score, and the landing page all point at the same release checklist instead of forcing the reader to synthesize it manually.
     - The checklist stays tied to real proof surfaces and explicit human release review, not feature momentum.
   - Non-goals:
@@ -192,7 +192,7 @@ Format:
     - no new proof surface beyond the already landed gates
   - Shipped behavior:
     - `docs/v2-release-checklist.md` now serves as the single ship/no-ship checklist and release scoreboard for the v2 track.
-    - `QUALITY_SCORE.md`, `docs/README.md`, `docs/release-tracks.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, `README.md`, `docs/harness-readiness.md`, and `index.html` now all point at the same release checklist and use the same serious-alpha posture.
+    - `QUALITY_SCORE.md`, `docs/README.md`, `docs/release-tracks.md`, `docs/v2-roadmap.md`, `docs/elixir-parity-matrix.md`, `README.md`, `docs/harness-readiness.md`, and `index.html` now all point at the same release checklist and use the same beta posture.
 
 - [x] Add OpenClaw loopback integration smoke on top of the real service
   - Acceptance:
@@ -243,20 +243,20 @@ Format:
 
 - [x] Define the beta and prod-default release bar explicitly
   - Acceptance:
-    - `QUALITY_SCORE.md`, `docs/harness-readiness.md`, `docs/release-tracks.md`, and `docs/v2-roadmap.md` all agree on what alpha means now, what beta requires next, and what must still be true before v2 becomes the default public runtime.
+    - `QUALITY_SCORE.md`, `docs/harness-readiness.md`, `docs/release-tracks.md`, and `docs/v2-roadmap.md` all agree on what beta means now and what must still be true before v2 becomes the default public runtime.
     - `README.md` and `docs/v1-to-v2-upgrade.md` reflect the same posture in user-facing language.
     - The documented gates stay tied to real proof surfaces rather than a generic release process.
   - Non-goals:
     - no runtime behavior change
-    - no premature beta claim
+    - no premature prod-default claim
     - no silent cutover away from the stable v1 recommendation
   - Shipped behavior:
-    - The repo now describes v2 as a serious alpha with an explicit beta gate and a stricter prod-default gate.
-    - Release/readiness docs now answer the product question directly: what must be true before v2 becomes the default public path?
+    - The repo now describes v2 as beta with a stricter prod-default gate.
+    - Release/readiness docs now answer the product question directly: what must still be true before v2 becomes the default public path?
 
-- [x] Codify an alpha release-proof cadence and reproducible product screenshot flow
+- [x] Codify a beta release-proof cadence and reproducible product screenshot flow
   - Acceptance:
-    - The repo exposes a manual/scheduled alpha-proof workflow that runs the shell gate, eval harness, Elixir tests, self-host proof, and screenshot regeneration outside default PR CI.
+    - The repo exposes a manual/scheduled beta-proof workflow that runs the shell gate, eval harness, Elixir tests, self-host proof, and screenshot regeneration outside default PR CI.
     - Public screenshots are regenerated from a seeded canonical demo repo rendered by the real HUD, not hand-made mockups.
     - README, landing page, readiness docs, and quality-score docs all reference the same proof cadence and screenshot regeneration path.
   - REQUIRED TESTS:
@@ -267,9 +267,9 @@ Format:
   - Non-goals:
     - no new control plane for demos
     - no fake spectator-only state
-    - no requirement that the heavy alpha-proof workflow run on every PR
+    - no requirement that the heavy beta-proof workflow run on every PR
   - Shipped behavior:
-    - `.github/workflows/v2-alpha-proof.yml` now codifies the manual/scheduled alpha proof cadence and uploads the resulting proof artifacts.
+    - `.github/workflows/v2-beta-proof.yml` now codifies the manual/scheduled beta proof cadence and uploads the resulting proof artifacts.
     - `bin/capture-product-screenshots.sh` now renders the real HUD against `demo/signalboard` and regenerates the committed operator/director screenshots.
     - `README.md`, `index.html`, `docs/harness-readiness.md`, `QUALITY_SCORE.md`, and `design.md` now all treat proof cadence and reproducible screenshots as part of the launch-hardening story.
 
@@ -692,7 +692,7 @@ Format:
     - The HUD and OpenClaw seam now prefer that shared ownership/start-gate view for operator messaging, while docs/site copy describe it as additive service hardening rather than a new control plane.
 - [x] Add a one-command self-hosting proof harness for the real HUD/service path
   - Acceptance:
-    - The repo exposes one public manual command for the V2-alpha self-host proof in both repo-root and installed-wrapper layouts.
+    - The repo exposes one public manual command for the V2-beta self-host proof in both repo-root and installed-wrapper layouts.
     - The proof uses the real loopback service, HUD, and `agent-browser`, not a JSON-only simulation.
     - The proof stays bounded/manual-first, preserves fail-closed ownership behavior, and does not silently join default CI or `evals`.
     - Managed UI `plan` proof runs stay viable even when the source checkout is dirty.
@@ -707,12 +707,12 @@ Format:
     - The static HUD now exposes stable control button ids so browser-driven proofing stays selector-safe across rerenders.
 - [x] Clarify public release tracks for the V2 launch path
   - Acceptance:
-    - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 alpha / development track.
+    - Primary public/operator surfaces clearly distinguish stable `v1.0.0` from `main` as the current v2 beta / development track.
     - The repo has one durable release-track note that explains who should use each track and how to evaluate/upgrade from stable to main.
     - Public wording does not overclaim beta, parity, or workflow-lane maturity.
   - Shipped behavior:
     - `docs/release-tracks.md` now serves as the stable-v1 vs mainline-v2 source of truth.
-    - `README.md`, `docs/README.md`, `docs/v2-roadmap.md`, and `index.html` now align on `v1.0.0` stable vs `main` as the v2 alpha / development track.
+    - `README.md`, `docs/README.md`, `docs/v2-roadmap.md`, and `index.html` now align on `v1.0.0` stable vs `main` as the current v2 beta / development track.
     - The public upgrade/evaluation path now explicitly points stable users at `./forgeloop.sh upgrade --from ...`, `./forgeloop.sh evals`, and `bash forgeloop/tests/run.sh` before trusting mainline V2 surfaces.
 - [ ] Decide whether `prd.json` becomes a first-class alternate work lane in the UI
 - [ ] Add a service-owned broadcast summary read model only if Director Mode becomes too client-heavy
