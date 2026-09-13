@@ -1,3 +1,5 @@
+> **Archived — no longer maintained.** Existing source and releases remain available; no new features or support are planned.
+
 # Forgeloop
 
 [![v1.0.0](https://img.shields.io/badge/stable-v1.0.0-1fe38b)](https://github.com/zakelfassi/Forgeloop-kit/releases/tag/v1.0.0) [![v2 beta](https://img.shields.io/badge/main-v2%20beta-7c5cff)](https://github.com/zakelfassi/Forgeloop-kit/tree/main/elixir)
